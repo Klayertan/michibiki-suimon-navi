@@ -1,1 +1,709 @@
-<h1>Michibiki Pond Map</h1>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Michibiki Pond Map</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIINfQmbM3HlkR7n2ATyMZ5OnBfS1SR1B0=" crossorigin="">
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f6f7f4;
+      --panel: #ffffff;
+      --text: #1d2528;
+      --muted: #647174;
+      --line: #d9dfdc;
+      --green: #15803d;
+      --orange: #d97706;
+      --active: #2563eb;
+      --abandoned: #7c2d12;
+      --drained: #6b7280;
+      --unknown: #334155;
+      --shadow: 0 10px 30px rgba(29, 37, 40, 0.12);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      height: 100%;
+      margin: 0;
+    }
+
+    body {
+      min-height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    .app {
+      display: grid;
+      grid-template-rows: auto 1fr;
+      min-height: 100vh;
+    }
+
+    header {
+      background: var(--panel);
+      border-bottom: 1px solid var(--line);
+      box-shadow: var(--shadow);
+      padding: 14px clamp(14px, 3vw, 28px);
+      position: relative;
+      z-index: 500;
+    }
+
+    .top-row {
+      align-items: center;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px 16px;
+      justify-content: space-between;
+    }
+
+    h1 {
+      font-size: 1.25rem;
+      line-height: 1.2;
+      margin: 0;
+    }
+
+    .controls {
+      align-items: center;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px 14px;
+    }
+
+    .action-button {
+      align-items: center;
+      background: #214e57;
+      border: 0;
+      border-radius: 6px;
+      color: #fff;
+      cursor: pointer;
+      display: inline-flex;
+      font-size: 0.95rem;
+      font-weight: 700;
+      gap: 8px;
+      justify-content: center;
+      min-height: 42px;
+      padding: 10px 14px;
+      text-decoration: none;
+    }
+
+    .action-button.secondary {
+      background: #455a64;
+    }
+
+    .action-button:disabled {
+      cursor: not-allowed;
+      opacity: 0.55;
+    }
+
+    .action-button:focus,
+    .action-button:focus-within {
+      outline: 3px solid rgba(33, 78, 87, 0.28);
+      outline-offset: 2px;
+    }
+
+    .action-button input {
+      height: 1px;
+      opacity: 0;
+      position: absolute;
+      width: 1px;
+    }
+
+    .filter {
+      align-items: center;
+      color: var(--text);
+      display: inline-flex;
+      font-size: 0.95rem;
+      gap: 8px;
+      min-height: 42px;
+      white-space: nowrap;
+    }
+
+    .filter input {
+      accent-color: var(--green);
+      height: 18px;
+      width: 18px;
+    }
+
+    .summary {
+      align-items: center;
+      color: var(--muted);
+      display: flex;
+      flex-wrap: wrap;
+      font-size: 0.93rem;
+      gap: 8px 16px;
+      margin-top: 12px;
+    }
+
+    .summary strong {
+      color: var(--text);
+      font-weight: 750;
+    }
+
+    .summary-item {
+      align-items: center;
+      display: inline-flex;
+      gap: 6px;
+    }
+
+    .dot {
+      border-radius: 50%;
+      display: inline-block;
+      height: 10px;
+      width: 10px;
+    }
+
+    .dot.green {
+      background: var(--green);
+    }
+
+    .dot.orange {
+      background: var(--orange);
+    }
+
+    main {
+      min-height: 0;
+      position: relative;
+    }
+
+    #map {
+      height: 100%;
+      min-height: 520px;
+      width: 100%;
+    }
+
+    .empty-state {
+      background: rgba(255, 255, 255, 0.95);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+      color: var(--muted);
+      left: 50%;
+      max-width: min(420px, calc(100vw - 28px));
+      padding: 16px 18px;
+      position: absolute;
+      text-align: center;
+      top: 28px;
+      transform: translateX(-50%);
+      z-index: 450;
+    }
+
+    .empty-state strong {
+      color: var(--text);
+      display: block;
+      margin-bottom: 4px;
+    }
+
+    .leaflet-popup-content {
+      line-height: 1.45;
+      margin: 12px 14px;
+    }
+
+    .popup-panel {
+      min-width: min(280px, calc(100vw - 72px));
+    }
+
+    .popup-grid {
+      display: grid;
+      gap: 4px 12px;
+      grid-template-columns: auto 1fr;
+      margin-bottom: 12px;
+    }
+
+    .popup-grid span:nth-child(odd) {
+      color: var(--muted);
+    }
+
+    .survey-form {
+      border-top: 1px solid var(--line);
+      display: grid;
+      gap: 10px;
+      padding-top: 12px;
+    }
+
+    .survey-field {
+      display: grid;
+      gap: 4px;
+    }
+
+    .survey-field label {
+      color: var(--muted);
+      font-size: 0.78rem;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    .survey-field input,
+    .survey-field select,
+    .survey-field textarea {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      color: var(--text);
+      font: inherit;
+      padding: 8px 9px;
+      width: 100%;
+    }
+
+    .survey-field textarea {
+      min-height: 74px;
+      resize: vertical;
+    }
+
+    .survey-save {
+      background: #214e57;
+      border: 0;
+      border-radius: 6px;
+      color: #fff;
+      cursor: pointer;
+      font: inherit;
+      font-weight: 700;
+      min-height: 40px;
+      padding: 9px 12px;
+    }
+
+    @media (max-width: 760px) {
+      .top-row {
+        align-items: stretch;
+      }
+
+      .controls {
+        align-items: stretch;
+        flex-direction: column;
+        width: 100%;
+      }
+
+      .action-button,
+      .filter {
+        justify-content: center;
+        width: 100%;
+      }
+
+      #map {
+        min-height: 62vh;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <div class="top-row">
+        <h1>Michibiki Pond Map</h1>
+        <div class="controls">
+          <label class="action-button">
+            Upload .nmea file
+            <input id="fileInput" type="file" accept=".nmea,text/plain">
+          </label>
+          <label class="action-button secondary">
+            Import survey JSON
+            <input id="importInput" type="file" accept=".json,application/json">
+          </label>
+          <button id="exportButton" class="action-button secondary" type="button" disabled>Export survey JSON</button>
+          <label class="filter">
+            <input id="augmentedOnly" type="checkbox">
+            Show only augmented points
+          </label>
+        </div>
+      </div>
+      <div id="summary" class="summary" aria-live="polite" hidden>
+        <span class="summary-item">Total points: <strong id="totalPoints">0</strong></span>
+        <span class="summary-item"><span class="dot green"></span>Augmented: <strong id="augmentedPoints">0</strong></span>
+        <span class="summary-item"><span class="dot orange"></span>Plain GPS: <strong id="gpsPoints">0</strong></span>
+        <span class="summary-item">Skipped lines: <strong id="skippedLines">0</strong></span>
+        <span class="summary-item">Status: <strong id="statusCounts">0 unknown</strong></span>
+      </div>
+    </header>
+
+    <main>
+      <div id="map"></div>
+      <div id="emptyState" class="empty-state">
+        <strong>No NMEA file loaded</strong>
+        Upload a field capture or import survey JSON to plot valid GGA positions.
+      </div>
+    </main>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script>
+    const STATUS_OPTIONS = ["active", "abandoned", "drained", "unknown"];
+    const STATUS_COLORS = {
+      active: "#2563eb",
+      abandoned: "#7c2d12",
+      drained: "#6b7280",
+      unknown: "#334155"
+    };
+
+    const map = L.map("map", { zoomControl: true }).setView([34.65, 135.83], 14);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      maxZoom: 19
+    }).addTo(map);
+
+    const fileInput = document.getElementById("fileInput");
+    const importInput = document.getElementById("importInput");
+    const exportButton = document.getElementById("exportButton");
+    const augmentedOnlyInput = document.getElementById("augmentedOnly");
+    const emptyState = document.getElementById("emptyState");
+    const summary = document.getElementById("summary");
+    const summaryEls = {
+      total: document.getElementById("totalPoints"),
+      augmented: document.getElementById("augmentedPoints"),
+      gps: document.getElementById("gpsPoints"),
+      skipped: document.getElementById("skippedLines"),
+      status: document.getElementById("statusCounts")
+    };
+
+    let parsedPoints = [];
+    let pointLayer = L.layerGroup().addTo(map);
+    let lastSkippedCount = 0;
+
+    function parseNmea(text) {
+      const result = {
+        points: [],
+        malformed: 0,
+        noFix: 0,
+        ignored: 0
+      };
+
+      text.split(/\r?\n/).forEach((rawLine) => {
+        const line = rawLine.trim();
+        if (!line) {
+          return;
+        }
+
+        if (!/^\$G[A-Z0-9]GGA,/i.test(line)) {
+          result.ignored += 1;
+          return;
+        }
+
+        const sentence = line.split("*")[0];
+        const fields = sentence.split(",");
+        if (fields.length < 10) {
+          result.malformed += 1;
+          return;
+        }
+
+        const fixQuality = Number.parseInt(fields[6], 10);
+        if (!Number.isFinite(fixQuality)) {
+          result.malformed += 1;
+          return;
+        }
+
+        if (fixQuality === 0) {
+          result.noFix += 1;
+          return;
+        }
+
+        const lat = parseCoordinate(fields[2], fields[3], 2);
+        const lon = parseCoordinate(fields[4], fields[5], 3);
+        const satellites = Number.parseInt(fields[7], 10);
+        const hdop = Number.parseFloat(fields[8]);
+        const altitude = Number.parseFloat(fields[9]);
+
+        if (
+          lat === null ||
+          lon === null ||
+          !Number.isFinite(satellites) ||
+          !Number.isFinite(hdop) ||
+          !Number.isFinite(altitude)
+        ) {
+          result.malformed += 1;
+          return;
+        }
+
+        if (fixQuality === 1 || fixQuality === 2 || fixQuality === 4 || fixQuality === 5) {
+          result.points.push(createPoint({
+            id: `nmea-${result.points.length}`,
+            timestamp: fields[1],
+            lat,
+            lon,
+            fixQuality,
+            satellites,
+            hdop,
+            altitude
+          }));
+          return;
+        }
+
+        result.malformed += 1;
+      });
+
+      return result;
+    }
+
+    function createPoint(point) {
+      const fixQuality = Number.parseInt(point.fixQuality, 10);
+      return {
+        id: point.id,
+        timestamp: String(point.timestamp ?? ""),
+        lat: Number(point.lat),
+        lon: Number(point.lon),
+        fixQuality,
+        satellites: Number.parseInt(point.satellites, 10),
+        hdop: point.hdop === undefined || point.hdop === null ? null : Number(point.hdop),
+        altitude: point.altitude === undefined || point.altitude === null ? null : Number(point.altitude),
+        augmented: fixQuality === 2 || fixQuality === 4 || fixQuality === 5,
+        status: normalizeStatus(point.status),
+        photoRef: String(point.photoRef ?? ""),
+        note: String(point.note ?? "")
+      };
+    }
+
+    function normalizeStatus(status) {
+      return STATUS_OPTIONS.includes(status) ? status : "unknown";
+    }
+
+    function parseCoordinate(value, hemisphere, degreeDigits) {
+      if (!value || !hemisphere || value.length <= degreeDigits) {
+        return null;
+      }
+
+      const degrees = Number.parseInt(value.slice(0, degreeDigits), 10);
+      const minutes = Number.parseFloat(value.slice(degreeDigits));
+      if (!Number.isFinite(degrees) || !Number.isFinite(minutes)) {
+        return null;
+      }
+
+      const upperHemisphere = hemisphere.toUpperCase();
+      if (!["N", "S", "E", "W"].includes(upperHemisphere)) {
+        return null;
+      }
+
+      const sign = upperHemisphere === "S" || upperHemisphere === "W" ? -1 : 1;
+      return sign * (degrees + minutes / 60);
+    }
+
+    function renderPoints(options = {}) {
+      pointLayer.clearLayers();
+
+      const visiblePoints = augmentedOnlyInput.checked
+        ? parsedPoints.filter((point) => point.augmented)
+        : parsedPoints;
+
+      visiblePoints.forEach((point) => {
+        L.circleMarker([point.lat, point.lon], markerStyle(point))
+          .bindPopup(buildPopup(point), { maxWidth: 360 })
+          .addTo(pointLayer);
+      });
+
+      if (visiblePoints.length > 0 && options.fit !== false) {
+        const bounds = L.latLngBounds(visiblePoints.map((point) => [point.lat, point.lon]));
+        map.fitBounds(bounds, { padding: [36, 36], maxZoom: 18 });
+      }
+
+      emptyState.hidden = parsedPoints.length > 0;
+      exportButton.disabled = parsedPoints.length === 0;
+    }
+
+    function markerStyle(point) {
+      const fillColor = point.augmented ? "#15803d" : "#d97706";
+      return {
+        radius: 8,
+        color: STATUS_COLORS[point.status],
+        fillColor,
+        fillOpacity: 0.84,
+        opacity: 1,
+        weight: point.status === "unknown" ? 3 : 5
+      };
+    }
+
+    function buildPopup(point) {
+      const label = point.augmented ? "SLAS augmented" : "GPS only";
+      const hdop = point.hdop === null || !Number.isFinite(point.hdop) ? "N/A" : point.hdop;
+      const statusOptions = STATUS_OPTIONS.map((status) => {
+        const selected = status === point.status ? " selected" : "";
+        return `<option value="${status}"${selected}>${status}</option>`;
+      }).join("");
+
+      return `
+        <div class="popup-panel">
+          <div class="popup-grid">
+            <span>Timestamp</span><strong>${escapeHtml(point.timestamp)}</strong>
+            <span>Latitude</span><strong>${point.lat.toFixed(6)}</strong>
+            <span>Longitude</span><strong>${point.lon.toFixed(6)}</strong>
+            <span>Fix quality</span><strong>${point.fixQuality} (${label})</strong>
+            <span>Satellites</span><strong>${point.satellites}</strong>
+            <span>HDOP</span><strong>${escapeHtml(hdop)}</strong>
+          </div>
+          <form class="survey-form" data-point-id="${escapeHtml(point.id)}">
+            <div class="survey-field">
+              <label for="status-${escapeHtml(point.id)}">Status</label>
+              <select id="status-${escapeHtml(point.id)}" name="status">${statusOptions}</select>
+            </div>
+            <div class="survey-field">
+              <label for="photo-${escapeHtml(point.id)}">Photo reference</label>
+              <input id="photo-${escapeHtml(point.id)}" name="photoRef" type="text" value="${escapeHtml(point.photoRef)}" placeholder="IMG_6685.jpg">
+            </div>
+            <div class="survey-field">
+              <label for="note-${escapeHtml(point.id)}">Note</label>
+              <textarea id="note-${escapeHtml(point.id)}" name="note">${escapeHtml(point.note)}</textarea>
+            </div>
+            <button class="survey-save" type="submit">Save tag</button>
+          </form>
+        </div>
+      `;
+    }
+
+    function escapeHtml(value) {
+      return String(value).replace(/[&<>"']/g, (char) => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#039;"
+      }[char]));
+    }
+
+    function updateSummary() {
+      const augmented = parsedPoints.filter((point) => point.augmented).length;
+      const gps = parsedPoints.filter((point) => !point.augmented).length;
+      const statusCounts = countStatuses(parsedPoints);
+      summaryEls.total.textContent = String(parsedPoints.length);
+      summaryEls.augmented.textContent = String(augmented);
+      summaryEls.gps.textContent = String(gps);
+      summaryEls.skipped.textContent = String(lastSkippedCount);
+      summaryEls.status.textContent = formatStatusCounts(statusCounts);
+      summary.hidden = false;
+    }
+
+    function countStatuses(points) {
+      return points.reduce((counts, point) => {
+        counts[point.status] += 1;
+        return counts;
+      }, { active: 0, abandoned: 0, drained: 0, unknown: 0 });
+    }
+
+    function formatStatusCounts(counts) {
+      const nonZero = STATUS_OPTIONS
+        .filter((status) => counts[status] > 0)
+        .map((status) => `${counts[status]} ${status}`);
+
+      return nonZero.length > 0 ? nonZero.join(", ") : "0 unknown";
+    }
+
+    function exportSurveyJson() {
+      if (parsedPoints.length === 0) {
+        return;
+      }
+
+      const records = parsedPoints.map((point) => ({
+        lat: point.lat,
+        lon: point.lon,
+        fixQuality: point.fixQuality,
+        satelliteCount: point.satellites,
+        timestamp: point.timestamp,
+        status: point.status,
+        photoRef: point.photoRef,
+        note: point.note
+      }));
+      const blob = new Blob([JSON.stringify(records, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `michibiki-survey-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    }
+
+    function parseSurveyJson(text) {
+      const data = JSON.parse(text);
+      const records = Array.isArray(data) ? data : data.points;
+      if (!Array.isArray(records)) {
+        throw new Error("Survey JSON must be an array of point records.");
+      }
+
+      return records.map((record, index) => {
+        const point = createPoint({
+          id: `json-${index}`,
+          timestamp: record.timestamp,
+          lat: record.lat,
+          lon: record.lon,
+          fixQuality: record.fixQuality,
+          satellites: record.satelliteCount,
+          status: record.status,
+          photoRef: record.photoRef,
+          note: record.note
+        });
+
+        if (
+          !Number.isFinite(point.lat) ||
+          !Number.isFinite(point.lon) ||
+          !Number.isFinite(point.fixQuality) ||
+          !Number.isFinite(point.satellites) ||
+          !(point.fixQuality === 1 || point.fixQuality === 2 || point.fixQuality === 4 || point.fixQuality === 5)
+        ) {
+          throw new Error(`Invalid point record at index ${index}.`);
+        }
+
+        return point;
+      });
+    }
+
+    function saveSurveyForm(form) {
+      const point = parsedPoints.find((candidate) => candidate.id === form.dataset.pointId);
+      if (!point) {
+        return;
+      }
+
+      const formData = new FormData(form);
+      point.status = normalizeStatus(formData.get("status"));
+      point.photoRef = String(formData.get("photoRef") || "").trim();
+      point.note = String(formData.get("note") || "").trim();
+      updateSummary();
+      renderPoints({ fit: false });
+    }
+
+    fileInput.addEventListener("change", async (event) => {
+      const file = event.target.files[0];
+      if (!file) {
+        return;
+      }
+
+      const text = await file.text();
+      const parseResult = parseNmea(text);
+      parsedPoints = parseResult.points;
+      lastSkippedCount = parseResult.noFix + parseResult.malformed;
+      updateSummary();
+      renderPoints();
+      fileInput.value = "";
+    });
+
+    importInput.addEventListener("change", async (event) => {
+      const file = event.target.files[0];
+      if (!file) {
+        return;
+      }
+
+      try {
+        parsedPoints = parseSurveyJson(await file.text());
+        lastSkippedCount = 0;
+        updateSummary();
+        renderPoints();
+      } catch (error) {
+        alert(error.message);
+      } finally {
+        importInput.value = "";
+      }
+    });
+
+    exportButton.addEventListener("click", exportSurveyJson);
+    augmentedOnlyInput.addEventListener("change", () => renderPoints());
+
+    document.addEventListener("submit", (event) => {
+      if (!event.target.matches(".survey-form")) {
+        return;
+      }
+
+      event.preventDefault();
+      saveSurveyForm(event.target);
+    });
+  </script>
+</body>
+</html>
