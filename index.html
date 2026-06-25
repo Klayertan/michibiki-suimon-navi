@@ -219,6 +219,52 @@
       color: var(--muted);
     }
 
+    .quality-band {
+      align-items: center;
+      display: inline-flex;
+      gap: 5px;
+    }
+
+    .quality-band::before {
+      border-radius: 50%;
+      content: "";
+      display: inline-block;
+      height: 8px;
+      width: 8px;
+    }
+
+    .quality-band.good {
+      color: #15803d;
+    }
+
+    .quality-band.good::before {
+      background: #15803d;
+    }
+
+    .quality-band.normal {
+      color: #647174;
+    }
+
+    .quality-band.normal::before {
+      background: #94a3b8;
+    }
+
+    .quality-band.warning {
+      color: #c2410c;
+    }
+
+    .quality-band.warning::before {
+      background: #f97316;
+    }
+
+    .quality-band.poor {
+      color: #b91c1c;
+    }
+
+    .quality-band.poor::before {
+      background: #dc2626;
+    }
+
     .survey-form {
       border-top: 1px solid var(--line);
       display: grid;
@@ -515,6 +561,8 @@
     function buildPopup(point) {
       const label = point.augmented ? "SLAS augmented" : "GPS only";
       const hdop = point.hdop === null || !Number.isFinite(point.hdop) ? "N/A" : point.hdop;
+      const satelliteBand = satelliteCountBand(point.satellites);
+      const hdopBand = hdopQualityBand(point.hdop);
       const statusOptions = STATUS_OPTIONS.map((status) => {
         const selected = status === point.status ? " selected" : "";
         return `<option value="${status}"${selected}>${status}</option>`;
@@ -527,8 +575,8 @@
             <span>Latitude</span><strong>${point.lat.toFixed(6)}</strong>
             <span>Longitude</span><strong>${point.lon.toFixed(6)}</strong>
             <span>Fix quality</span><strong>${point.fixQuality} (${label})</strong>
-            <span>Satellites</span><strong>${point.satellites}</strong>
-            <span>HDOP</span><strong>${escapeHtml(hdop)}</strong>
+            <span>衛星数:</span><strong>${point.satellites} (${qualityBandMarkup(satelliteBand)})</strong>
+            <span>HDOP:</span><strong>${escapeHtml(hdop)} (${qualityBandMarkup(hdopBand)})</strong>
           </div>
           <form class="survey-form" data-point-id="${escapeHtml(point.id)}">
             <div class="survey-field">
@@ -547,6 +595,42 @@
           </form>
         </div>
       `;
+    }
+
+    function satelliteCountBand(count) {
+      if (count >= 9) {
+        return { label: "良い", tone: "good" };
+      }
+
+      if (count >= 6) {
+        return { label: "普通", tone: "normal" };
+      }
+
+      return { label: "限界", tone: "warning" };
+    }
+
+    function hdopQualityBand(hdop) {
+      if (!Number.isFinite(hdop)) {
+        return { label: "不明", tone: "normal" };
+      }
+
+      if (hdop < 1) {
+        return { label: "非常に良い", tone: "good" };
+      }
+
+      if (hdop <= 2) {
+        return { label: "良い", tone: "good" };
+      }
+
+      if (hdop < 5) {
+        return { label: "普通", tone: "normal" };
+      }
+
+      return { label: "悪い", tone: "poor" };
+    }
+
+    function qualityBandMarkup(band) {
+      return `<span class="quality-band ${band.tone}">${escapeHtml(band.label)}</span>`;
     }
 
     function escapeHtml(value) {
@@ -596,6 +680,7 @@
         lon: point.lon,
         fixQuality: point.fixQuality,
         satelliteCount: point.satellites,
+        hdop: point.hdop,
         timestamp: point.timestamp,
         status: point.status,
         photoRef: point.photoRef,
@@ -627,6 +712,7 @@
           lon: record.lon,
           fixQuality: record.fixQuality,
           satellites: record.satelliteCount,
+          hdop: record.hdop,
           status: record.status,
           photoRef: record.photoRef,
           note: record.note
