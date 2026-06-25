@@ -96,6 +96,10 @@
       background: #455a64;
     }
 
+    .action-button.phone {
+      background: #b91c1c;
+    }
+
     .action-button:disabled {
       cursor: not-allowed;
       opacity: 0.55;
@@ -149,6 +153,12 @@
       align-items: center;
       display: inline-flex;
       gap: 6px;
+    }
+
+    .gps-message {
+      color: #b91c1c;
+      font-size: 0.9rem;
+      margin-top: 10px;
     }
 
     .dot {
@@ -350,6 +360,16 @@
             <input id="importInput" type="file" accept=".json,application/json">
           </label>
           <button id="exportButton" class="action-button secondary" type="button" disabled>Export survey JSON</button>
+          <button id="recordPhoneButton" class="action-button phone" type="button">📍 Record phone GPS point</button>
+          <button id="clearPhoneButton" class="action-button secondary" type="button" disabled>Clear phone GPS points</button>
+          <label class="filter">
+            <input id="showQz1Layer" type="checkbox" checked>
+            QZ1 layer
+          </label>
+          <label class="filter">
+            <input id="showPhoneLayer" type="checkbox" checked>
+            Phone GPS layer
+          </label>
           <label class="filter">
             <input id="augmentedOnly" type="checkbox">
             Show only augmented points
@@ -362,7 +382,9 @@
         <span class="summary-item"><span class="dot orange"></span>Plain GPS: <strong id="gpsPoints">0</strong></span>
         <span class="summary-item">Skipped lines: <strong id="skippedLines">0</strong></span>
         <span class="summary-item">Status: <strong id="statusCounts">0 unknown</strong></span>
+        <span id="comparisonSummary" class="summary-item" hidden>Comparison: <strong id="comparisonText"></strong></span>
       </div>
+      <div id="gpsMessage" class="gps-message" role="status" aria-live="polite" hidden></div>
     </header>
 
     <main>
@@ -393,8 +415,15 @@
     const fileInput = document.getElementById("fileInput");
     const importInput = document.getElementById("importInput");
     const exportButton = document.getElementById("exportButton");
+    const recordPhoneButton = document.getElementById("recordPhoneButton");
+    const clearPhoneButton = document.getElementById("clearPhoneButton");
+    const showQz1LayerInput = document.getElementById("showQz1Layer");
+    const showPhoneLayerInput = document.getElementById("showPhoneLayer");
     const augmentedOnlyInput = document.getElementById("augmentedOnly");
     const emptyState = document.getElementById("emptyState");
+    const gpsMessage = document.getElementById("gpsMessage");
+    const comparisonSummary = document.getElementById("comparisonSummary");
+    const comparisonText = document.getElementById("comparisonText");
     const summary = document.getElementById("summary");
     const summaryEls = {
       total: document.getElementById("totalPoints"),
@@ -405,7 +434,9 @@
     };
 
     let parsedPoints = [];
+    let phonePoints = [];
     let pointLayer = L.layerGroup().addTo(map);
+    let phoneLayer = L.layerGroup().addTo(map);
     let lastSkippedCount = 0;
 
     function parseNmea(text) {
@@ -542,8 +573,10 @@
         map.fitBounds(bounds, { padding: [36, 36], maxZoom: 18 });
       }
 
-      emptyState.hidden = parsedPoints.length > 0;
+      emptyState.hidden = parsedPoints.length > 0 || phonePoints.length > 0;
       exportButton.disabled = parsedPoints.length === 0;
+      syncLayerVisibility();
+      updateComparisonSummary();
     }
 
     function markerStyle(point) {
@@ -556,6 +589,189 @@
         opacity: 1,
         weight: point.status === "unknown" ? 3 : 5
       };
+    }
+
+    function renderPhonePoints(options = {}) {
+      phoneLayer.clearLayers();
+
+      phonePoints.forEach((point) => {
+        L.circle([point.lat, point.lon], {
+          radius: point.accuracy,
+          color: "#dc2626",
+          fillColor: "#dc2626",
+          fillOpacity: 0.08,
+          opacity: 0.28,
+          weight: 1
+        }).addTo(phoneLayer);
+
+        L.circleMarker([point.lat, point.lon], {
+          radius: 7,
+          color: "#7f1d1d",
+          fillColor: "#dc2626",
+          fillOpacity: 0.9,
+          opacity: 1,
+          weight: 2
+        })
+          .bindPopup(buildPhonePopup(point), { maxWidth: 280 })
+          .addTo(phoneLayer);
+      });
+
+      clearPhoneButton.disabled = phonePoints.length === 0;
+      emptyState.hidden = parsedPoints.length > 0 || phonePoints.length > 0;
+      syncLayerVisibility();
+      updateComparisonSummary();
+
+      if (phonePoints.length > 0 && options.fit !== false) {
+        fitVisibleLayers();
+      }
+    }
+
+    function buildPhonePopup(point) {
+      return `
+        <div class="popup-panel">
+          <div class="popup-grid">
+            <span>Phone lat</span><strong>${point.lat.toFixed(6)}</strong>
+            <span>Phone lon</span><strong>${point.lon.toFixed(6)}</strong>
+            <span>Accuracy radius</span><strong>${formatMeters(point.accuracy)}</strong>
+          </div>
+        </div>
+      `;
+    }
+
+    function recordPhoneGpsPoint() {
+      clearGpsMessage();
+
+      if (!globalThis.navigator || !navigator.geolocation) {
+        showGpsMessage("Phone GPS unavailable — needs HTTPS or localhost, and location permission.");
+        return;
+      }
+
+      // Browser geolocation requires HTTPS/localhost and meaningful results require a real-GPS device, such as a phone.
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const lat = Number(position.coords.latitude);
+          const lon = Number(position.coords.longitude);
+          const accuracy = Number(position.coords.accuracy);
+          if (!Number.isFinite(lat) || !Number.isFinite(lon) || !Number.isFinite(accuracy)) {
+            showGpsMessage("Phone GPS unavailable — needs HTTPS or localhost, and location permission.");
+            return;
+          }
+
+          phonePoints.push({
+            lat,
+            lon,
+            accuracy,
+            timestamp: position.timestamp || Date.now()
+          });
+          renderPhonePoints();
+        },
+        () => {
+          showGpsMessage("Phone GPS unavailable — needs HTTPS or localhost, and location permission.");
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 15000,
+          maximumAge: 0
+        }
+      );
+    }
+
+    function clearPhoneGpsPoints() {
+      phonePoints = [];
+      renderPhonePoints({ fit: false });
+      clearGpsMessage();
+    }
+
+    function syncLayerVisibility() {
+      setLayerVisible(pointLayer, showQz1LayerInput.checked);
+      setLayerVisible(phoneLayer, showPhoneLayerInput.checked);
+    }
+
+    function setLayerVisible(layer, visible) {
+      if (visible && !map.hasLayer(layer)) {
+        layer.addTo(map);
+      }
+
+      if (!visible && map.hasLayer(layer)) {
+        map.removeLayer(layer);
+      }
+    }
+
+    function fitVisibleLayers() {
+      const latLngs = [];
+
+      if (showQz1LayerInput.checked) {
+        const qz1Points = augmentedOnlyInput.checked
+          ? parsedPoints.filter((point) => point.augmented)
+          : parsedPoints;
+        qz1Points.forEach((point) => latLngs.push([point.lat, point.lon]));
+      }
+
+      if (showPhoneLayerInput.checked) {
+        phonePoints.forEach((point) => latLngs.push([point.lat, point.lon]));
+      }
+
+      if (latLngs.length > 0) {
+        map.fitBounds(L.latLngBounds(latLngs), { padding: [36, 36], maxZoom: 18 });
+      }
+    }
+
+    function showGpsMessage(message) {
+      gpsMessage.textContent = message;
+      gpsMessage.hidden = false;
+    }
+
+    function clearGpsMessage() {
+      gpsMessage.textContent = "";
+      gpsMessage.hidden = true;
+    }
+
+    function updateComparisonSummary() {
+      if (parsedPoints.length === 0 || phonePoints.length === 0) {
+        comparisonSummary.hidden = true;
+        comparisonText.textContent = "";
+        return;
+      }
+
+      const phoneAverage = phonePoints.reduce((sum, point) => sum + point.accuracy, 0) / phonePoints.length;
+      const qz1Spread = qz1TypicalSpread(parsedPoints);
+      comparisonText.textContent = `phone avg accuracy ${formatMeters(phoneAverage)} vs QZ1 spread ${formatMeters(qz1Spread)}`;
+      comparisonSummary.hidden = false;
+    }
+
+    function qz1TypicalSpread(points) {
+      if (points.length < 2) {
+        return 0;
+      }
+
+      const centroid = points.reduce((center, point) => ({
+        lat: center.lat + point.lat / points.length,
+        lon: center.lon + point.lon / points.length
+      }), { lat: 0, lon: 0 });
+      const meanSquared = points.reduce((sum, point) => {
+        const distance = distanceMeters(point.lat, point.lon, centroid.lat, centroid.lon);
+        return sum + distance * distance;
+      }, 0) / points.length;
+
+      return Math.sqrt(meanSquared);
+    }
+
+    function distanceMeters(lat1, lon1, lat2, lon2) {
+      const earthRadiusMeters = 6371000;
+      const toRadians = (degrees) => degrees * Math.PI / 180;
+      const dLat = toRadians(lat2 - lat1);
+      const dLon = toRadians(lon2 - lon1);
+      const a = Math.sin(dLat / 2) ** 2
+        + Math.cos(toRadians(lat1)) * Math.cos(toRadians(lat2)) * Math.sin(dLon / 2) ** 2;
+      return 2 * earthRadiusMeters * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    }
+
+    function formatMeters(value) {
+      if (!Number.isFinite(value)) {
+        return "N/A";
+      }
+
+      return `${value.toFixed(value >= 10 ? 0 : 1)} m`;
     }
 
     function buildPopup(point) {
@@ -780,6 +996,10 @@
     });
 
     exportButton.addEventListener("click", exportSurveyJson);
+    recordPhoneButton.addEventListener("click", recordPhoneGpsPoint);
+    clearPhoneButton.addEventListener("click", clearPhoneGpsPoints);
+    showQz1LayerInput.addEventListener("change", syncLayerVisibility);
+    showPhoneLayerInput.addEventListener("change", syncLayerVisibility);
     augmentedOnlyInput.addEventListener("change", () => renderPoints());
 
     document.addEventListener("submit", (event) => {
