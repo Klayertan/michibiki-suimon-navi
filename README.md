@@ -1,65 +1,65 @@
 # 水門ナビ / Suimon Navi
 
-準天頂衛星「みちびき」ハッカソン entry — Team E, Nara KOSEN (KAI, solo).
+準天頂衛星「みちびき」ハッカソン出展作品 — チームE、奈良高専（KAI、個人参加）。
 
-Suimon Navi is a decision-support web app for irrigation floodgate (水門) timing on a real wheat field, built on QZSS positioning data. This repo started as a pond-hazard map (`Michibiki Pond Map`) and pivoted to Suimon Navi; the NMEA-parsing and mapping code from that project is reused here. Full plan: [`Suimon_Navi_Plan.pptx`](./Suimon_Navi_Plan.pptx).
+水門ナビは、QZSS（準天頂衛星）の位置情報を活用した、実在する水田の水門（取水口）操作タイミングを支援するWebアプリです。本リポジトリはもともと池のハザードマップ（`Michibiki Pond Map`）として始まり、水門ナビへとピボットしました。そのプロジェクトのNMEA解析・地図表示コードをここで再利用しています。全体計画はこちら：[`Suimon_Navi_Plan.pptx`](./Suimon_Navi_Plan.pptx)。
 
 ## 地域課題 (The problem)
 
-A real wheat field — belonging to a friend's grandfather — is irrigated through a manually-operated floodgate. Open/close timing currently relies on the farmer's long experience and intuition rather than precise field geometry or weather data. That judgment gets harder for older farmers, and there's no guarantee a successor could match the same precision — a succession risk on top of the day-to-day one. Since irrigation precision directly affects rice yield and quality, this is worth solving now.
+実在する友人の祖父の水田は、手動操作の水門で灌漑されています。開閉タイミングは現在、正確な圃場形状や気象データではなく、農家の長年の経験と勘に頼っています。この判断は高齢の担い手ほど負担が大きく、後継者が同じ精度で判断できる保証もありません — 日々の負担に加えて継承リスクも抱えています。水管理の精度は米の収量・品質に直結するため、今取り組む価値があります。
 
 ## 技術の壁 (The technical wall)
 
-**Phone GPS alone:** multipath error in built-up/shaded areas causes ~5m drift in practice, risking confusion between nearby features (ridges, channels) — not precise enough to record field geometry reliably.
+**スマホ単体GPS：** 市街地・遮蔽下でのマルチパス誤差により、実際には約5mのずれが生じることがあり、畦や水路など近接する地物を取り違えるリスクがあります。圃場形状を正確に記録するには不向きです。
 
-**QZ1 + みちびき SLAS:** only a **blue QZ1** receiver (L1S/SLAS) was available; a CLAS/centimeter-class receiver was unavailable to us. SLAS augmentation is not guaranteed by the organizer, so it's framed as a conditional upside rather than a confirmed feature — **if** it's active (shown by fix-quality `2` in the QZ1's NMEA GGA sentences), accuracy improves to sub-meter (~1m) and adjacent field features become distinguishable. The design still has to work without it.
+**QZ1 + みちびきSLAS：** 今回使用できたのは**青いQZ1**受信機（L1S/SLAS）のみで、CLAS（センチメートル級）受信機は入手できませんでした。SLAS補強は主催者から確約されていないため、確定した機能ではなく条件付きの利点として扱っています — **もし**補強が有効であれば（QZ1のNMEA GGAセンテンスでfix-quality `2` が示されれば）、精度はサブメートル級（約1m）まで改善し、隣接する地物を区別できるようになります。補強が得られない場合でも動作する設計を優先しています。
 
 ## ソリューション (Solution)
 
-Suimon Navi is a decision-support web app for floodgate timing — not an automation system. It combines high-precision field geometry (surveyed with the QZ1, better when SLAS is active) with weather data to recommend when to open or close the gate. The farmer still operates the gate manually; physically automating real floodgate hardware is explicitly out of scope, both for hackathon fit and to avoid the liability of automating physical infrastructure.
+水門ナビは水門操作タイミングの「意思決定支援」Webアプリであり、自動化システムではありません。高精度な圃場形状（QZ1で実測、SLASが有効ならさらに高精度）と気象データを組み合わせ、水門の開閉タイミングを推奨します。実際の水門操作は農家が行います。物理的な水門の自動化は、ハッカソンのスコープに合わないことと、実際のインフラを自動化する責任・安全上のリスクを避けるため、明確にスコープ外としています。
 
 ## 技術構成 (Tech stack)
 
-- **Field hardware:** Blue QZ1 GNSS receiver (L1S/SLAS, Bluetooth SPP) + Android Pixel 6a, logging NMEA and confirming `fix=2` when augmented
-- **Mapping:** Leaflet, rendering field geometry parsed client-side from the NMEA logs
-- **Data:** Static JSON (field geometry + gate rules + weather input) — no cloud DB or login for the MVP, so effort stays on 完成度 (completeness)
-- **App:** Plain HTML/CSS/JS, hosted on GitHub Pages
-- **Reused from Pond Map:** NMEA file upload/paste, GGA parsing with fix-quality coloring, survey point tagging, JSON export/import, phone-GPS vs. QZ1 comparison layer, layer toggles, augmented-only filter, summary bar
+- **フィールド機器：** 青いQZ1 GNSS受信機（L1S/SLAS、Bluetooth SPP）＋ Android Pixel 6a。NMEAを記録し、補強時は `fix=2` を確認
+- **地図表示：** Leaflet。NMEAログからクライアント側でパースした圃場形状を表示
+- **データ：** 静的JSON（圃場形状＋水門ルール＋気象入力）— MVP段階ではクラウドDBやログイン機能は構築せず、完成度に集中
+- **アプリ：** プレーンなHTML/CSS/JS、GitHub Pagesでホスティング
+- **Pond Mapから再利用：** NMEAファイルのアップロード/貼り付け、fix-quality別に色分けしたGGA解析、測量ポイントのタグ付け、JSONのエクスポート/インポート、スマホGPSとQZ1の比較レイヤー、レイヤー切り替え、補強済みのみ表示フィルター、サマリーバー
 
 ## ドローン拡張計画 (Drone expansion — stretch goal)
 
-Aircraft: Holybro X500 V2. Rather than relying on live Bluetooth telemetry (SPP range ~10–30m, unreliable at real flight distances), the drone flies on its own onboard GPS and carries the QZ1 as a payload, logging in-flight; data is recovered after landing. Aircraft registration and 航空法 compliance are done, and test flights are cleared at school (teacher-approved, crop-free area). Flying over the actual field still needs the grandfather's explicit consent and a companion present — solo fieldwork and solo drone flights are banned by the hackathon rules.
+機体：Holybro X500 V2。BluetoothSPPのライブ通信（通信距離約10〜30mで実際の飛行距離には不十分）に頼るのではなく、ドローンは自機のGPSで自律飛行し、QZ1をペイロードとして搭載して機内ロギングを行います。データは着陸後に回収するため、飛行中のライブ通信は不要です。機体登録・航空法対応は完了しており、学校内での試験飛行も許可されています（教員承認済み・作物のない区域）。実際の水田上空での飛行には、祖父からの明示的な同意と同伴者の確保がさらに必要です — 単独でのフィールドワーク・ドローン飛行はハッカソンのルールで禁止されています。
 
 ## 検証・フィールドワーク計画 (Validation plan)
 
-1. Payload test at school (crop-free area, teacher-approved)
-2. Get explicit consent from the grandfather for field survey + overflight
-3. Walked survey with a companion (QZ1 + Pixel) — the reliable MVP path
-4. Drone survey over the field (stretch) for higher-density geometry data
+1. 学校でのペイロード試験（作物のない区域、教員承認済み）
+2. 祖父から水田の実地調査・上空飛行への明示的な同意を取得
+3. 同伴者とQZ1＋Pixelによる徒歩測量 — 確実に動くMVPの主経路
+4. 水田上空でのドローン測量（発展）— より高密度な圃場形状データを取得
 
 ## ロードマップ (Roadmap to 9/4)
 
-- **July:** prove the core loop — one real QZ1 point through to map display, end-to-end. Build the static JSON skeleton.
-- **Early August:** start data collection — walked survey of the field, school-based drone payload test, weekly check-ins begin.
-- **Late August:** stretch features — drone flight over the field (after consent), weather-integration logic.
-- **9/1–9/4:** on-site camp and final presentation at Nagaoka KOSEN (10-min talk + 10-min Q&A).
+- **7月：** コア機能を証明 — QZ1の実測1点から地図表示までをE2Eで動作確認。静的JSONの骨組みを構築。
+- **8月上旬：** データ収集を開始 — 徒歩測量で水田形状を取得、学校でドローン搭載試験、週次報告を開始。
+- **8月下旬：** 発展機能 — 同意取得後にドローン実地飛行、気象連携ロジックを実装。
+- **9/1〜9/4：** 現地合宿・最終発表 — 長岡高専にてフィールドテスト・仕上げ・最終発表（10分＋質疑10分）。
 
 ## 審査基準への対応 (Rubric alignment)
 
 | 評価項目 | 配点 | 対応内容 |
 |---|---|---|
-| 地域課題の的確さ | 25 | Real grandfather + real field; manual gate-operation burden confirmed by on-site interview |
-| 位置情報の活用度 | 25 | Field geometry recorded at high precision when SLAS is available (fix=2, satellite count, HDOP) |
-| 完成度 | 20 | Static-JSON-first MVP, live and working on GitHub Pages |
-| プレゼンテーション | 15 | Structured as 課題 → 技術の壁 → 解決策 → デモ |
-| 発展可能性 | 15 | Extensible to other fields; drone-based survey as a growth path |
+| 地域課題の的確さ | 25 | 実在する祖父・水田。手動水門操作の負担を実地ヒアリングで裏付け |
+| 位置情報の活用度 | 25 | SLAS取得時（fix=2・衛星数・HDOPで判定）に圃場形状を高精度記録 |
+| 完成度 | 20 | 静的JSON中心のMVPをGitHub Pagesで公開・実動作 |
+| プレゼンテーション | 15 | 課題→技術の壁→解決策→デモの型で構成 |
+| 発展可能性 | 15 | 他地域の水田・ドローン測量への展開余地 |
 
-Special awards targeted: ベストフィールドワーク賞 (real fieldwork emphasis) / 技術チャレンジ賞 (drone-mounted SLAS survey).
+狙う特別賞：ベストフィールドワーク賞（実地調査重視）／技術チャレンジ賞（ドローン搭載SLAS測量）。
 
-## Hardware Notes
+## ハードウェア補足 (Hardware Notes)
 
-The blue QZ1 receiver has no screen, so the NMEA logs are the evidence source for augmentation status. In GGA sentences, a fix-quality field value of `2` indicates a differential GNSS fix — used here as the signal that みちびき augmentation is active, when it's available.
+青いQZ1受信機には画面がないため、NMEAログが補強状況を示す証拠となります。GGAセンテンスのfix-quality値が `2` の場合、ディファレンシャルGNSS固定を示しており、みちびき補強が有効であることのシグナルとして使用しています（補強が得られる場合）。
 
-## How to Use
+## 使い方 (How to Use)
 
-Placeholder — app logic in progress.
+準備中 — アプリのロジックは開発中です。
