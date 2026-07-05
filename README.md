@@ -21,7 +21,8 @@ Suimon Navi is a decision-support web app for floodgate timing — not an automa
 ## 技術構成 (Tech stack)
 
 - **Field hardware:** Blue QZ1 GNSS receiver (L1S/SLAS, Bluetooth SPP) + Android Pixel 6a, logging NMEA and confirming `fix=2` when augmented
-- **Mapping:** Leaflet, rendering field geometry parsed client-side from the NMEA logs
+- **Live capture (PC):** Web Serial API — QZ1 paired over Bluetooth appears as a virtual serial port in Chrome/Edge; the app streams, plots, and saves NMEA live (with screen Wake Lock during recording). Phones can't reach SPP from a browser, so Pixel/iPhone use log-app + file upload
+- **Mapping:** Leaflet + Leaflet.markercluster (auto-clusters logs >400 points, e.g. 1Hz walked/drone surveys) + Turf.js (field area from the boundary polygon)
 - **Data:** Static JSON (field geometry + gate rules + weather input) — no cloud DB or login for the MVP, so effort stays on 完成度 (completeness)
 - **App:** Plain HTML/CSS/JS, hosted on GitHub Pages
 - **Reused from Pond Map:** NMEA file upload/paste, GGA parsing with fix-quality coloring, survey point tagging, JSON export/import, phone-GPS vs. QZ1 comparison layer, layer toggles, augmented-only filter, summary bar
@@ -62,4 +63,12 @@ The blue QZ1 receiver has no screen, so the NMEA logs are the evidence source fo
 
 ## How to Use
 
-Placeholder — app logic in progress.
+1. Serve the repo over HTTP so the app can fetch `data/*.json` — GitHub Pages, or locally e.g. `python3 -m http.server 4173`. Opening `index.html` directly (`file://`) also works: the app falls back to built-in copies of the same data.
+2. **NMEAをアップロード** — load a QZ1 log (`.nmea`). Valid GGA sentences are plotted: green = SLAS-augmented (fix=2), orange = plain GPS. The summary bar shows totals, skipped lines, and tag counts.
+   - Or record live: on a PC (Chrome/Edge, HTTPS/localhost) with the QZ1 paired via Bluetooth, use the **QZ1ライブ記録** card — connect to the serial port, watch the NMEA tail, see points appear on the map in real time, and save the raw log as `.nmea`. On phones the card explains the fallback (log app + upload).
+3. Click a point to tag it (水門 / 畦 / 水路 / 圃場の角 / その他), attach a photo reference and note, then save. **Tagging a point as 水門 promotes that QZ1-surveyed point to the app's gate location** (shown in the 圃場・水門 card; revert with 「水門位置を初期値に戻す」).
+4. **測量JSONを書き出し / 読み込み** — export or re-import the tagged survey as JSON.
+5. The right panel recommends **開ける / 閉める / 様子見** from the weather inputs and the thresholds in `data/gate_rules.json`. Both are editable live in the panel for demos; persistent values live in the JSON files.
+6. **📍 スマホGPSを記録** — record phone-GPS points (with accuracy circles) for the phone-vs-QZ1 comparison layer. Requires HTTPS or localhost plus location permission.
+
+Static data lives in `data/field.json` (boundary, channel, initial gate position), `data/gate_rules.json` (decision thresholds), and `data/weather.json` (initial weather input).
