@@ -1,0 +1,10 @@
+{
+  "fieldId": "field-001",
+  "description": "営農者（祖父）の経験則を初期しきい値として記録したもの。アプリ上で一時調整でき、確定値はこのファイルを更新して残す。",
+  "thresholds": {
+    "heavyRain24hMm": 20,
+    "lightRain24hMm": 5,
+    "forecastRainProbPct": 60,
+    "drySpellDays": 3
+  }
+}
