@@ -73,3 +73,4 @@
 6. **📍 スマホGPSを記録** — スマホGPSの測位点（精度円付き）を記録し、スマホ対QZ1の比較レイヤーに使用します。HTTPSまたはlocalhostと位置情報の許可が必要です。
 
 静的データは `data/field.json`（圃場境界・水路・初期水門位置）、`data/gate_rules.json`（判断しきい値）、`data/weather.json`（初期気象入力）に格納されています。
+
