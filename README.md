@@ -62,6 +62,16 @@
 
 青いQZ1受信機には画面がないため、NMEAログが補強状況を示す証拠となります。GGAセンテンスのfix-quality値が `2` の場合、ディファレンシャルGNSS固定を示しており、みちびき補強が有効であることのシグナルとして使用しています（補強が得られる場合）。
 
+## 実測結果 (First real-world capture — 2026-07-06)
+
+寮周辺での徒歩テスト（約7分・深夜・建物近傍）で **SLAS補強（fix=2）の受信を実証**しました。ログ: [`data/samples/qz1-dorm-walk-20260706.txt`](./data/samples/qz1-dorm-walk-20260706.txt)
+
+- GGA 426文 → SLAS補強 **48点**（6衛星・HDOP 1.8・約47秒連続ロック）／GPS単独 158点／コールドスタート直後の測位なし 220行
+- `$GQGSV`（QZSS衛星の可視情報）を受信 — みちびき捕捉の直接証拠
+- 記録経路: Pixel 6a ＋ Serial Bluetooth Terminal（Bluetooth SPP）→ ログ共有 → 本アプリにアップロード（スマホ運用フローの実証）
+
+建物影響の大きい夜間でSLAS率23%のため、開けた水田・日中ではさらに高い補強率を見込んでいます。
+
 ## 使い方 (How to Use)
 
 1. アプリが `data/*.json` を取得できるよう、HTTP経由で配信してください — GitHub Pages、またはローカルなら `python3 -m http.server 4173` など。`index.html` を直接開く（`file://`）場合も動作します。その場合は内蔵の初期データにフォールバックします。
