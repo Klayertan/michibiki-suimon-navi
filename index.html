@@ -638,6 +638,7 @@
         <span class="summary-item"><span class="dot green"></span>SLAS補強: <strong id="augmentedPoints">0</strong></span>
         <span class="summary-item"><span class="dot orange"></span>GPS単独: <strong id="gpsPoints">0</strong></span>
         <span class="summary-item">スキップ行: <strong id="skippedLines">0</strong></span>
+        <span class="summary-item">認識外の行: <strong id="ignoredLines">0</strong></span>
         <span class="summary-item">タグ: <strong id="tagCounts">—</strong></span>
         <span id="comparisonSummary" class="summary-item" hidden>比較: <strong id="comparisonText"></strong></span>
       </div>
@@ -648,8 +649,8 @@
       <div class="map-wrap">
         <div id="map"></div>
         <div id="emptyState" class="empty-state">
-          <strong>QZ1ログが未読込です</strong>
-          NMEAファイル（.nmea）をアップロードするか、測量JSONを読み込むと測位点が表示されます。
+          <strong id="emptyStateTitle">QZ1ログが未読込です</strong>
+          <span id="emptyStateDetail">NMEAファイル（.nmea）をアップロードするか、測量JSONを読み込むと測位点が表示されます。</span>
         </div>
       </div>
 
@@ -822,6 +823,21 @@
     const showPhoneLayerInput = document.getElementById("showPhoneLayer");
     const augmentedOnlyInput = document.getElementById("augmentedOnly");
     const emptyState = document.getElementById("emptyState");
+    const emptyStateTitle = document.getElementById("emptyStateTitle");
+    const emptyStateDetail = document.getElementById("emptyStateDetail");
+    const DEFAULT_EMPTY_STATE = {
+      title: "QZ1ログが未読込です",
+      detail: "NMEAファイル（.nmea）をアップロードするか、測量JSONを読み込むと測位点が表示されます。"
+    };
+
+    function setEmptyState(title, detail) {
+      emptyStateTitle.textContent = title;
+      emptyStateDetail.textContent = detail;
+    }
+
+    function resetEmptyState() {
+      setEmptyState(DEFAULT_EMPTY_STATE.title, DEFAULT_EMPTY_STATE.detail);
+    }
     const gpsMessage = document.getElementById("gpsMessage");
     const comparisonSummary = document.getElementById("comparisonSummary");
     const comparisonText = document.getElementById("comparisonText");
@@ -831,6 +847,7 @@
       augmented: document.getElementById("augmentedPoints"),
       gps: document.getElementById("gpsPoints"),
       skipped: document.getElementById("skippedLines"),
+      ignored: document.getElementById("ignoredLines"),
       tags: document.getElementById("tagCounts")
     };
     const verdictBadge = document.getElementById("verdictBadge");
@@ -878,6 +895,7 @@
     let liveLocationWatchId = null;
     let hasCenteredOnLiveLocation = false;
     let lastSkippedCount = 0;
+    let lastIgnoredCount = 0;
     let fieldData = DEFAULT_FIELD;
     let gateRules = DEFAULT_GATE_RULES;
     let weatherData = DEFAULT_WEATHER;
@@ -903,7 +921,8 @@
         points: [],
         malformed: 0,
         noFix: 0,
-        ignored: 0
+        ignored: 0,
+        ignoredSample: null
       };
 
       text.split(/\r?\n/).forEach((rawLine) => {
@@ -921,6 +940,9 @@
 
         if (!/^\$G[A-Z0-9]GGA,/i.test(line)) {
           result.ignored += 1;
+          if (result.ignoredSample === null) {
+            result.ignoredSample = rawLine.trim().slice(0, 80);
+          }
           return;
         }
 
@@ -1842,6 +1864,7 @@
       summaryEls.augmented.textContent = String(augmented);
       summaryEls.gps.textContent = String(gps);
       summaryEls.skipped.textContent = String(lastSkippedCount);
+      summaryEls.ignored.textContent = String(lastIgnoredCount);
       summaryEls.tags.textContent = formatFeatureCounts(countFeatures(parsedPoints));
       summary.hidden = false;
     }
@@ -2149,11 +2172,25 @@
       const parseResult = parseNmea(text);
       parsedPoints = parseResult.points;
       lastSkippedCount = parseResult.noFix + parseResult.malformed;
+      lastIgnoredCount = parseResult.ignored;
       clearSurveyedGate();
       rebuildSurveyedBoundaryAndChannel();
       updateSummary();
       renderPoints();
       refreshFieldOverlay();
+
+      if (parseResult.points.length === 0) {
+        const sample = parseResult.ignoredSample
+          ? `例: 「${parseResult.ignoredSample}」`
+          : "ファイルが空か、行の区切りを認識できませんでした。";
+        setEmptyState(
+          "有効なGGA文が見つかりませんでした",
+          `${parseResult.ignored}行を認識できずスキップしました。${sample} NMEA形式（$??GGA,...）か確認してください。`
+        );
+      } else {
+        resetEmptyState();
+      }
+
       fileInput.value = "";
     });
 
