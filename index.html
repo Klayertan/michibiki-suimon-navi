@@ -512,6 +512,12 @@
       grid-template-columns: 1fr 1fr;
     }
 
+    .fallback-steps {
+      display: grid;
+      gap: 6px;
+      padding-left: 18px;
+    }
+
     .serial-buttons .panel-button.primary {
       background: #214e57;
     }
@@ -599,7 +605,7 @@
         <div class="controls">
           <label class="action-button">
             NMEAをアップロード
-            <input id="fileInput" type="file" accept=".nmea,text/plain">
+            <input id="fileInput" type="file" accept=".nmea,.txt,.log,text/plain">
           </label>
           <label class="action-button secondary">
             測量JSONを読み込み
@@ -730,6 +736,13 @@
           </div>
           <pre id="serialLog" class="serial-log" hidden></pre>
           <p id="serialMessage" class="meta"></p>
+          <ol id="serialFallbackSteps" class="meta fallback-steps" hidden>
+            <li>Playストアで「Serial Bluetooth Terminal」（Kai Morich製）をインストール</li>
+            <li>Android設定 → Bluetooth でQZ1をペアリング</li>
+            <li>アプリのメニュー → Devices → <strong>Bluetooth Classic</strong> → QZ1を選んで接続（NMEA文が流れ始めます）</li>
+            <li>メニュー → <strong>Log</strong> で記録開始 → 測量 → 記録停止</li>
+            <li>ログファイルを共有/保存し、このアプリの「NMEAをアップロード」で読み込み（行頭にタイムスタンプが付いていても自動で除去します）</li>
+          </ol>
         </section>
       </aside>
     </main>
@@ -894,9 +907,16 @@
       };
 
       text.split(/\r?\n/).forEach((rawLine) => {
-        const line = rawLine.trim();
+        let line = rawLine.trim();
         if (!line) {
           return;
+        }
+
+        // Logger apps (e.g. Serial Bluetooth Terminal on Android) may prefix
+        // each line with a timestamp — recover the NMEA sentence mid-line.
+        const dollarIndex = line.indexOf("$G");
+        if (dollarIndex > 0) {
+          line = line.slice(dollarIndex);
         }
 
         if (!/^\$G[A-Z0-9]GGA,/i.test(line)) {
@@ -1929,7 +1949,8 @@
         serialConnectButton.disabled = true;
         baudSelect.disabled = true;
         setSerialStatus("非対応", "error");
-        setSerialMessage("このブラウザは Web Serial 非対応です。PCのChrome/EdgeならQZ1をBluetoothペアリングしてライブ接続できます。Pixel/iPhoneでは従来どおりアプリでログを記録し、「NMEAをアップロード」を使ってください。");
+        setSerialMessage("このブラウザは Web Serial 非対応です（Android/iPhoneでは使えません）。スマホでは以下の手順でログを記録してアップロードしてください：");
+        document.getElementById("serialFallbackSteps").hidden = false;
         return;
       }
 
