@@ -108,6 +108,14 @@
       background: #b91c1c;
     }
 
+    .action-button.locate {
+      background: #1d4ed8;
+    }
+
+    .action-button.locate.active {
+      background: #b91c1c;
+    }
+
     .action-button:disabled {
       cursor: not-allowed;
       opacity: 0.55;
@@ -315,6 +323,10 @@
       padding: 9px 12px;
     }
 
+    .panel-button.primary {
+      background: #214e57;
+    }
+
     .empty-state {
       background: rgba(255, 255, 255, 0.95);
       border: 1px solid var(--line);
@@ -500,6 +512,12 @@
       grid-template-columns: 1fr 1fr;
     }
 
+    .fallback-steps {
+      display: grid;
+      gap: 6px;
+      padding-left: 18px;
+    }
+
     .serial-buttons .panel-button.primary {
       background: #214e57;
     }
@@ -587,13 +605,14 @@
         <div class="controls">
           <label class="action-button">
             NMEAをアップロード
-            <input id="fileInput" type="file" accept=".nmea,text/plain">
+            <input id="fileInput" type="file" accept=".nmea,.txt,.log,text/plain">
           </label>
           <label class="action-button secondary">
             測量JSONを読み込み
             <input id="importInput" type="file" accept=".json,application/json">
           </label>
           <button id="exportButton" class="action-button secondary" type="button" disabled>測量JSONを書き出し</button>
+          <button id="locateButton" class="action-button locate" type="button">📍 現在地を表示</button>
           <button id="recordPhoneButton" class="action-button phone" type="button">📍 スマホGPSを記録</button>
           <button id="clearPhoneButton" class="action-button secondary" type="button" disabled>スマホGPS点をクリア</button>
           <label class="filter">
@@ -619,6 +638,7 @@
         <span class="summary-item"><span class="dot green"></span>SLAS補強: <strong id="augmentedPoints">0</strong></span>
         <span class="summary-item"><span class="dot orange"></span>GPS単独: <strong id="gpsPoints">0</strong></span>
         <span class="summary-item">スキップ行: <strong id="skippedLines">0</strong></span>
+        <span class="summary-item">認識外の行: <strong id="ignoredLines">0</strong></span>
         <span class="summary-item">タグ: <strong id="tagCounts">—</strong></span>
         <span id="comparisonSummary" class="summary-item" hidden>比較: <strong id="comparisonText"></strong></span>
       </div>
@@ -629,8 +649,8 @@
       <div class="map-wrap">
         <div id="map"></div>
         <div id="emptyState" class="empty-state">
-          <strong>QZ1ログが未読込です</strong>
-          NMEAファイル（.nmea）をアップロードするか、測量JSONを読み込むと測位点が表示されます。
+          <strong id="emptyStateTitle">QZ1ログが未読込です</strong>
+          <span id="emptyStateDetail">NMEAファイル（.nmea）をアップロードするか、測量JSONを読み込むと測位点が表示されます。</span>
         </div>
       </div>
 
@@ -644,6 +664,8 @@
 
         <section class="card">
           <h2>気象入力<span class="en">Weather</span></h2>
+          <div class="kv"><span>自動取得</span><strong><span id="weatherFetchStatus" class="serial-status">未取得</span></strong></div>
+          <button id="weatherFetchButton" class="panel-button primary" type="button">現在地の気象を自動取得（Open-Meteo）</button>
           <div class="input-row">
             <label for="rain24hInput">直近24時間の降雨量 (mm)</label>
             <input id="rain24hInput" type="number" min="0" step="0.5" inputmode="decimal">
@@ -684,11 +706,14 @@
           <h2>圃場・水門<span class="en">Field &amp; gate</span></h2>
           <div class="kv"><span>圃場</span><strong id="fieldName">—</strong></div>
           <div class="kv"><span>圃場面積</span><strong id="fieldArea">—</strong></div>
+          <div class="kv"><span>境界データ</span><strong id="boundarySource">—</strong></div>
+          <div class="kv"><span>水路データ</span><strong id="channelSource">—</strong></div>
           <div class="kv"><span>水門位置</span><strong id="gateCoords">—</strong></div>
           <div class="kv"><span>位置ソース</span><strong id="gateSource">—</strong></div>
           <button id="resetGateButton" class="panel-button" type="button" hidden>水門位置を初期値に戻す</button>
+          <button id="exportFieldButton" class="panel-button primary" type="button" disabled>圃場データを書き出し (field.json)</button>
           <p id="dataSourceNote" class="meta"></p>
-          <p class="meta">測位点を「水門」タグで保存すると、その QZ1 測量点が水門位置として使われます。</p>
+          <p class="meta">測位点を地図のポップアップで「圃場の角」「水路」「水門」にタグ付けすると、その場で境界線・水路・水門位置が描画されます。圃場の角は外周を歩いた順にタグ付けしてください（3点以上で境界線が描画されます）。</p>
         </section>
 
         <section class="card">
@@ -712,6 +737,13 @@
           </div>
           <pre id="serialLog" class="serial-log" hidden></pre>
           <p id="serialMessage" class="meta"></p>
+          <ol id="serialFallbackSteps" class="meta fallback-steps" hidden>
+            <li>Playストアで「Serial Bluetooth Terminal」（Kai Morich製）をインストール</li>
+            <li>Android設定 → Bluetooth でQZ1をペアリング</li>
+            <li>アプリのメニュー → Devices → <strong>Bluetooth Classic</strong> → QZ1を選んで接続（NMEA文が流れ始めます）</li>
+            <li>メニュー → <strong>Log</strong> で記録開始 → 測量 → 記録停止</li>
+            <li>ログファイルを共有/保存し、このアプリの「NMEAをアップロード」で読み込み（行頭にタイムスタンプが付いていても自動で除去します）</li>
+          </ol>
         </section>
       </aside>
     </main>
@@ -783,6 +815,7 @@
     const fileInput = document.getElementById("fileInput");
     const importInput = document.getElementById("importInput");
     const exportButton = document.getElementById("exportButton");
+    const locateButton = document.getElementById("locateButton");
     const recordPhoneButton = document.getElementById("recordPhoneButton");
     const clearPhoneButton = document.getElementById("clearPhoneButton");
     const showFieldLayerInput = document.getElementById("showFieldLayer");
@@ -790,6 +823,21 @@
     const showPhoneLayerInput = document.getElementById("showPhoneLayer");
     const augmentedOnlyInput = document.getElementById("augmentedOnly");
     const emptyState = document.getElementById("emptyState");
+    const emptyStateTitle = document.getElementById("emptyStateTitle");
+    const emptyStateDetail = document.getElementById("emptyStateDetail");
+    const DEFAULT_EMPTY_STATE = {
+      title: "QZ1ログが未読込です",
+      detail: "NMEAファイル（.nmea）をアップロードするか、測量JSONを読み込むと測位点が表示されます。"
+    };
+
+    function setEmptyState(title, detail) {
+      emptyStateTitle.textContent = title;
+      emptyStateDetail.textContent = detail;
+    }
+
+    function resetEmptyState() {
+      setEmptyState(DEFAULT_EMPTY_STATE.title, DEFAULT_EMPTY_STATE.detail);
+    }
     const gpsMessage = document.getElementById("gpsMessage");
     const comparisonSummary = document.getElementById("comparisonSummary");
     const comparisonText = document.getElementById("comparisonText");
@@ -799,11 +847,14 @@
       augmented: document.getElementById("augmentedPoints"),
       gps: document.getElementById("gpsPoints"),
       skipped: document.getElementById("skippedLines"),
+      ignored: document.getElementById("ignoredLines"),
       tags: document.getElementById("tagCounts")
     };
     const verdictBadge = document.getElementById("verdictBadge");
     const verdictReason = document.getElementById("verdictReason");
     const weatherMeta = document.getElementById("weatherMeta");
+    const weatherFetchButton = document.getElementById("weatherFetchButton");
+    const weatherFetchStatusEl = document.getElementById("weatherFetchStatus");
     const weatherInputs = {
       rain24hMm: document.getElementById("rain24hInput"),
       daysSinceRain: document.getElementById("daysSinceRainInput"),
@@ -817,9 +868,12 @@
     };
     const fieldNameEl = document.getElementById("fieldName");
     const fieldAreaEl = document.getElementById("fieldArea");
+    const boundarySourceEl = document.getElementById("boundarySource");
+    const channelSourceEl = document.getElementById("channelSource");
     const gateCoordsEl = document.getElementById("gateCoords");
     const gateSourceEl = document.getElementById("gateSource");
     const resetGateButton = document.getElementById("resetGateButton");
+    const exportFieldButton = document.getElementById("exportFieldButton");
     const dataSourceNote = document.getElementById("dataSourceNote");
     const serialStatusEl = document.getElementById("serialStatus");
     const serialLineCountEl = document.getElementById("serialLineCount");
@@ -837,11 +891,17 @@
     let pointLayerClustered = false;
     let phoneLayer = L.layerGroup().addTo(map);
     let fieldLayer = L.layerGroup().addTo(map);
+    let liveLocationLayer = L.layerGroup().addTo(map);
+    let liveLocationWatchId = null;
+    let hasCenteredOnLiveLocation = false;
     let lastSkippedCount = 0;
+    let lastIgnoredCount = 0;
     let fieldData = DEFAULT_FIELD;
     let gateRules = DEFAULT_GATE_RULES;
     let weatherData = DEFAULT_WEATHER;
     let surveyedGate = null;
+    let surveyedBoundary = [];
+    let surveyedChannel = [];
 
     // Web Serial live-capture state (QZ1 over Bluetooth SPP virtual port or USB)
     const serialSupported = "serial" in navigator;
@@ -861,17 +921,28 @@
         points: [],
         malformed: 0,
         noFix: 0,
-        ignored: 0
+        ignored: 0,
+        ignoredSample: null
       };
 
       text.split(/\r?\n/).forEach((rawLine) => {
-        const line = rawLine.trim();
+        let line = rawLine.trim();
         if (!line) {
           return;
         }
 
+        // Logger apps (e.g. Serial Bluetooth Terminal on Android) may prefix
+        // each line with a timestamp — recover the NMEA sentence mid-line.
+        const dollarIndex = line.indexOf("$G");
+        if (dollarIndex > 0) {
+          line = line.slice(dollarIndex);
+        }
+
         if (!/^\$G[A-Z0-9]GGA,/i.test(line)) {
           result.ignored += 1;
+          if (result.ignoredSample === null) {
+            result.ignoredSample = rawLine.trim().slice(0, 80);
+          }
           return;
         }
 
@@ -1048,7 +1119,92 @@
 
       const updated = weatherData.updatedAt ? `更新: ${weatherData.updatedAt}` : "更新日不明";
       const source = weatherData.source ? ` / 出典: ${weatherData.source}` : "";
-      weatherMeta.textContent = `${updated}${source}（data/weather.json の初期値。ここで上書きできます）`;
+      weatherMeta.textContent = `${updated}${source}（値はここで上書きできます）`;
+    }
+
+    function setWeatherFetchStatus(text, tone) {
+      weatherFetchStatusEl.textContent = text;
+      weatherFetchStatusEl.className = `serial-status${tone ? ` ${tone}` : ""}`;
+    }
+
+    function deriveWeatherFromOpenMeteo(data) {
+      const times = data?.hourly?.time ?? [];
+      const precip = data?.hourly?.precipitation ?? [];
+      const prob = data?.hourly?.precipitation_probability ?? [];
+
+      const now = new Date();
+      let nowIndex = 0;
+      for (let i = 0; i < times.length; i += 1) {
+        if (new Date(times[i]) <= now) {
+          nowIndex = i;
+        } else {
+          break;
+        }
+      }
+
+      const past24 = precip.slice(Math.max(0, nowIndex - 23), nowIndex + 1);
+      const rain24hMm = past24.reduce((sum, v) => sum + (Number.isFinite(v) ? v : 0), 0);
+
+      const next24 = prob.slice(nowIndex + 1, nowIndex + 25).filter((v) => Number.isFinite(v));
+      const forecastRainProbPct = next24.length > 0 ? Math.max(...next24) : 0;
+
+      const DRY_THRESHOLD_MM = 1;
+      const dailyTotals = new Map();
+      times.forEach((time, i) => {
+        const day = time.slice(0, 10);
+        const value = Number.isFinite(precip[i]) ? precip[i] : 0;
+        dailyTotals.set(day, (dailyTotals.get(day) ?? 0) + value);
+      });
+
+      const sortedDays = [...dailyTotals.keys()].sort();
+      const todayIndex = sortedDays.indexOf(times[nowIndex]?.slice(0, 10));
+
+      let daysSinceRain = 0;
+      for (let i = todayIndex - 1; i >= 0; i -= 1) {
+        if ((dailyTotals.get(sortedDays[i]) ?? 0) >= DRY_THRESHOLD_MM) {
+          break;
+        }
+        daysSinceRain += 1;
+      }
+
+      return {
+        rain24hMm: Math.round(rain24hMm * 10) / 10,
+        daysSinceRain,
+        forecastRainProbPct: Math.round(forecastRainProbPct)
+      };
+    }
+
+    async function fetchLiveWeather() {
+      const gate = activeGate();
+      const lat = gate ? gate.lat : finiteOr(fieldData?.gate?.lat, 34.65481);
+      const lon = gate ? gate.lon : finiteOr(fieldData?.gate?.lon, 135.83022);
+
+      weatherFetchButton.disabled = true;
+      setWeatherFetchStatus("取得中…", "");
+
+      try {
+        const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=precipitation,precipitation_probability&past_days=8&forecast_days=2&timezone=Asia%2FTokyo`;
+        const response = await fetch(url, { cache: "no-store" });
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        const data = await response.json();
+        const derived = deriveWeatherFromOpenMeteo(data);
+        weatherData = {
+          ...derived,
+          updatedAt: new Date().toISOString().slice(0, 16).replace("T", " ") + " UTC",
+          source: `Open-Meteo自動取得（${lat.toFixed(5)}, ${lon.toFixed(5)}）`
+        };
+
+        populateDecisionInputs();
+        updateDecision();
+        setWeatherFetchStatus("取得成功", "connected");
+      } catch (error) {
+        setWeatherFetchStatus(`取得失敗: ${error.message}`, "error");
+      } finally {
+        weatherFetchButton.disabled = false;
+      }
     }
 
     function evaluateGate(weather, th) {
@@ -1124,30 +1280,56 @@
       return null;
     }
 
-    function renderFieldLayer() {
-      fieldLayer.clearLayers();
+    function activeBoundary() {
+      if (surveyedBoundary.length >= 3) {
+        return { points: surveyedBoundary.map((point) => [point.lat, point.lon]), source: "survey" };
+      }
 
       const boundary = Array.isArray(fieldData.boundary) ? fieldData.boundary : [];
       if (boundary.length >= 3) {
-        L.polygon(boundary, {
+        return { points: boundary, source: "initial" };
+      }
+
+      return null;
+    }
+
+    function activeChannel() {
+      if (surveyedChannel.length >= 2) {
+        return { points: surveyedChannel.map((point) => [point.lat, point.lon]), source: "survey" };
+      }
+
+      const channel = Array.isArray(fieldData.channel) ? fieldData.channel : [];
+      if (channel.length >= 2) {
+        return { points: channel, source: "initial" };
+      }
+
+      return null;
+    }
+
+    function renderFieldLayer() {
+      fieldLayer.clearLayers();
+
+      const boundary = activeBoundary();
+      if (boundary) {
+        L.polygon(boundary.points, {
           color: "#15803d",
           weight: 2,
           fillColor: "#22c55e",
           fillOpacity: 0.08
         })
-          .bindTooltip(String(fieldData.name ?? "圃場"))
+          .bindTooltip(`${String(fieldData.name ?? "圃場")}${boundary.source === "survey" ? "（測量中）" : ""}`)
           .addTo(fieldLayer);
       }
 
-      const channel = Array.isArray(fieldData.channel) ? fieldData.channel : [];
-      if (channel.length >= 2) {
-        L.polyline(channel, {
+      const channel = activeChannel();
+      if (channel) {
+        L.polyline(channel.points, {
           color: "#0e7490",
           weight: 3,
           dashArray: "6 6",
           opacity: 0.85
         })
-          .bindTooltip("水路")
+          .bindTooltip(`水路${channel.source === "survey" ? "（測量中）" : ""}`)
           .addTo(fieldLayer);
       }
 
@@ -1167,13 +1349,13 @@
     }
 
     function formatFieldArea() {
-      const boundary = Array.isArray(fieldData.boundary) ? fieldData.boundary : [];
-      if (boundary.length < 3 || typeof globalThis.turf === "undefined") {
+      const boundary = activeBoundary();
+      if (!boundary || typeof globalThis.turf === "undefined") {
         return "—";
       }
 
       try {
-        const ring = boundary.map(([lat, lon]) => [lon, lat]);
+        const ring = boundary.points.map(([lat, lon]) => [lon, lat]);
         ring.push(ring[0]);
         const squareMeters = turf.area(turf.polygon([ring]));
         const tan = squareMeters / 991.74;
@@ -1186,6 +1368,17 @@
     function updateGatePanel() {
       fieldNameEl.textContent = String(fieldData.name ?? "—");
       fieldAreaEl.textContent = formatFieldArea();
+
+      const boundary = activeBoundary();
+      boundarySourceEl.textContent = boundary
+        ? (boundary.source === "survey" ? `QZ1測量（圃場の角 ${surveyedBoundary.length}点）` : "初期値（data/field.json・仮）")
+        : `未設定（あと${Math.max(0, 3 - surveyedBoundary.length)}点タグ付けが必要）`;
+
+      const channel = activeChannel();
+      channelSourceEl.textContent = channel
+        ? (channel.source === "survey" ? `QZ1測量（水路 ${surveyedChannel.length}点）` : "初期値（data/field.json・仮）")
+        : `未設定（あと${Math.max(0, 2 - surveyedChannel.length)}点タグ付けが必要）`;
+
       const gate = activeGate();
       if (gate) {
         gateCoordsEl.textContent = `${gate.lat.toFixed(6)}, ${gate.lon.toFixed(6)}`;
@@ -1196,18 +1389,57 @@
       }
 
       resetGateButton.hidden = surveyedGate === null;
+      exportFieldButton.disabled = surveyedGate === null && surveyedBoundary.length === 0 && surveyedChannel.length === 0;
     }
 
     function setSurveyedGate(point) {
       surveyedGate = { id: point.id, lat: point.lat, lon: point.lon };
-      renderFieldLayer();
-      updateGatePanel();
     }
 
     function clearSurveyedGate() {
       surveyedGate = null;
+    }
+
+    function rebuildSurveyedBoundaryAndChannel() {
+      surveyedBoundary = parsedPoints
+        .filter((point) => point.feature === "corner")
+        .map((point) => ({ id: point.id, lat: point.lat, lon: point.lon }));
+
+      surveyedChannel = parsedPoints
+        .filter((point) => point.feature === "channel")
+        .map((point) => ({ id: point.id, lat: point.lat, lon: point.lon }));
+    }
+
+    function refreshFieldOverlay() {
       renderFieldLayer();
       updateGatePanel();
+    }
+
+    function exportFieldJson() {
+      const boundary = activeBoundary();
+      const channel = activeChannel();
+      const gate = activeGate();
+
+      const data = {
+        id: fieldData.id ?? "field-001",
+        name: fieldData.name ?? "圃場",
+        note: "QZ1測量点から書き出し（Suimon Navi）",
+        boundary: boundary ? boundary.points.map(([lat, lon]) => [Number(lat.toFixed(6)), Number(lon.toFixed(6))]) : [],
+        channel: channel ? channel.points.map(([lat, lon]) => [Number(lat.toFixed(6)), Number(lon.toFixed(6))]) : [],
+        gate: gate
+          ? { lat: Number(gate.lat.toFixed(6)), lon: Number(gate.lon.toFixed(6)), label: "水門" }
+          : (fieldData.gate ?? null)
+      };
+
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "field.json";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
     }
 
     function ensurePointContainer(pointCount) {
@@ -1351,10 +1583,99 @@
       clearGpsMessage();
     }
 
+    function toggleLiveLocation() {
+      if (liveLocationWatchId !== null) {
+        stopLiveLocation();
+        return;
+      }
+
+      startLiveLocation();
+    }
+
+    function startLiveLocation() {
+      clearGpsMessage();
+
+      if (!globalThis.navigator || !navigator.geolocation) {
+        showGpsMessage("現在地を取得できません — HTTPS（またはlocalhost）と位置情報の許可が必要です。");
+        return;
+      }
+
+      hasCenteredOnLiveLocation = false;
+      locateButton.textContent = "📍 現在地を停止";
+      locateButton.classList.add("active");
+
+      liveLocationWatchId = navigator.geolocation.watchPosition(
+        (position) => {
+          const lat = Number(position.coords.latitude);
+          const lon = Number(position.coords.longitude);
+          const accuracy = Number(position.coords.accuracy);
+          if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+            return;
+          }
+
+          renderLiveLocation(lat, lon, accuracy);
+        },
+        () => {
+          showGpsMessage("現在地を取得できません — HTTPS（またはlocalhost）と位置情報の許可が必要です。");
+          stopLiveLocation();
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 15000,
+          maximumAge: 2000
+        }
+      );
+    }
+
+    function stopLiveLocation() {
+      if (liveLocationWatchId !== null) {
+        navigator.geolocation.clearWatch(liveLocationWatchId);
+        liveLocationWatchId = null;
+      }
+
+      locateButton.textContent = "📍 現在地を表示";
+      locateButton.classList.remove("active");
+      liveLocationLayer.clearLayers();
+    }
+
+    function renderLiveLocation(lat, lon, accuracy) {
+      liveLocationLayer.clearLayers();
+
+      if (Number.isFinite(accuracy)) {
+        L.circle([lat, lon], {
+          radius: accuracy,
+          color: "#1d4ed8",
+          fillColor: "#1d4ed8",
+          fillOpacity: 0.08,
+          opacity: 0.3,
+          weight: 1
+        }).addTo(liveLocationLayer);
+      }
+
+      L.circleMarker([lat, lon], {
+        radius: 8,
+        color: "#ffffff",
+        fillColor: "#1d4ed8",
+        fillOpacity: 1,
+        opacity: 1,
+        weight: 3
+      })
+        .bindTooltip("現在地", { direction: "top", offset: [0, -8] })
+        .addTo(liveLocationLayer);
+
+      syncLayerVisibility();
+
+      if (!hasCenteredOnLiveLocation) {
+        map.setView([lat, lon], Math.max(map.getZoom(), 17));
+        hasCenteredOnLiveLocation = true;
+      }
+    }
+
     function syncLayerVisibility() {
       setLayerVisible(fieldLayer, showFieldLayerInput.checked);
       setLayerVisible(pointLayer, showQz1LayerInput.checked);
       setLayerVisible(phoneLayer, showPhoneLayerInput.checked);
+      setLayerVisible(liveLocationLayer, showPhoneLayerInput.checked);
     }
 
     function setLayerVisible(layer, visible) {
@@ -1543,6 +1864,7 @@
       summaryEls.augmented.textContent = String(augmented);
       summaryEls.gps.textContent = String(gps);
       summaryEls.skipped.textContent = String(lastSkippedCount);
+      summaryEls.ignored.textContent = String(lastIgnoredCount);
       summaryEls.tags.textContent = formatFeatureCounts(countFeatures(parsedPoints));
       summary.hidden = false;
     }
@@ -1624,13 +1946,16 @@
       });
     }
 
-    function applySurveyedGateFromPoints() {
+    function applySurveyedFieldFromPoints() {
       const gatePoint = [...parsedPoints].reverse().find((point) => point.feature === "gate");
       if (gatePoint) {
         setSurveyedGate(gatePoint);
       } else {
         clearSurveyedGate();
       }
+
+      rebuildSurveyedBoundaryAndChannel();
+      refreshFieldOverlay();
     }
 
     function setSerialStatus(text, tone) {
@@ -1647,7 +1972,8 @@
         serialConnectButton.disabled = true;
         baudSelect.disabled = true;
         setSerialStatus("非対応", "error");
-        setSerialMessage("このブラウザは Web Serial 非対応です。PCのChrome/EdgeならQZ1をBluetoothペアリングしてライブ接続できます。Pixel/iPhoneでは従来どおりアプリでログを記録し、「NMEAをアップロード」を使ってください。");
+        setSerialMessage("このブラウザは Web Serial 非対応です（Android/iPhoneでは使えません）。スマホでは以下の手順でログを記録してアップロードしてください：");
+        document.getElementById("serialFallbackSteps").hidden = false;
         return;
       }
 
@@ -1830,8 +2156,10 @@
         clearSurveyedGate();
       }
 
+      rebuildSurveyedBoundaryAndChannel();
       updateSummary();
       renderPoints({ fit: false });
+      refreshFieldOverlay();
     }
 
     fileInput.addEventListener("change", async (event) => {
@@ -1844,9 +2172,25 @@
       const parseResult = parseNmea(text);
       parsedPoints = parseResult.points;
       lastSkippedCount = parseResult.noFix + parseResult.malformed;
+      lastIgnoredCount = parseResult.ignored;
       clearSurveyedGate();
+      rebuildSurveyedBoundaryAndChannel();
       updateSummary();
       renderPoints();
+      refreshFieldOverlay();
+
+      if (parseResult.points.length === 0) {
+        const sample = parseResult.ignoredSample
+          ? `例: 「${parseResult.ignoredSample}」`
+          : "ファイルが空か、行の区切りを認識できませんでした。";
+        setEmptyState(
+          "有効なGGA文が見つかりませんでした",
+          `${parseResult.ignored}行を認識できずスキップしました。${sample} NMEA形式（$??GGA,...）か確認してください。`
+        );
+      } else {
+        resetEmptyState();
+      }
+
       fileInput.value = "";
     });
 
@@ -1859,7 +2203,7 @@
       try {
         parsedPoints = parseSurveyJson(await file.text());
         lastSkippedCount = 0;
-        applySurveyedGateFromPoints();
+        applySurveyedFieldFromPoints();
         updateSummary();
         renderPoints();
       } catch (error) {
@@ -1870,13 +2214,18 @@
     });
 
     exportButton.addEventListener("click", exportSurveyJson);
+    exportFieldButton.addEventListener("click", exportFieldJson);
+    locateButton.addEventListener("click", toggleLiveLocation);
     recordPhoneButton.addEventListener("click", recordPhoneGpsPoint);
     clearPhoneButton.addEventListener("click", clearPhoneGpsPoints);
     showFieldLayerInput.addEventListener("change", syncLayerVisibility);
     showQz1LayerInput.addEventListener("change", syncLayerVisibility);
     showPhoneLayerInput.addEventListener("change", syncLayerVisibility);
     augmentedOnlyInput.addEventListener("change", () => renderPoints());
-    resetGateButton.addEventListener("click", clearSurveyedGate);
+    resetGateButton.addEventListener("click", () => {
+      clearSurveyedGate();
+      refreshFieldOverlay();
+    });
     serialConnectButton.addEventListener("click", toggleSerialConnection);
     serialDownloadButton.addEventListener("click", downloadSerialLog);
 
@@ -1895,6 +2244,7 @@
       }
     });
 
+    weatherFetchButton.addEventListener("click", fetchLiveWeather);
     Object.values(weatherInputs).forEach((input) => input.addEventListener("input", updateDecision));
     Object.values(thresholdInputs).forEach((input) => input.addEventListener("input", updateDecision));
 
@@ -1915,6 +2265,7 @@
       updateGatePanel();
       updateDecision();
       fitFieldBounds();
+      fetchLiveWeather();
     })();
   </script>
 </body>
