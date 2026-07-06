@@ -26,32 +26,26 @@
 - 重量: QZ1 約100g + スマホ 約200g ≪ X500 V2 ペイロード余裕（約1kg）→ 問題なし
 - リスク: 振動でBT切断 → スマホとQZ1を同じ防振マウントに載せる
 
-## Phase 1 — E220ペアの机上テスト（手持ち部品で今すぐ着手可）
+## Phase 1 — E220ペアの机上テスト（M5Stack Core2×2 + YwRobot Power MB V2で着手）
 
-**手持ち部品の役割**
+Arduino UNOは使わず、**空中局・地上局とも M5Stack Core2** で統一（保有機材のみで新規購入なし）。Core2は画面・タッチ・バッテリー内蔵のESP32ボードなので、地上局側は受信状況をその場で画面表示できる（PC不要でも動作確認できる）。
 
-| 部品 | 役割 |
+**役割分担**
+
+| 機材 | 役割 |
 |---|---|
-| Arduino UNO | 地上局E220用の**USB-シリアル変換器として流用**（新規購入不要）。UNOのUSBは0/1ピンに直結しているため、スケッチを書かず（または空スケッチのまま）0/1ピンにE220を配線すればPC側からはただのUSBシリアルポートとして見える |
-| YwRobot Power MB V2 | ブレッドボード上でE220に**安定した3.3V**を供給。Arduino/USBの3.3Vピンは送信バースト時の電流（〜120mA）で電圧降下しやすく、通信が不安定になりがちなので専用レギュレータから取る方が安全 |
-| ESP32 DevKit | 空中局（機上ブリッジ）用。3.3Vロジックネイティブなので E220 と直結できる（レベル変換不要） |
+| M5Stack Core2 #1（空中局） | QZ1へBluetooth SPP接続 → GGA行のみ抽出 → Port C（UART, G13/G14）経由でE220へ送信。画面は使わない（M5.begin()を呼ばず素のESP32 Arduino coreとして軽量に動かす） |
+| M5Stack Core2 #2（地上局） | E220からPort C（G13/G14）で受信 → USB経由でPCへそのまま中継（Suimon NaviのWeb Serialが読む） → 同時に自機の画面へ受信バイト数・GGA件数・最新fix qualityを表示（デモ映え・PC無しでも動作確認可） |
+| YwRobot Power MB V2 | **地上局E220専用の3.3V電源**。Core2のGroveポート(Port C)の5Vピンは電池/USB由来でそのまま5V系のため、**E220のVCCには使わない**。ブレッドボード上でYwRobotから安定3.3Vを別途供給し、Core2とはGNDのみ共通にする |
 
-**⚠️ 電圧注意（UNOは5Vロジック、E220は3.3Vロジック）**
-- E220 TX → UNO RX(pin0): 3.3V出力はUNOの5V系でも「HIGH」と認識されるため直結可
-- UNO TX(pin1) → E220 RX: **直結禁止**。5V信号がE220の3.3V入力を壊す恐れがある。抵抗分圧（例: UNO TX --1kΩ-- E220 RX --2kΩ-- GND、分圧比 2/3 ≈3.3V）を挟む
-- E220 VCC/GND は YwRobot Power MB V2 の3.3VレールへUNOと共通GNDで接続（UNOの5Vやオンボード3.3Vピンからは取らない）
+**⚠️ 配線前に必ず確認: E220-900T22S(JP)の許容入力電圧**
+E220モジュールの基板シルク/データシートで「VCC 3.3V専用」か「3.3〜5.5V許容（オンボードレギュレータ内蔵）」かを確認してください。
+- **3.3V専用の場合:** VCCは必ずYwRobot Power MB V2の3.3Vレールから取る（地上局）。空中局はCore2のGrove 5Vではなく、機体のBECから3.3Vへ落とす小型レギュレータ（または3.3V単体電源）を別途用意する
+- **3.3〜5.5V許容の場合:** Core2のGrove Port C の5VピンからそのままVCCを取ってよい（地上・空中とも配線がシンプルになる）。この場合YwRobot Power MB V2はベンチテストの電源安定化用途のみに使う
 
-**部品リスト（追加購入が必要なもの）**
-
-| 部品 | 数 | 用途 | 目安 |
-|---|---|---|---|
-| E220-900T22S(JP) + 920MHzアンテナ | 2 | 機上局・地上局 | 手持ち |
-| ESP32 DevKit | 1 | 機上ブリッジ | 手持ち |
-| Arduino UNO | 1 | 地上局のUSB変換器として流用 | 手持ち |
-| YwRobot Power MB V2 | 1 | E220への3.3V給電 | 手持ち |
-| 抵抗 1kΩ・2kΩ 各1本 | — | UNO→E220 RXの分圧 | 数十円（手持ちの可能性大） |
-
-→ **追加購入なしでPhase 1着手可能。**
+**Core2 Port C（Grove）ピン配置（両局共通）**
+- G13 = RX2、G14 = TX2、GND、5V（上記の電圧確認結果に応じて使用/未使用を判断）
+- E220の TX/RX と Core2の RX2/TX2 をクロス接続（E220 TX → Core2 G13、E220 RX → Core2 G14）
 
 **E220設定（両局共通・設定モード M0=0,M1=1 で書込み）**
 - UARTボーレート: 9600 / 8N1（アプリのボーレート選択に既にある）
@@ -60,26 +54,24 @@
 - 送信出力: 22dBm（JP版はLBT内蔵で ARIB STD-T108 適合）
 
 **テスト手順**
-1. 地上局E220をUNO（抵抗分圧経由）に配線、YwRobot Power MB V2から3.3V給電、UNOをPCにUSB接続
-2. 機上局E220はまずESP32に接続せず、単体でPCの別ポート（もう1台のUNO、または後述のESP32）から直接テキストを流し、地上局側で受信できるか確認
-3. Suimon NaviのQZ1ライブ記録カードでボーレート9600・「QZ1に接続」→ UNOのUSBシリアルポートを選択
-4. 機上局側からNMEAサンプル（`data/samples/qz1-dorm-walk-20260706.txt`）を1行ずつ流し、地図に点が増えることを確認
+1. 地上局Core2とE220をPort C経由で配線、YwRobot Power MB V2（または電圧確認済みなら5V直結）でE220に給電、地上局Core2をPCにUSB接続
+2. 地上局スケッチを書き込み（下記）→ PCのシリアルモニタでE220からの受信を確認
+3. 空中局Core2にNMEAサンプルの中身を直接`Serial.println`で流し込むテストスケッチを一時的に書き込み、地上局が受信・画面表示することを確認
+4. Suimon NaviのQZ1ライブ記録カードでボーレート9600・「QZ1に接続」→ 地上局Core2のUSBシリアルポートを選択 → 地図に点が増えることを確認
 
-## Phase 2 — ESP32ブリッジ開発
+## Phase 2 — Core2ブリッジ開発
 
-役割: QZ1のBluetooth SPPにマスタ接続 → NMEA受信 → **GGA行のみ** E220へ転送（帯域対策。全文 ≈6kbps は 2.4kbps に収まらないため）。
-
-スケッチ骨子:
+**空中局スケッチ骨子**（画面・バッテリー管理は使わず、素のESP32 Arduino coreのBluetoothSerial + HardwareSerial2のみ使用）:
 ```cpp
 #include "BluetoothSerial.h"
 BluetoothSerial SerialBT;
-// QZ1のMACアドレスに接続（事前にスマホで確認）
+// QZ1のMACアドレスに接続（事前にスマホのBluetooth設定で確認）
 uint8_t qz1mac[] = { /* QZ1 MAC */ };
 String line;
 
 void setup() {
-  Serial2.begin(9600);          // E220 (TX2/RX2)
-  SerialBT.begin("bridge", true); // master mode
+  Serial2.begin(9600, SERIAL_8N1, 13, 14); // Core2 Port C = G13(RX)/G14(TX)
+  SerialBT.begin("bridge", true);           // master mode
   SerialBT.connect(qz1mac);
 }
 void loop() {
@@ -93,8 +85,39 @@ void loop() {
   }
 }
 ```
-- 電源: 機体の5V BEC または モバイルバッテリー小型（独立電源の方が切り分けしやすい）
-- 追加重量: ESP32+E220+アンテナ ≈ 40g（無視できる）
+
+**地上局スケッチ骨子**（M5Core2ライブラリで画面表示 + USBへ透過転送）:
+```cpp
+#include <M5Core2.h>
+uint32_t byteCount = 0, ggaCount = 0;
+String line;
+
+void setup() {
+  M5.begin();
+  Serial2.begin(9600, SERIAL_8N1, 13, 14); // Port C から E220
+  Serial.begin(9600);                       // USB→PC（Suimon Naviが読む側）
+  M5.Lcd.println("Ground station ready");
+}
+void loop() {
+  while (Serial2.available()) {
+    char c = Serial2.read();
+    Serial.write(c);       // PCへそのまま転送（Web Serialが受信）
+    byteCount++;
+    if (c == '\n') {
+      if (line.indexOf("GGA,") >= 0) ggaCount++;
+      line = "";
+      M5.Lcd.fillRect(0, 40, 320, 60, BLACK);
+      M5.Lcd.setCursor(0, 40);
+      M5.Lcd.printf("bytes: %lu\nGGA: %lu", byteCount, ggaCount);
+    } else if (c != '\r') {
+      line += c;
+    }
+  }
+}
+```
+
+- 空中局電源: 機体のBEC 5V（→E220の電圧要件次第でレギュレータ経由）または Core2内蔵バッテリー（390mAh、短時間テスト向け）
+- 追加重量: Core2（約108g）+ E220+アンテナ（約30〜50g）≈ 150g前後 → X500 V2のペイロード余裕（約1kg）内で問題なし。ただし機上ロギング（Phase 0のスマホ+QZ1）と合わせて搭載する場合は総重量を確認
 
 ## Phase 3 — 実機搭載テスト（学校・教員承認済み区域）
 
