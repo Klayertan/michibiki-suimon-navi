@@ -1,7 +1,8 @@
-# みちびきハッカソン Master Brief — Suimon Navi (水門ナビ)
+# みちびきハッカソン Master Brief — スイスイナビ (旧称: Suimon Navi / 水門ナビ)
 Team E, Nara KOSEN. Solo competitor: KAI. Final: 2026-09-04, Nagaoka KOSEN.
 Purpose: single source of truth to feed Claude Code / Codex sessions. Supersedes scattered notes.
 
+> **RENAME (2026-07-07):** teacher's ダジャレ suggestion — public/pitch name is now **スイスイナビ** (スイスイ, "smoothly/effortlessly," evokes water flowing through the gate + ナビ). Repo slug, filenames, and internal code comments stay `michibiki-suimon-navi` / "Suimon Navi" (no broken links, no rebuild risk) — treat 水門ナビ / Suimon Navi as the internal engineering codename, スイスイナビ as the external brand used in README, UI, deck, and pitch narration.
 > **CORRECTION (2026-07-04):** field is a **paddy field (水田, rice)**, not wheat — belongs to friend's grandfather. Actually strengthens the pitch: 水門ナビ (floodgate navi) is textbook paddy infrastructure — flood irrigation control is exactly what a 水門 is for. If your repo/docs still say "wheat," rename `WHEAT_FIELD_BRIEF.md` → `PADDY_FIELD_BRIEF.md` and swap the term throughout (do this in the GitHub update below).
 > **Drone status update:** Holybro X500 V2 is registered (航空法 compliance done), teacher-approved for free lab use, school test-fly site confirmed for non-crop testing. §9a open items 4–5 below are now resolved — only payload/power/logging-method and grandfather's flight-over-paddy consent remain open.
 
@@ -281,7 +282,7 @@ Total 100. Currently strong: 完成度20 (app live, real data). Currently WEAK a
 ### Likely rival shapes (from official precedent list, expect these patterns from other teams)
 - Hazard/photo-mapping apps (通学路ヒヤリ pattern) — crowded space, judges saw the template
 - Route/tracking apps (ごみ収集 pattern) — solid but common
-Suimon Navi's edge: **named real stakeholder + decision-support (not just visualization) + agriculture** (organizer-cited QZSS priority domain). Nobody else likely has a farmer whose thresholds are IN the app.
+スイスイナビ's edge: **named real stakeholder + decision-support (not just visualization) + agriculture** (organizer-cited QZSS priority domain). Nobody else likely has a farmer whose thresholds are IN the app.
 
 ### Q&A kill-list (prepare answers, judges will ask)
 1. "なぜ自動化しない？" → 責任・安全・ハッカソン規定でWeb成果物。判断支援こそ現実的な導入形態。UI内に免責明記済み。
@@ -297,7 +298,7 @@ Suimon Navi's edge: **named real stakeholder + decision-support (not just visual
 ## 16. CLAUDE CODE / CODEX HANDOFF PROMPT (paste this + this file at session start)
 
 ```
-You are working on Suimon Navi (水門ナビ), a live web app:
+You are working on スイスイナビ (public name; engineering codename / repo slug remains "Suimon Navi" / 水門ナビ / michibiki-suimon-navi), a live web app:
 https://klayertan.github.io/michibiki-suimon-navi/ (repo: Klayertan/michibiki-suimon-navi)
 Plain HTML/CSS/JS + Leaflet + OSM. No build step. Deployed on GitHub Pages.
 

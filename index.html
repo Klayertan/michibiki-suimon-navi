@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>水門ナビ | Suimon Navi</title>
+  <title>スイスイナビ | 水門ナビ / Suimon Navi</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" integrity="sha256-YU3qCpj/P06tdPBJGPax0bm6Q1wltfwjsho5TR4+TYc=" crossorigin="">
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" integrity="sha256-YSWCMtmNZNwqex4CEw1nQhvFub2lmU7vcCKP+XVwwXA=" crossorigin="">
@@ -599,8 +599,8 @@
     <header>
       <div class="top-row">
         <h1>
-          水門ナビ
-          <span class="app-subtitle">Suimon Navi — みちびき対応・水門開閉の判断支援</span>
+          スイスイナビ
+          <span class="app-subtitle">水門ナビ / Suimon Navi — みちびき対応・水門開閉の判断支援</span>
         </h1>
         <div class="controls">
           <label class="action-button">
@@ -1423,7 +1423,7 @@
       const data = {
         id: fieldData.id ?? "field-001",
         name: fieldData.name ?? "圃場",
-        note: "QZ1測量点から書き出し（Suimon Navi）",
+        note: "QZ1測量点から書き出し（スイスイナビ）",
         boundary: boundary ? boundary.points.map(([lat, lon]) => [Number(lat.toFixed(6)), Number(lon.toFixed(6))]) : [],
         channel: channel ? channel.points.map(([lat, lon]) => [Number(lat.toFixed(6)), Number(lon.toFixed(6))]) : [],
         gate: gate
