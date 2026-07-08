@@ -4,9 +4,11 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>スイスイナビ | 水門ナビ / Suimon Navi</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23214e57'/%3E%3Cpath d='M5 19c5-5 10 5 15 0 3-3 5-3 7-1v5H5z' fill='%2338bdf8'/%3E%3Cpath d='M7 12h18v4H7z' fill='%2322c55e'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" integrity="sha256-YU3qCpj/P06tdPBJGPax0bm6Q1wltfwjsho5TR4+TYc=" crossorigin="">
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" integrity="sha256-YSWCMtmNZNwqex4CEw1nQhvFub2lmU7vcCKP+XVwwXA=" crossorigin="">
+  <link rel="stylesheet" href="css/paddy-intelligence.css">
   <style>
     :root {
       color-scheme: light;
@@ -17,6 +19,8 @@
       --line: #d9dfdc;
       --green: #15803d;
       --orange: #d97706;
+      --blue: #0e7490;
+      --red: #b91c1c;
       --shadow: 0 10px 30px rgba(29, 37, 40, 0.12);
     }
 
@@ -148,6 +152,21 @@
       accent-color: var(--green);
       height: 18px;
       width: 18px;
+    }
+
+    .layer-grid {
+      display: grid;
+      gap: 8px;
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .panel .filter {
+      align-items: center;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      min-height: 36px;
+      padding: 7px 8px;
+      white-space: normal;
     }
 
     .summary {
@@ -325,6 +344,74 @@
 
     .panel-button.primary {
       background: #214e57;
+    }
+
+    .panel-button.export {
+      background: #0f766e;
+    }
+
+    .metric-grid {
+      display: grid;
+      gap: 8px;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .metric {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      display: grid;
+      gap: 2px;
+      min-width: 0;
+      padding: 9px;
+    }
+
+    .metric span {
+      color: var(--muted);
+      font-size: 0.72rem;
+      font-weight: 700;
+    }
+
+    .metric strong {
+      font-size: 0.95rem;
+      overflow-wrap: anywhere;
+    }
+
+    .data-table {
+      border-collapse: collapse;
+      font-size: 0.82rem;
+      width: 100%;
+    }
+
+    .data-table th,
+    .data-table td {
+      border-bottom: 1px solid var(--line);
+      padding: 6px 4px;
+      text-align: right;
+      vertical-align: top;
+    }
+
+    .data-table th:first-child,
+    .data-table td:first-child {
+      text-align: left;
+    }
+
+    .legend-swatch {
+      border-radius: 3px;
+      display: inline-block;
+      height: 10px;
+      margin-right: 5px;
+      width: 10px;
+    }
+
+    .grid-cell-detail {
+      background: #f8fafc;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      color: var(--muted);
+      font-size: 0.84rem;
+      line-height: 1.5;
+      margin: 0;
+      padding: 9px;
     }
 
     .empty-state {
@@ -588,6 +675,11 @@
         gap: 6px 12px;
       }
 
+      .layer-grid,
+      .metric-grid {
+        grid-template-columns: 1fr;
+      }
+
       #map {
         min-height: 340px;
       }
@@ -717,6 +809,215 @@
         </section>
 
         <section class="card">
+          <h2>圃場エリア解析<span class="en">Paddy intelligence</span></h2>
+          <p class="meta">ドローン・GNSS測量・水管理・AI検出結果を重ねて、圃場内の水面、稲株、問題ゾーン、障害物を確認します。</p>
+          <div class="paddy-actions">
+            <button id="loadPaddyDemoButton" class="panel-button primary" type="button">Load Demo Data</button>
+            <button id="resetPaddyDemoButton" class="panel-button" type="button">Reset Demo</button>
+            <button id="recalculatePaddyButton" class="panel-button warning" type="button">Recalculate</button>
+            <button id="clearPaddyAnalysisButton" class="panel-button danger" type="button">Clear Analysis</button>
+          </div>
+          <div id="paddyWarnings" class="paddy-warning-list" role="status" aria-live="polite"></div>
+          <div class="layer-grid">
+            <label class="filter"><input id="showPaddyBoundaryLayer" type="checkbox" checked>境界</label>
+            <label class="filter"><input id="showWaterLayer" type="checkbox" checked>水面</label>
+            <label class="filter"><input id="showPlantLayer" type="checkbox" checked>稲株</label>
+            <label class="filter"><input id="showProblemLayer" type="checkbox" checked>問題ゾーン</label>
+            <label class="filter"><input id="showIrrigationLayer" type="checkbox" checked>取水・排水</label>
+            <label class="filter"><input id="showObstacleLayer" type="checkbox" checked>障害物</label>
+            <label class="filter"><input id="showDroneLayer" type="checkbox" checked>ドローン経路</label>
+            <label class="filter"><input id="showGridLayer" type="checkbox" checked>管理グリッド</label>
+          </div>
+          <div class="metric-grid">
+            <div class="metric"><span>総面積</span><strong id="paddyAreaMetric">—</strong></div>
+            <div class="metric"><span>水面率</span><strong id="waterCoverageMetric">—</strong></div>
+            <div class="metric"><span>稲株率</span><strong id="plantCoverageMetric">—</strong></div>
+            <div class="metric"><span>問題ゾーン</span><strong id="problemCoverageMetric">—</strong></div>
+          </div>
+          <div class="paddy-import-row">
+            <label class="file-button">
+              Import JSON
+              <input id="paddyImportInput" type="file" accept=".json,application/json">
+            </label>
+            <button id="exportAnalysisButton" class="panel-button export" type="button">Download JSON</button>
+          </div>
+        </section>
+
+        <section class="card">
+          <h2>手動注釈<span class="en">Manual annotation</span></h2>
+          <div class="paddy-drawing-status">
+            <span id="drawingModeBadge" class="paddy-mode-badge">No drawing mode</span>
+            <span>Points: <strong id="drawingPointCount">0</strong></span>
+          </div>
+          <div class="input-row">
+            <label for="annotationTypeSelect">注釈タイプ</label>
+            <select id="annotationTypeSelect">
+              <option value="">選択なし</option>
+              <option value="water">water polygon</option>
+              <option value="healthy">healthy rice polygon</option>
+              <option value="weak">weak rice polygon</option>
+              <option value="missing">missing rice polygon</option>
+              <option value="weed">weed polygon</option>
+              <option value="pest">pest damage polygon</option>
+              <option value="disease">disease damage polygon</option>
+              <option value="fertilizer">fertilizer-deficient polygon</option>
+              <option value="bareSoil">bare soil polygon</option>
+              <option value="inlet">water inlet marker</option>
+              <option value="outlet">water outlet marker</option>
+              <option value="gate">water gate marker</option>
+              <option value="drainage">drainage point marker</option>
+              <option value="tree">tree marker</option>
+              <option value="pole">pole marker</option>
+              <option value="building">building marker</option>
+              <option value="noFlyZone">no-fly zone polygon</option>
+            </select>
+          </div>
+          <div class="paddy-drawing-actions">
+            <button id="finishPaddyPolygonButton" class="panel-button primary" type="button" disabled>Finish Polygon</button>
+            <button id="cancelPaddyDrawingButton" class="panel-button" type="button">Cancel Drawing</button>
+          </div>
+          <p id="drawingHint" class="paddy-drawing-hint">注釈タイプを選ぶと地図上で追加できます。</p>
+        </section>
+
+        <section class="card">
+          <h2>選択地物<span class="en">Feature inspection</span></h2>
+          <div id="selectedFeatureSummary" class="paddy-selected-panel">地図上の解析地物をクリックすると詳細を表示します。</div>
+          <div class="input-row">
+            <label for="selectedFeatureNote">選択地物メモ</label>
+            <textarea id="selectedFeatureNote" rows="3" placeholder="短いメモ"></textarea>
+          </div>
+          <button id="saveSelectedNoteButton" class="panel-button primary" type="button" disabled>Save Note</button>
+        </section>
+
+        <section class="card">
+          <h2>水量計算<span class="en">Water volume</span></h2>
+          <div class="input-row">
+            <label for="targetWaterDepthInput">目標水深 (cm)</label>
+            <input id="targetWaterDepthInput" type="number" min="0" step="0.5" inputmode="decimal" value="5">
+          </div>
+          <div class="kv"><span>推定水量</span><strong id="waterVolumeMetric">—</strong></div>
+          <p class="meta">水量 = 圃場面積 × 目標水深。用水計画の概算用です。</p>
+        </section>
+
+        <section class="card">
+          <h2>カテゴリ別面積<span class="en">Problem zones</span></h2>
+          <p class="meta">各ポリゴン面積を合算しています。重なりがある場合は重複分も合計されます。</p>
+          <table class="data-table">
+            <thead>
+              <tr><th>稲カテゴリ</th><th>面積</th><th>割合</th></tr>
+            </thead>
+            <tbody id="plantAreaTable"></tbody>
+          </table>
+          <table class="data-table">
+            <thead>
+              <tr><th>カテゴリ</th><th>面積</th><th>割合</th></tr>
+            </thead>
+            <tbody id="problemAreaTable"></tbody>
+          </table>
+        </section>
+
+        <section class="card">
+          <h2>ドローン経路<span class="en">Flight planning</span></h2>
+          <div class="input-row">
+            <label for="flightAltitudeInput">飛行高度 (m)</label>
+            <input id="flightAltitudeInput" type="number" min="1" step="1" inputmode="decimal" value="30">
+          </div>
+          <div class="input-row">
+            <label for="swathWidthInput">カメラ地上幅 / swath (m)</label>
+            <input id="swathWidthInput" type="number" min="1" step="0.5" inputmode="decimal" value="10">
+          </div>
+          <div class="input-row">
+            <label for="imageOverlapInput">画像オーバーラップ (%)</label>
+            <input id="imageOverlapInput" type="number" min="0" max="95" step="5" inputmode="numeric" value="70">
+          </div>
+          <div class="input-row">
+            <label for="flightSpeedInput">飛行速度 (m/s)</label>
+            <input id="flightSpeedInput" type="number" min="0.1" step="0.1" inputmode="decimal" value="4">
+          </div>
+          <div class="input-row">
+            <label for="flightAngleInput">経路角度 (degrees)</label>
+            <input id="flightAngleInput" type="number" step="5" inputmode="decimal" value="0">
+          </div>
+          <div class="input-row">
+            <label for="flightSafetyMarginInput">境界安全マージン (m)</label>
+            <input id="flightSafetyMarginInput" type="number" min="0" step="0.5" inputmode="decimal" value="1">
+          </div>
+          <div class="kv"><span>有効ライン間隔</span><strong id="flightSpacingMetric">—</strong></div>
+          <div class="kv"><span>飛行ライン数</span><strong id="flightLineMetric">—</strong></div>
+          <div class="kv"><span>推定経路長</span><strong id="flightLengthMetric">—</strong></div>
+          <div class="kv"><span>概算飛行時間</span><strong id="flightTimeMetric">—</strong></div>
+          <div class="kv"><span>概算写真枚数</span><strong id="flightPhotoMetric">—</strong></div>
+          <p class="meta">飛行禁止区域は可能な範囲でラインを分割します。交差が残る場合は警告と赤線で表示します。</p>
+        </section>
+
+        <section class="card">
+          <h2>管理グリッド<span class="en">Management zones</span></h2>
+          <div class="input-row">
+            <label for="gridSizeSelect">グリッドサイズ</label>
+            <select id="gridSizeSelect">
+              <option value="1">1 m × 1 m</option>
+              <option value="2">2 m × 2 m</option>
+              <option value="5" selected>5 m × 5 m</option>
+              <option value="10">10 m × 10 m</option>
+            </select>
+          </div>
+          <div class="kv"><span>セル数</span><strong id="gridCellCountMetric">—</strong></div>
+          <p id="gridCellDetail" class="grid-cell-detail">グリッドセルをクリックすると状態を表示します。</p>
+          <div id="gridCellEditor" class="paddy-grid-editor" hidden>
+            <div class="paddy-grid-form">
+              <div class="input-row">
+                <label for="gridWaterStatus">water status</label>
+                <select id="gridWaterStatus">
+                  <option value="unknown">unknown</option>
+                  <option value="dry">dry</option>
+                  <option value="shallow">shallow</option>
+                  <option value="target">target</option>
+                  <option value="deep">deep</option>
+                </select>
+              </div>
+              <div class="input-row">
+                <label for="gridPlantStatus">plant status</label>
+                <select id="gridPlantStatus">
+                  <option value="unknown">unknown</option>
+                  <option value="healthy">healthy</option>
+                  <option value="weak">weak</option>
+                  <option value="missing">missing</option>
+                </select>
+              </div>
+              <div class="input-row">
+                <label for="gridWeedStatus">weed status</label>
+                <select id="gridWeedStatus">
+                  <option value="unknown">unknown</option>
+                  <option value="none">none</option>
+                  <option value="low">low</option>
+                  <option value="medium">medium</option>
+                  <option value="high">high</option>
+                </select>
+              </div>
+              <div class="input-row">
+                <label for="gridPestDiseaseStatus">pest/disease status</label>
+                <select id="gridPestDiseaseStatus">
+                  <option value="unknown">unknown</option>
+                  <option value="none">none</option>
+                  <option value="suspected">suspected</option>
+                  <option value="severe">severe</option>
+                </select>
+              </div>
+              <div class="input-row">
+                <label for="gridNotes">grid notes</label>
+                <textarea id="gridNotes" rows="3"></textarea>
+              </div>
+              <button id="saveGridCellButton" class="panel-button primary" type="button">Save Grid Cell</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="card">
+          <h2>凡例<span class="en">Layer legend</span></h2>
+          <div id="paddyLegend" class="paddy-legend"></div>
+        </section>
+
+        <section class="card">
           <h2>QZ1ライブ記録<span class="en">Web Serial</span></h2>
           <div class="kv"><span>状態</span><strong><span id="serialStatus" class="serial-status">未接続</span></strong></div>
           <div class="kv"><span>受信行数</span><strong id="serialLineCount">0</strong></div>
@@ -751,7 +1052,8 @@
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
   <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js" integrity="sha256-Hk4dIpcqOSb0hZjgyvFOP+cEmDXUKKNE/tT542ZbNQg=" crossorigin=""></script>
-  <script defer src="https://cdn.jsdelivr.net/npm/@turf/turf@7.2.0/turf.min.js" integrity="sha256-1XhsCK5OmIs3qlwm3jKwUewuRoD2AvKpjKO8SzKONDI=" crossorigin="" onload="updateGatePanel()"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/@turf/turf@7.2.0/turf.min.js" integrity="sha256-1XhsCK5OmIs3qlwm3jKwUewuRoD2AvKpjKO8SzKONDI=" crossorigin="" onload="handleTurfReady()"></script>
+  <script src="js/paddy-intelligence.js"></script>
   <script>
     const FEATURE_OPTIONS = ["gate", "ridge", "channel", "corner", "other", "unknown"];
     const FEATURE_LABELS = {
@@ -778,10 +1080,12 @@
       name: "実証圃場（仮ジオメトリ）",
       note: "QZ1による歩行測量で置き換える予定の仮座標",
       boundary: [
-        [34.65478, 135.82985],
-        [34.65478, 135.83068],
-        [34.65428, 135.83068],
-        [34.65428, 135.82985]
+        [34.65480, 135.82982],
+        [34.65477, 135.83069],
+        [34.65452, 135.83074],
+        [34.65425, 135.83061],
+        [34.65421, 135.82991],
+        [34.65448, 135.82978]
       ],
       channel: [
         [34.65484, 135.82965],
@@ -804,6 +1108,199 @@
       rain24hMm: 0,
       daysSinceRain: 4,
       forecastRainProbPct: 20
+    };
+
+    const PADDY_STATUS_LABELS = {
+      water: "水面",
+      healthy: "健康な稲",
+      weak: "弱い稲",
+      missing: "欠株",
+      unknown: "不明",
+      weed: "雑草",
+      pest: "害虫被害",
+      disease: "病害",
+      fertilizer: "肥料不足",
+      bareSoil: "裸地",
+      inlet: "取水口",
+      outlet: "排水口",
+      gate: "水門",
+      drainage: "排水点",
+      tree: "樹木",
+      pole: "電柱",
+      powerLine: "電線",
+      building: "建物",
+      humanArea: "人の作業範囲",
+      noFlyZone: "飛行禁止区域"
+    };
+    const PADDY_STYLES = {
+      boundary: { color: "#166534", fillColor: "#22c55e", fillOpacity: 0.08, weight: 3 },
+      water: { color: "#0369a1", fillColor: "#38bdf8", fillOpacity: 0.34, weight: 2 },
+      healthy: { color: "#15803d", fillColor: "#22c55e", fillOpacity: 0.28, weight: 2 },
+      weak: { color: "#ca8a04", fillColor: "#fde047", fillOpacity: 0.34, weight: 2 },
+      missing: { color: "#64748b", fillColor: "#cbd5e1", fillOpacity: 0.42, weight: 2 },
+      unknown: { color: "#475569", fillColor: "#94a3b8", fillOpacity: 0.24, weight: 2 },
+      weed: { color: "#16a34a", fillColor: "#86efac", fillOpacity: 0.5, weight: 2 },
+      pest: { color: "#ea580c", fillColor: "#fb923c", fillOpacity: 0.42, weight: 2 },
+      disease: { color: "#b91c1c", fillColor: "#f87171", fillOpacity: 0.42, weight: 2 },
+      fertilizer: { color: "#7c3aed", fillColor: "#c4b5fd", fillOpacity: 0.42, weight: 2 },
+      bareSoil: { color: "#92400e", fillColor: "#d97706", fillOpacity: 0.36, weight: 2 },
+      noFlyZone: { color: "#991b1b", fillColor: "#ef4444", fillOpacity: 0.25, weight: 2, dashArray: "7 5" },
+      obstacle: { color: "#334155", fillColor: "#64748b", fillOpacity: 0.28, weight: 2 },
+      drone: { color: "#111827", weight: 2, opacity: 0.82, dashArray: "5 6" },
+      grid: { color: "#475569", weight: 1, opacity: 0.35, fillOpacity: 0 }
+    };
+    const PROBLEM_CATEGORIES = ["weed", "pest", "disease", "fertilizer", "bareSoil"];
+    const PLANT_CATEGORIES = ["healthy", "weak", "missing", "unknown"];
+    const DEMO_PADDY_ANALYSIS = {
+      waterDepthCm: 5,
+      gridSizeMeters: 5,
+      fieldBoundary: [
+        [34.65480, 135.82982],
+        [34.65477, 135.83069],
+        [34.65452, 135.83074],
+        [34.65425, 135.83061],
+        [34.65421, 135.82991],
+        [34.65448, 135.82978]
+      ],
+      waterPolygons: [
+        {
+          id: "water-main",
+          category: "water",
+          note: "浅水管理中の水面",
+          coordinates: [
+            [34.65472, 135.82992],
+            [34.65469, 135.83055],
+            [34.65448, 135.83059],
+            [34.65431, 135.83048],
+            [34.65430, 135.82998],
+            [34.65449, 135.82991]
+          ]
+        }
+      ],
+      plantPolygons: [
+        {
+          id: "rice-healthy-a",
+          category: "healthy",
+          note: "葉色と株密度が良好",
+          coordinates: [
+            [34.65467, 135.82994],
+            [34.65464, 135.83025],
+            [34.65446, 135.83025],
+            [34.65446, 135.82996]
+          ]
+        },
+        {
+          id: "rice-weak-a",
+          category: "weak",
+          note: "北東側で生育が弱い",
+          coordinates: [
+            [34.65466, 135.83030],
+            [34.65463, 135.83056],
+            [34.65451, 135.83058],
+            [34.65450, 135.83030]
+          ]
+        },
+        {
+          id: "rice-missing-a",
+          category: "missing",
+          note: "欠株・苗抜けの疑い",
+          coordinates: [
+            [34.65442, 135.83012],
+            [34.65440, 135.83028],
+            [34.65433, 135.83027],
+            [34.65434, 135.83010]
+          ]
+        },
+        {
+          id: "rice-unknown-a",
+          category: "unknown",
+          note: "画像再確認が必要",
+          coordinates: [
+            [34.65457, 135.82988],
+            [34.65456, 135.82998],
+            [34.65447, 135.83000],
+            [34.65447, 135.82989]
+          ]
+        }
+      ],
+      problemZones: [
+        {
+          id: "weed-west",
+          category: "weed",
+          note: "畦際に雑草密度が高い",
+          coordinates: [
+            [34.65460, 135.82985],
+            [34.65458, 135.82994],
+            [34.65438, 135.82996],
+            [34.65438, 135.82987]
+          ]
+        },
+        {
+          id: "pest-south",
+          category: "pest",
+          note: "食害パターン候補",
+          coordinates: [
+            [34.65436, 135.83034],
+            [34.65435, 135.83048],
+            [34.65427, 135.83046],
+            [34.65428, 135.83032]
+          ]
+        },
+        {
+          id: "disease-center",
+          category: "disease",
+          note: "葉色異常の集中的な領域",
+          coordinates: [
+            [34.65454, 135.83012],
+            [34.65453, 135.83022],
+            [34.65445, 135.83021],
+            [34.65446, 135.83011]
+          ]
+        },
+        {
+          id: "fertilizer-east",
+          category: "fertilizer",
+          note: "肥料むらの可能性",
+          coordinates: [
+            [34.65456, 135.83050],
+            [34.65455, 135.83063],
+            [34.65443, 135.83063],
+            [34.65444, 135.83050]
+          ]
+        },
+        {
+          id: "bare-soil-southwest",
+          category: "bareSoil",
+          note: "裸地・水深不足確認",
+          coordinates: [
+            [34.65432, 135.82996],
+            [34.65431, 135.83008],
+            [34.65424, 135.83006],
+            [34.65425, 135.82996]
+          ]
+        }
+      ],
+      irrigationMarkers: [
+        { id: "inlet-1", type: "inlet", lat: 34.65476, lon: 135.83021, note: "北側用水路から入水" },
+        { id: "outlet-1", type: "outlet", lat: 34.65424, lon: 135.83052, note: "南東側へ排水" },
+        { id: "gate-1", type: "gate", lat: 34.65481, lon: 135.83022, note: "手動水門。将来自動制御候補" },
+        { id: "drainage-1", type: "drainage", lat: 34.65425, lon: 135.82996, note: "大雨時の逃げ口" }
+      ],
+      obstacles: [
+        { id: "tree-1", type: "tree", geometry: "point", lat: 34.65469, lon: 135.82984, note: "畦の外側の樹木" },
+        {
+          id: "no-fly-1",
+          type: "noFlyZone",
+          geometry: "polygon",
+          note: "人の通行がある農道側",
+          coordinates: [
+            [34.65473, 135.83054],
+            [34.65470, 135.83066],
+            [34.65458, 135.83068],
+            [34.65459, 135.83054]
+          ]
+        }
+      ]
     };
 
     const map = L.map("map", { zoomControl: true }).setView([34.65, 135.83], 14);
@@ -875,6 +1372,35 @@
     const resetGateButton = document.getElementById("resetGateButton");
     const exportFieldButton = document.getElementById("exportFieldButton");
     const dataSourceNote = document.getElementById("dataSourceNote");
+    const paddyLayerInputs = {
+      boundary: document.getElementById("showPaddyBoundaryLayer"),
+      water: document.getElementById("showWaterLayer"),
+      plant: document.getElementById("showPlantLayer"),
+      problem: document.getElementById("showProblemLayer"),
+      irrigation: document.getElementById("showIrrigationLayer"),
+      obstacle: document.getElementById("showObstacleLayer"),
+      drone: document.getElementById("showDroneLayer"),
+      grid: document.getElementById("showGridLayer")
+    };
+    const paddyAreaMetric = document.getElementById("paddyAreaMetric");
+    const waterCoverageMetric = document.getElementById("waterCoverageMetric");
+    const plantCoverageMetric = document.getElementById("plantCoverageMetric");
+    const problemCoverageMetric = document.getElementById("problemCoverageMetric");
+    const targetWaterDepthInput = document.getElementById("targetWaterDepthInput");
+    const waterVolumeMetric = document.getElementById("waterVolumeMetric");
+    const problemAreaTable = document.getElementById("problemAreaTable");
+    const flightInputs = {
+      altitude: document.getElementById("flightAltitudeInput"),
+      swathWidth: document.getElementById("swathWidthInput"),
+      overlap: document.getElementById("imageOverlapInput")
+    };
+    const flightLineMetric = document.getElementById("flightLineMetric");
+    const flightLengthMetric = document.getElementById("flightLengthMetric");
+    const flightTimeMetric = document.getElementById("flightTimeMetric");
+    const gridSizeSelect = document.getElementById("gridSizeSelect");
+    const gridCellCountMetric = document.getElementById("gridCellCountMetric");
+    const gridCellDetail = document.getElementById("gridCellDetail");
+    const exportAnalysisButton = document.getElementById("exportAnalysisButton");
     const serialStatusEl = document.getElementById("serialStatus");
     const serialLineCountEl = document.getElementById("serialLineCount");
     const serialPointCountEl = document.getElementById("serialPointCount");
@@ -891,6 +1417,16 @@
     let pointLayerClustered = false;
     let phoneLayer = L.layerGroup().addTo(map);
     let fieldLayer = L.layerGroup().addTo(map);
+    let paddyLayers = {
+      boundary: L.layerGroup().addTo(map),
+      water: L.layerGroup().addTo(map),
+      plant: L.layerGroup().addTo(map),
+      problem: L.layerGroup().addTo(map),
+      irrigation: L.layerGroup().addTo(map),
+      obstacle: L.layerGroup().addTo(map),
+      drone: L.layerGroup().addTo(map),
+      grid: L.layerGroup().addTo(map)
+    };
     let liveLocationLayer = L.layerGroup().addTo(map);
     let liveLocationWatchId = null;
     let hasCenteredOnLiveLocation = false;
@@ -902,6 +1438,11 @@
     let surveyedGate = null;
     let surveyedBoundary = [];
     let surveyedChannel = [];
+    let paddyAnalysis = JSON.parse(JSON.stringify(DEMO_PADDY_ANALYSIS));
+    let paddyMetrics = {};
+    let dronePlan = { path: [], lineCount: 0, pathLengthMeters: 0, estimatedMinutes: 0 };
+    let gridCells = [];
+    let paddyIntelligence = null;
 
     // Web Serial live-capture state (QZ1 over Bluetooth SPP virtual port or USB)
     const serialSupported = "serial" in navigator;
@@ -1306,6 +1847,249 @@
       return null;
     }
 
+    function paddyBoundaryPoints() {
+      if (paddyIntelligence) {
+        return paddyIntelligence.getBoundaryPoints();
+      }
+
+      if (surveyedBoundary.length >= 3) {
+        return surveyedBoundary.map((point) => [point.lat, point.lon]);
+      }
+
+      if (Array.isArray(paddyAnalysis.fieldBoundary) && paddyAnalysis.fieldBoundary.length >= 3) {
+        return paddyAnalysis.fieldBoundary;
+      }
+
+      return activeBoundary()?.points ?? [];
+    }
+
+    function polygonAreaSqm(points) {
+      if (!Array.isArray(points) || points.length < 3) {
+        return 0;
+      }
+
+      if (typeof globalThis.turf !== "undefined") {
+        try {
+          const ring = points.map(([lat, lon]) => [lon, lat]);
+          ring.push(ring[0]);
+          return turf.area(turf.polygon([ring]));
+        } catch {}
+      }
+
+      const projection = createLocalProjection(points);
+      const projected = points.map(projection.toXY);
+      return Math.abs(shoelaceArea(projected));
+    }
+
+    function shoelaceArea(points) {
+      let sum = 0;
+      for (let i = 0; i < points.length; i += 1) {
+        const a = points[i];
+        const b = points[(i + 1) % points.length];
+        sum += a.x * b.y - b.x * a.y;
+      }
+      return sum / 2;
+    }
+
+    function sumPolygonAreas(polygons) {
+      return polygons.reduce((sum, zone) => sum + polygonAreaSqm(zone.coordinates), 0);
+    }
+
+    function formatAreaFull(area) {
+      if (!Number.isFinite(area) || area <= 0) {
+        return "—";
+      }
+
+      return `${Math.round(area).toLocaleString()} m² / ${(area / 100).toFixed(2)} a / ${(area / 991.7).toFixed(2)} tan`;
+    }
+
+    function formatAreaShort(area) {
+      if (!Number.isFinite(area) || area <= 0) {
+        return "0 m²";
+      }
+
+      return `${Math.round(area).toLocaleString()} m²`;
+    }
+
+    function formatPercent(value) {
+      if (!Number.isFinite(value)) {
+        return "—";
+      }
+
+      return `${value.toFixed(1)}%`;
+    }
+
+    function createLocalProjection(points) {
+      const origin = points[0] ?? [34.6545, 135.8302];
+      const originLat = origin[0];
+      const originLon = origin[1];
+      const metersPerDegreeLat = 111320;
+      const metersPerDegreeLon = 111320 * Math.cos(originLat * Math.PI / 180);
+
+      return {
+        toXY: ([lat, lon]) => ({
+          x: (lon - originLon) * metersPerDegreeLon,
+          y: (lat - originLat) * metersPerDegreeLat
+        }),
+        toLatLng: ({ x, y }) => [
+          originLat + y / metersPerDegreeLat,
+          originLon + x / metersPerDegreeLon
+        ]
+      };
+    }
+
+    function polygonIntersectionsAtY(points, y) {
+      const xs = [];
+      for (let i = 0; i < points.length; i += 1) {
+        const a = points[i];
+        const b = points[(i + 1) % points.length];
+        if ((a.y <= y && b.y > y) || (b.y <= y && a.y > y)) {
+          const ratio = (y - a.y) / (b.y - a.y);
+          xs.push(a.x + ratio * (b.x - a.x));
+        }
+      }
+
+      xs.sort((a, b) => a - b);
+      const intervals = [];
+      for (let i = 0; i + 1 < xs.length; i += 2) {
+        intervals.push([xs[i], xs[i + 1]]);
+      }
+      return intervals;
+    }
+
+    function subtractIntervals(sourceIntervals, blockedIntervals) {
+      let open = sourceIntervals.map(([start, end]) => [start, end]);
+      blockedIntervals.forEach(([blockedStart, blockedEnd]) => {
+        open = open.flatMap(([start, end]) => {
+          if (blockedEnd <= start || blockedStart >= end) {
+            return [[start, end]];
+          }
+
+          const pieces = [];
+          if (blockedStart > start) {
+            pieces.push([start, Math.min(blockedStart, end)]);
+          }
+          if (blockedEnd < end) {
+            pieces.push([Math.max(blockedEnd, start), end]);
+          }
+          return pieces;
+        });
+      });
+
+      return open.filter(([start, end]) => end - start > 1);
+    }
+
+    function pathLengthMeters(path) {
+      let length = 0;
+      for (let i = 1; i < path.length; i += 1) {
+        length += distanceMeters(path[i - 1][0], path[i - 1][1], path[i][0], path[i][1]);
+      }
+      return length;
+    }
+
+    function generateDronePath() {
+      const boundary = paddyBoundaryPoints();
+      if (boundary.length < 3) {
+        return { path: [], lineCount: 0, pathLengthMeters: 0, estimatedMinutes: 0 };
+      }
+
+      const swathWidth = readNumberInput(flightInputs.swathWidth, 10);
+      const overlap = Math.min(90, readNumberInput(flightInputs.overlap, 70));
+      const spacing = Math.max(1, swathWidth * (1 - overlap / 100));
+      const projection = createLocalProjection(boundary);
+      const boundaryXY = boundary.map(projection.toXY);
+      const noFlyPolygons = paddyAnalysis.obstacles
+        .filter((item) => item.geometry === "polygon" && item.type === "noFlyZone")
+        .map((item) => item.coordinates.map(projection.toXY));
+      const yValues = boundaryXY.map((point) => point.y);
+      const minY = Math.min(...yValues);
+      const maxY = Math.max(...yValues);
+      const path = [];
+      let lineCount = 0;
+      let reverse = false;
+
+      for (let y = minY + spacing / 2; y <= maxY - spacing / 4; y += spacing) {
+        const fieldIntervals = polygonIntersectionsAtY(boundaryXY, y);
+        const blockedIntervals = noFlyPolygons.flatMap((polygon) => polygonIntersectionsAtY(polygon, y));
+        const openIntervals = subtractIntervals(fieldIntervals, blockedIntervals);
+
+        openIntervals.forEach((interval) => {
+          const [startX, endX] = reverse ? [interval[1], interval[0]] : interval;
+          const start = projection.toLatLng({ x: startX, y });
+          const end = projection.toLatLng({ x: endX, y });
+          path.push(start, end);
+          lineCount += 1;
+          reverse = !reverse;
+        });
+      }
+
+      const pathLength = pathLengthMeters(path);
+      const flightSpeedMetersPerSecond = 4;
+      const estimatedMinutes = pathLength / flightSpeedMetersPerSecond / 60;
+      return { path, lineCount, pathLengthMeters: pathLength, estimatedMinutes };
+    }
+
+    function generateGridCells() {
+      const boundary = paddyBoundaryPoints();
+      const size = Number(gridSizeSelect.value) || paddyAnalysis.gridSizeMeters || 5;
+      if (boundary.length < 3) {
+        return [];
+      }
+
+      const projection = createLocalProjection(boundary);
+      const boundaryXY = boundary.map(projection.toXY);
+      const xs = boundaryXY.map((point) => point.x);
+      const ys = boundaryXY.map((point) => point.y);
+      const minX = Math.min(...xs);
+      const maxX = Math.max(...xs);
+      const minY = Math.min(...ys);
+      const maxY = Math.max(...ys);
+      const cells = [];
+      let index = 1;
+
+      for (let y = minY; y < maxY; y += size) {
+        for (let x = minX; x < maxX; x += size) {
+          const center = { x: x + size / 2, y: y + size / 2 };
+          if (!pointInPolygonXY(center, boundaryXY)) {
+            continue;
+          }
+
+          const corners = [
+            projection.toLatLng({ x, y }),
+            projection.toLatLng({ x: Math.min(x + size, maxX), y }),
+            projection.toLatLng({ x: Math.min(x + size, maxX), y: Math.min(y + size, maxY) }),
+            projection.toLatLng({ x, y: Math.min(y + size, maxY) })
+          ];
+          cells.push({
+            id: `G-${index}`,
+            coordinates: corners,
+            waterStatus: index % 5 === 0 ? "浅い" : "適正",
+            plantStatus: index % 7 === 0 ? "弱い稲" : "健康な稲",
+            weedStatus: index % 6 === 0 ? "要確認" : "低",
+            pestDiseaseStatus: index % 11 === 0 ? "病害候補" : "なし",
+            notes: "デモセル。将来は画像AI/GNSS測量結果で更新。"
+          });
+          index += 1;
+        }
+      }
+
+      return cells;
+    }
+
+    function pointInPolygonXY(point, polygon) {
+      let inside = false;
+      for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i, i += 1) {
+        const a = polygon[i];
+        const b = polygon[j];
+        const intersects = ((a.y > point.y) !== (b.y > point.y))
+          && point.x < (b.x - a.x) * (point.y - a.y) / (b.y - a.y) + a.x;
+        if (intersects) {
+          inside = !inside;
+        }
+      }
+      return inside;
+    }
+
     function renderFieldLayer() {
       fieldLayer.clearLayers();
 
@@ -1348,18 +2132,172 @@
       }
     }
 
+    function renderPaddyIntelligence() {
+      if (paddyIntelligence) {
+        paddyIntelligence.refresh();
+        return;
+      }
+
+      Object.values(paddyLayers).forEach((layer) => layer.clearLayers());
+
+      const boundary = paddyBoundaryPoints();
+      if (boundary.length >= 3) {
+        L.polygon(boundary, PADDY_STYLES.boundary)
+          .bindTooltip("解析用圃場境界")
+          .addTo(paddyLayers.boundary);
+      }
+
+      paddyAnalysis.waterPolygons.forEach((zone) => {
+        renderPaddyPolygon(zone, PADDY_STYLES.water, paddyLayers.water);
+      });
+
+      paddyAnalysis.plantPolygons.forEach((zone) => {
+        renderPaddyPolygon(zone, PADDY_STYLES[zone.category] ?? PADDY_STYLES.unknown, paddyLayers.plant);
+      });
+
+      paddyAnalysis.problemZones.forEach((zone) => {
+        renderPaddyPolygon(zone, PADDY_STYLES[zone.category] ?? PADDY_STYLES.bareSoil, paddyLayers.problem);
+      });
+
+      paddyAnalysis.irrigationMarkers.forEach((marker) => {
+        L.circleMarker([marker.lat, marker.lon], {
+          radius: 8,
+          color: "#ffffff",
+          fillColor: marker.type === "inlet" ? "#0284c7" : marker.type === "outlet" ? "#0f766e" : "#2563eb",
+          fillOpacity: 0.95,
+          opacity: 1,
+          weight: 2
+        })
+          .bindPopup(`<strong>${escapeHtml(PADDY_STATUS_LABELS[marker.type] ?? marker.type)}</strong><br>${escapeHtml(marker.note ?? "")}`)
+          .bindTooltip(PADDY_STATUS_LABELS[marker.type] ?? marker.type)
+          .addTo(paddyLayers.irrigation);
+      });
+
+      paddyAnalysis.obstacles.forEach((item) => {
+        if (item.geometry === "polygon") {
+          const style = item.type === "noFlyZone" ? PADDY_STYLES.noFlyZone : PADDY_STYLES.obstacle;
+          renderPaddyPolygon(item, style, paddyLayers.obstacle);
+          return;
+        }
+
+        L.circleMarker([item.lat, item.lon], {
+          radius: item.type === "tree" ? 9 : 7,
+          color: "#1f2937",
+          fillColor: "#64748b",
+          fillOpacity: 0.92,
+          weight: 2
+        })
+          .bindPopup(`<strong>${escapeHtml(PADDY_STATUS_LABELS[item.type] ?? item.type)}</strong><br>${escapeHtml(item.note ?? "")}`)
+          .bindTooltip(PADDY_STATUS_LABELS[item.type] ?? item.type)
+          .addTo(paddyLayers.obstacle);
+      });
+
+      dronePlan = generateDronePath();
+      if (dronePlan.path.length >= 2) {
+        L.polyline(dronePlan.path, PADDY_STYLES.drone)
+          .bindTooltip("ドローン概算飛行経路")
+          .addTo(paddyLayers.drone);
+      }
+
+      gridCells = generateGridCells();
+      gridCells.forEach((cell) => {
+        L.polygon(cell.coordinates, PADDY_STYLES.grid)
+          .bindTooltip(cell.id)
+          .on("click", () => showGridCellDetail(cell))
+          .addTo(paddyLayers.grid);
+      });
+
+      updatePaddyMetrics();
+      syncLayerVisibility();
+    }
+
+    function renderPaddyPolygon(zone, style, layer) {
+      L.polygon(zone.coordinates, style)
+        .bindPopup(`
+          <strong>${escapeHtml(PADDY_STATUS_LABELS[zone.category ?? zone.type] ?? zone.category ?? zone.type)}</strong><br>
+          ${escapeHtml(zone.note ?? "")}<br>
+          面積: ${escapeHtml(formatAreaShort(polygonAreaSqm(zone.coordinates)))}
+        `)
+        .bindTooltip(PADDY_STATUS_LABELS[zone.category ?? zone.type] ?? zone.category ?? zone.type)
+        .addTo(layer);
+    }
+
+    function updatePaddyMetrics() {
+      if (paddyIntelligence) {
+        paddyIntelligence.refresh();
+        return;
+      }
+
+      const fieldArea = polygonAreaSqm(paddyBoundaryPoints());
+      const waterArea = sumPolygonAreas(paddyAnalysis.waterPolygons);
+      const plantArea = sumPolygonAreas(paddyAnalysis.plantPolygons);
+      const problemArea = sumPolygonAreas(paddyAnalysis.problemZones);
+      const waterDepthMeters = readNumberInput(targetWaterDepthInput, paddyAnalysis.waterDepthCm) / 100;
+      const waterVolume = fieldArea * waterDepthMeters;
+
+      paddyMetrics = {
+        fieldArea,
+        waterArea,
+        plantArea,
+        problemArea,
+        waterCoveragePct: fieldArea > 0 ? waterArea / fieldArea * 100 : 0,
+        plantCoveragePct: fieldArea > 0 ? plantArea / fieldArea * 100 : 0,
+        problemCoveragePct: fieldArea > 0 ? problemArea / fieldArea * 100 : 0,
+        waterVolumeCubicMeters: waterVolume,
+        waterVolumeLiters: waterVolume * 1000
+      };
+
+      paddyAreaMetric.textContent = formatAreaFull(fieldArea);
+      waterCoverageMetric.textContent = `${formatAreaShort(waterArea)} / ${formatPercent(paddyMetrics.waterCoveragePct)}`;
+      plantCoverageMetric.textContent = `${formatAreaShort(plantArea)} / ${formatPercent(paddyMetrics.plantCoveragePct)}`;
+      problemCoverageMetric.textContent = `${formatAreaShort(problemArea)} / ${formatPercent(paddyMetrics.problemCoveragePct)}`;
+      waterVolumeMetric.textContent = `${waterVolume.toFixed(1)} m³ / ${Math.round(waterVolume * 1000).toLocaleString()} L`;
+      flightLineMetric.textContent = `${dronePlan.lineCount.toLocaleString()} 本`;
+      flightLengthMetric.textContent = formatMeters(dronePlan.pathLengthMeters);
+      flightTimeMetric.textContent = `${dronePlan.estimatedMinutes.toFixed(1)} 分（4 m/s想定）`;
+      gridCellCountMetric.textContent = `${gridCells.length.toLocaleString()} セル`;
+
+      renderProblemAreaTable(fieldArea);
+      fieldAreaEl.textContent = formatFieldArea();
+    }
+
+    function renderProblemAreaTable(fieldArea) {
+      problemAreaTable.innerHTML = PROBLEM_CATEGORIES.map((category) => {
+        const area = sumPolygonAreas(paddyAnalysis.problemZones.filter((zone) => zone.category === category));
+        const pct = fieldArea > 0 ? area / fieldArea * 100 : 0;
+        const style = PADDY_STYLES[category] ?? PADDY_STYLES.bareSoil;
+        return `
+          <tr>
+            <td><span class="legend-swatch" style="background:${style.fillColor}"></span>${escapeHtml(PADDY_STATUS_LABELS[category])}</td>
+            <td>${escapeHtml(formatAreaShort(area))}</td>
+            <td>${escapeHtml(formatPercent(pct))}</td>
+          </tr>
+        `;
+      }).join("");
+    }
+
+    function showGridCellDetail(cell) {
+      gridCellDetail.innerHTML = `
+        <strong>${escapeHtml(cell.id)}</strong><br>
+        水: ${escapeHtml(cell.waterStatus)} / 稲: ${escapeHtml(cell.plantStatus)}<br>
+        雑草: ${escapeHtml(cell.weedStatus)} / 病害虫: ${escapeHtml(cell.pestDiseaseStatus)}<br>
+        ${escapeHtml(cell.notes)}
+      `;
+    }
+
+    function handleTurfReady() {
+      updateGatePanel();
+      paddyIntelligence?.refresh();
+    }
+
     function formatFieldArea() {
-      const boundary = activeBoundary();
-      if (!boundary || typeof globalThis.turf === "undefined") {
+      const boundaryPoints = paddyBoundaryPoints();
+      if (boundaryPoints.length < 3) {
         return "—";
       }
 
       try {
-        const ring = boundary.points.map(([lat, lon]) => [lon, lat]);
-        ring.push(ring[0]);
-        const squareMeters = turf.area(turf.polygon([ring]));
-        const tan = squareMeters / 991.74;
-        return `約${Math.round(squareMeters).toLocaleString()} m²（約${tan.toFixed(1)}反）`;
+        return formatAreaFull(polygonAreaSqm(boundaryPoints));
       } catch {
         return "—";
       }
@@ -1412,6 +2350,7 @@
 
     function refreshFieldOverlay() {
       renderFieldLayer();
+      paddyIntelligence?.refresh();
       updateGatePanel();
     }
 
@@ -1676,6 +2615,10 @@
       setLayerVisible(pointLayer, showQz1LayerInput.checked);
       setLayerVisible(phoneLayer, showPhoneLayerInput.checked);
       setLayerVisible(liveLocationLayer, showPhoneLayerInput.checked);
+      Object.entries(paddyLayers).forEach(([key, layer]) => {
+        setLayerVisible(layer, paddyLayerInputs[key].checked);
+      });
+      paddyIntelligence?.syncLayerVisibility();
     }
 
     function setLayerVisible(layer, visible) {
@@ -1708,7 +2651,7 @@
     }
 
     function fitFieldBounds() {
-      const boundary = Array.isArray(fieldData.boundary) ? fieldData.boundary : [];
+      const boundary = paddyBoundaryPoints();
       if (boundary.length >= 3) {
         map.fitBounds(L.latLngBounds(boundary), { padding: [48, 48], maxZoom: 17 });
       }
@@ -1905,6 +2848,70 @@
       const link = document.createElement("a");
       link.href = url;
       link.download = `suimon-navi-survey-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    }
+
+    function exportPaddyAnalysisJson() {
+      if (paddyIntelligence) {
+        paddyIntelligence.downloadJson();
+        return;
+      }
+
+      const data = {
+        timestamp: new Date().toISOString(),
+        fieldBoundary: paddyBoundaryPoints(),
+        totalArea: {
+          squareMeters: paddyMetrics.fieldArea,
+          ares: paddyMetrics.fieldArea / 100,
+          tan: paddyMetrics.fieldArea / 991.7
+        },
+        water: {
+          polygons: paddyAnalysis.waterPolygons,
+          areaSquareMeters: paddyMetrics.waterArea,
+          coverageRatioPercent: paddyMetrics.waterCoveragePct,
+          targetDepthCentimeters: readNumberInput(targetWaterDepthInput, paddyAnalysis.waterDepthCm),
+          estimatedVolumeCubicMeters: paddyMetrics.waterVolumeCubicMeters,
+          estimatedVolumeLiters: paddyMetrics.waterVolumeLiters
+        },
+        plantCoverage: {
+          polygons: paddyAnalysis.plantPolygons,
+          areaSquareMeters: paddyMetrics.plantArea,
+          coverageRatioPercent: paddyMetrics.plantCoveragePct,
+          categories: PLANT_CATEGORIES
+        },
+        problemZones: paddyAnalysis.problemZones.map((zone) => ({
+          ...zone,
+          areaSquareMeters: polygonAreaSqm(zone.coordinates),
+          percentOfField: paddyMetrics.fieldArea > 0 ? polygonAreaSqm(zone.coordinates) / paddyMetrics.fieldArea * 100 : 0
+        })),
+        irrigationMarkers: paddyAnalysis.irrigationMarkers,
+        obstaclesAndNoFlyZones: paddyAnalysis.obstacles,
+        dronePath: {
+          coordinates: dronePlan.path,
+          settings: {
+            altitudeMeters: readNumberInput(flightInputs.altitude, 30),
+            swathWidthMeters: readNumberInput(flightInputs.swathWidth, 10),
+            imageOverlapPercent: readNumberInput(flightInputs.overlap, 70)
+          },
+          estimatedFlightLines: dronePlan.lineCount,
+          estimatedPathLengthMeters: dronePlan.pathLengthMeters,
+          estimatedFlightTimeMinutes: dronePlan.estimatedMinutes
+        },
+        grid: {
+          sizeMeters: Number(gridSizeSelect.value),
+          cellCount: gridCells.length,
+          cells: gridCells
+        }
+      };
+
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `paddy-field-analysis-${new Date().toISOString().slice(0, 10)}.json`;
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -2221,6 +3228,11 @@
     showFieldLayerInput.addEventListener("change", syncLayerVisibility);
     showQz1LayerInput.addEventListener("change", syncLayerVisibility);
     showPhoneLayerInput.addEventListener("change", syncLayerVisibility);
+    Object.values(paddyLayerInputs).forEach((input) => input.addEventListener("change", syncLayerVisibility));
+    targetWaterDepthInput.addEventListener("input", updatePaddyMetrics);
+    Object.values(flightInputs).forEach((input) => input.addEventListener("input", renderPaddyIntelligence));
+    gridSizeSelect.addEventListener("change", renderPaddyIntelligence);
+    // The refactored paddy module owns the Download JSON button.
     augmentedOnlyInput.addEventListener("change", () => renderPoints());
     resetGateButton.addEventListener("click", () => {
       clearSurveyedGate();
@@ -2262,6 +3274,14 @@
       await loadStaticData();
       populateDecisionInputs();
       renderFieldLayer();
+      paddyIntelligence = new PaddyFieldIntelligence({
+        map,
+        getBoundary: () => activeBoundary()?.points ?? [],
+        onMetricsChange: () => {
+          fieldAreaEl.textContent = formatFieldArea();
+        }
+      });
+      window.paddyIntelligence = paddyIntelligence;
       updateGatePanel();
       updateDecision();
       fitFieldBounds();
