@@ -26,20 +26,20 @@
 
   const STYLES = {
     boundary: { color: "#166534", fillColor: "#22c55e", fillOpacity: 0.08, weight: 3 },
-    water: { color: "#0369a1", fillColor: "#38bdf8", fillOpacity: 0.36, weight: 2 },
-    healthy: { color: "#15803d", fillColor: "#22c55e", fillOpacity: 0.28, weight: 2 },
-    weak: { color: "#b45309", fillColor: "#facc15", fillOpacity: 0.38, weight: 2 },
-    missing: { color: "#475569", fillColor: "#cbd5e1", fillOpacity: 0.48, weight: 2 },
-    weed: { color: "#16a34a", fillColor: "#86efac", fillOpacity: 0.52, weight: 2 },
-    pest: { color: "#ea580c", fillColor: "#fb923c", fillOpacity: 0.44, weight: 2 },
-    disease: { color: "#b91c1c", fillColor: "#f87171", fillOpacity: 0.46, weight: 2 },
-    fertilizer: { color: "#7c3aed", fillColor: "#c4b5fd", fillOpacity: 0.44, weight: 2 },
-    bareSoil: { color: "#854d0e", fillColor: "#d97706", fillOpacity: 0.38, weight: 2 },
-    noFlyZone: { color: "#991b1b", fillColor: "#ef4444", fillOpacity: 0.26, weight: 2, dashArray: "7 5" },
-    obstacle: { color: "#334155", fillColor: "#64748b", fillOpacity: 0.32, weight: 2 },
-    drone: { color: "#111827", weight: 2, opacity: 0.86, dashArray: "5 6" },
-    droneWarning: { color: "#dc2626", weight: 4, opacity: 0.92 },
-    grid: { color: "#475569", weight: 1, opacity: 0.36, fillOpacity: 0 },
+    water: { color: "#0369a1", fillColor: "#38bdf8", fillOpacity: 0.28, weight: 2 },
+    healthy: { color: "#15803d", fillColor: "#22c55e", fillOpacity: 0.22, weight: 2 },
+    weak: { color: "#b45309", fillColor: "#facc15", fillOpacity: 0.28, weight: 2 },
+    missing: { color: "#475569", fillColor: "#cbd5e1", fillOpacity: 0.34, weight: 2 },
+    weed: { color: "#16a34a", fillColor: "#86efac", fillOpacity: 0.36, weight: 2 },
+    pest: { color: "#ea580c", fillColor: "#fb923c", fillOpacity: 0.34, weight: 2 },
+    disease: { color: "#b91c1c", fillColor: "#f87171", fillOpacity: 0.36, weight: 2 },
+    fertilizer: { color: "#7c3aed", fillColor: "#c4b5fd", fillOpacity: 0.34, weight: 2 },
+    bareSoil: { color: "#854d0e", fillColor: "#d97706", fillOpacity: 0.3, weight: 2 },
+    noFlyZone: { color: "#991b1b", fillColor: "#ef4444", fillOpacity: 0.24, weight: 2, dashArray: "7 5" },
+    obstacle: { color: "#334155", fillColor: "#64748b", fillOpacity: 0.26, weight: 2 },
+    drone: { color: "#111827", weight: 1.8, opacity: 0.78, dashArray: "5 6" },
+    droneWarning: { color: "#dc2626", weight: 3.5, opacity: 0.9 },
+    grid: { color: "#64748b", weight: 0.7, opacity: 0.24, fillOpacity: 0 },
     drawing: { color: "#2563eb", fillColor: "#93c5fd", fillOpacity: 0.22, weight: 2, dashArray: "4 4" }
   };
 
@@ -275,6 +275,7 @@
         selectedSummary: byId("selectedFeatureSummary"),
         selectedNote: byId("selectedFeatureNote"),
         warnings: byId("paddyWarnings"),
+        droneWarnings: byId("droneWarnings"),
         drawingHint: byId("drawingHint"),
         drawingModeBadge: byId("drawingModeBadge"),
         drawingPointCount: byId("drawingPointCount"),
@@ -1052,10 +1053,14 @@
     }
 
     renderWarnings() {
-      if (!this.elements.warnings) {
-        return;
+      const droneWarnings = this.warningMessages.filter(isDroneWarning);
+      const globalWarnings = this.warningMessages.filter((message) => !isDroneWarning(message));
+      if (this.elements.warnings) {
+        this.elements.warnings.innerHTML = globalWarnings.map((message) => `<div>${escapeHtml(message)}</div>`).join("");
       }
-      this.elements.warnings.innerHTML = this.warningMessages.map((message) => `<div>${escapeHtml(message)}</div>`).join("");
+      if (this.elements.droneWarnings) {
+        this.elements.droneWarnings.innerHTML = droneWarnings.map((message) => `<div>${escapeHtml(message)}</div>`).join("");
+      }
     }
 
     setDrawingHint(message) {
@@ -1159,7 +1164,7 @@
           pathLength_m: this.dronePlan.pathLengthMeters,
           estimatedFlightTime_min: this.dronePlan.estimatedMinutes,
           estimatedPhotoCount: this.dronePlan.estimatedPhotoCount,
-          warnings: this.warningMessages.filter((message) => /drone|flight|fly|no-fly/i.test(message))
+          warnings: this.warningMessages.filter(isDroneWarning)
         },
         grid: {
           enabled: this.elements.layers.grid?.checked ?? true,
@@ -1350,6 +1355,10 @@
 
   function percent(part, whole) {
     return whole > 0 ? part / whole * 100 : 0;
+  }
+
+  function isDroneWarning(message) {
+    return /drone|flight|fly|no-fly|swath|overlap|speed|safety margin|path/i.test(message);
   }
 
   function formatAreaFull(area) {

@@ -39,6 +39,7 @@
       background: var(--bg);
       color: var(--text);
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Sans", "Noto Sans JP", sans-serif;
+      overflow: hidden;
     }
 
     .app {
@@ -215,6 +216,7 @@
       display: grid;
       grid-template-columns: minmax(0, 1fr) 360px;
       min-height: 0;
+      overflow: hidden;
     }
 
     .map-wrap {
@@ -233,6 +235,7 @@
       border-left: 1px solid var(--line);
       display: grid;
       gap: 14px;
+      min-height: 0;
       overflow-y: auto;
       padding: 16px;
     }
@@ -256,6 +259,60 @@
       font-size: 0.76rem;
       font-weight: 500;
       margin-left: 6px;
+    }
+
+    details.card {
+      display: block;
+      padding: 0;
+    }
+
+    details.card > summary {
+      align-items: center;
+      cursor: pointer;
+      display: flex;
+      gap: 8px;
+      justify-content: space-between;
+      list-style: none;
+      min-height: 44px;
+      padding: 12px 14px;
+      user-select: none;
+    }
+
+    details.card > summary::-webkit-details-marker {
+      display: none;
+    }
+
+    details.card > summary::after {
+      color: var(--muted);
+      content: "＋";
+      font-size: 1rem;
+      font-weight: 800;
+    }
+
+    details.card[open] > summary {
+      border-bottom: 1px solid var(--line);
+    }
+
+    details.card[open] > summary::after {
+      content: "−";
+    }
+
+    .details-title {
+      font-size: 1rem;
+      font-weight: 750;
+    }
+
+    .details-title .en {
+      color: var(--muted);
+      font-size: 0.76rem;
+      font-weight: 500;
+      margin-left: 6px;
+    }
+
+    .details-content {
+      display: grid;
+      gap: 10px;
+      padding: 12px 14px 14px;
     }
 
     .verdict {
@@ -620,26 +677,25 @@
 
     @media (max-width: 980px) {
       .app {
-        height: auto;
-        min-height: 100vh;
-        min-height: 100dvh;
+        height: 100vh;
+        height: 100dvh;
       }
 
       main {
         grid-template-columns: 1fr;
+        grid-template-rows: minmax(260px, 45dvh) minmax(0, 1fr);
       }
 
       .panel {
         border-left: 0;
         border-top: 1px solid var(--line);
-        overflow: visible;
+        overflow-y: auto;
         padding-bottom: max(16px, env(safe-area-inset-bottom));
       }
 
       #map {
-        height: 56vh;
-        height: 56dvh;
-        min-height: 420px;
+        height: 100%;
+        min-height: 0;
       }
     }
 
@@ -681,7 +737,7 @@
       }
 
       #map {
-        min-height: 340px;
+        min-height: 0;
       }
     }
   </style>
@@ -808,8 +864,9 @@
           <p class="meta">測位点を地図のポップアップで「圃場の角」「水路」「水門」にタグ付けすると、その場で境界線・水路・水門位置が描画されます。圃場の角は外周を歩いた順にタグ付けしてください（3点以上で境界線が描画されます）。</p>
         </section>
 
-        <section class="card">
-          <h2>圃場エリア解析<span class="en">Paddy intelligence</span></h2>
+        <details class="card paddy-collapsible" open>
+          <summary><span class="details-title">Demo / Layers / Summary<span class="en">Paddy intelligence</span></span></summary>
+          <div class="details-content">
           <p class="meta">ドローン・GNSS測量・水管理・AI検出結果を重ねて、圃場内の水面、稲株、問題ゾーン、障害物を確認します。</p>
           <div class="paddy-actions">
             <button id="loadPaddyDemoButton" class="panel-button primary" type="button">Load Demo Data</button>
@@ -826,7 +883,7 @@
             <label class="filter"><input id="showIrrigationLayer" type="checkbox" checked>取水・排水</label>
             <label class="filter"><input id="showObstacleLayer" type="checkbox" checked>障害物</label>
             <label class="filter"><input id="showDroneLayer" type="checkbox" checked>ドローン経路</label>
-            <label class="filter"><input id="showGridLayer" type="checkbox" checked>管理グリッド</label>
+            <label class="filter"><input id="showGridLayer" type="checkbox">管理グリッド</label>
           </div>
           <div class="metric-grid">
             <div class="metric"><span>総面積</span><strong id="paddyAreaMetric">—</strong></div>
@@ -841,10 +898,12 @@
             </label>
             <button id="exportAnalysisButton" class="panel-button export" type="button">Download JSON</button>
           </div>
-        </section>
+          </div>
+        </details>
 
-        <section class="card">
-          <h2>手動注釈<span class="en">Manual annotation</span></h2>
+        <details class="card paddy-collapsible">
+          <summary><span class="details-title">Manual Annotation<span class="en">Draw / mark</span></span></summary>
+          <div class="details-content">
           <div class="paddy-drawing-status">
             <span id="drawingModeBadge" class="paddy-mode-badge">No drawing mode</span>
             <span>Points: <strong id="drawingPointCount">0</strong></span>
@@ -877,30 +936,36 @@
             <button id="cancelPaddyDrawingButton" class="panel-button" type="button">Cancel Drawing</button>
           </div>
           <p id="drawingHint" class="paddy-drawing-hint">注釈タイプを選ぶと地図上で追加できます。</p>
-        </section>
+          </div>
+        </details>
 
-        <section class="card">
-          <h2>選択地物<span class="en">Feature inspection</span></h2>
+        <details class="card paddy-collapsible">
+          <summary><span class="details-title">Selected Feature<span class="en">Inspect / notes</span></span></summary>
+          <div class="details-content">
           <div id="selectedFeatureSummary" class="paddy-selected-panel">地図上の解析地物をクリックすると詳細を表示します。</div>
           <div class="input-row">
             <label for="selectedFeatureNote">選択地物メモ</label>
             <textarea id="selectedFeatureNote" rows="3" placeholder="短いメモ"></textarea>
           </div>
           <button id="saveSelectedNoteButton" class="panel-button primary" type="button" disabled>Save Note</button>
-        </section>
+          </div>
+        </details>
 
-        <section class="card">
-          <h2>水量計算<span class="en">Water volume</span></h2>
+        <details class="card paddy-collapsible" open>
+          <summary><span class="details-title">Water Volume<span class="en">Irrigation estimate</span></span></summary>
+          <div class="details-content">
           <div class="input-row">
             <label for="targetWaterDepthInput">目標水深 (cm)</label>
             <input id="targetWaterDepthInput" type="number" min="0" step="0.5" inputmode="decimal" value="5">
           </div>
           <div class="kv"><span>推定水量</span><strong id="waterVolumeMetric">—</strong></div>
           <p class="meta">水量 = 圃場面積 × 目標水深。用水計画の概算用です。</p>
-        </section>
+          </div>
+        </details>
 
-        <section class="card">
-          <h2>カテゴリ別面積<span class="en">Problem zones</span></h2>
+        <details class="card paddy-collapsible">
+          <summary><span class="details-title">Category Area Table<span class="en">Plants / problems</span></span></summary>
+          <div class="details-content">
           <p class="meta">各ポリゴン面積を合算しています。重なりがある場合は重複分も合計されます。</p>
           <table class="data-table">
             <thead>
@@ -914,10 +979,13 @@
             </thead>
             <tbody id="problemAreaTable"></tbody>
           </table>
-        </section>
+          </div>
+        </details>
 
-        <section class="card">
-          <h2>ドローン経路<span class="en">Flight planning</span></h2>
+        <details class="card paddy-collapsible" open>
+          <summary><span class="details-title">Drone Flight Planning<span class="en">Lawnmower path</span></span></summary>
+          <div class="details-content">
+          <div id="droneWarnings" class="paddy-warning-list paddy-drone-warning-list" role="status" aria-live="polite"></div>
           <div class="input-row">
             <label for="flightAltitudeInput">飛行高度 (m)</label>
             <input id="flightAltitudeInput" type="number" min="1" step="1" inputmode="decimal" value="30">
@@ -948,10 +1016,12 @@
           <div class="kv"><span>概算飛行時間</span><strong id="flightTimeMetric">—</strong></div>
           <div class="kv"><span>概算写真枚数</span><strong id="flightPhotoMetric">—</strong></div>
           <p class="meta">飛行禁止区域は可能な範囲でラインを分割します。交差が残る場合は警告と赤線で表示します。</p>
-        </section>
+          </div>
+        </details>
 
-        <section class="card">
-          <h2>管理グリッド<span class="en">Management zones</span></h2>
+        <details class="card paddy-collapsible">
+          <summary><span class="details-title">Grid Management<span class="en">Management zones</span></span></summary>
+          <div class="details-content">
           <div class="input-row">
             <label for="gridSizeSelect">グリッドサイズ</label>
             <select id="gridSizeSelect">
@@ -1010,15 +1080,19 @@
               <button id="saveGridCellButton" class="panel-button primary" type="button">Save Grid Cell</button>
             </div>
           </div>
-        </section>
+          </div>
+        </details>
 
-        <section class="card">
-          <h2>凡例<span class="en">Layer legend</span></h2>
+        <details class="card paddy-collapsible">
+          <summary><span class="details-title">Layer Legend<span class="en">Styles</span></span></summary>
+          <div class="details-content">
           <div id="paddyLegend" class="paddy-legend"></div>
-        </section>
+          </div>
+        </details>
 
-        <section class="card">
-          <h2>QZ1ライブ記録<span class="en">Web Serial</span></h2>
+        <details class="card paddy-collapsible">
+          <summary><span class="details-title">QZ1 Live Record<span class="en">Web Serial</span></span></summary>
+          <div class="details-content">
           <div class="kv"><span>状態</span><strong><span id="serialStatus" class="serial-status">未接続</span></strong></div>
           <div class="kv"><span>受信行数</span><strong id="serialLineCount">0</strong></div>
           <div class="kv"><span>有効測位点</span><strong id="serialPointCount">0</strong></div>
@@ -1045,7 +1119,8 @@
             <li>メニュー → <strong>Log</strong> で記録開始 → 測量 → 記録停止</li>
             <li>ログファイルを共有/保存し、このアプリの「NMEAをアップロード」で読み込み（行頭にタイムスタンプが付いていても自動で除去します）</li>
           </ol>
-        </section>
+          </div>
+        </details>
       </aside>
     </main>
   </div>
