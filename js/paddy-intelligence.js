@@ -194,12 +194,13 @@
   };
 
   class PaddyFieldIntelligence {
-    constructor({ map, getBoundary, onMetricsChange }) {
+    constructor({ map, getBoundary, getGnssPoints, onMetricsChange }) {
       if (!map || typeof L === "undefined") {
         throw new Error("PaddyFieldIntelligence requires a Leaflet map.");
       }
       this.map = map;
       this.getBaseBoundary = getBoundary;
+      this.getGnssPoints = getGnssPoints || (() => []);
       this.onMetricsChange = onMetricsChange || (() => {});
       this.analysis = clone(DEMO_ANALYSIS);
       this.layers = Object.fromEntries(
@@ -208,6 +209,8 @@
       this.metrics = {};
       this.gridCells = [];
       this.dronePlan = emptyDronePlan();
+      this.gnssAssociations = [];
+      this.gnssSummary = emptyGnssSummary();
       this.selected = null;
       this.drawing = null;
       this.warningMessages = [];
@@ -254,6 +257,7 @@
           angle: byId("flightAngleInput"),
           safetyMargin: byId("flightSafetyMarginInput"),
           gridSize: byId("gridSizeSelect"),
+          gnssThreshold: byId("gnssBoundaryThresholdInput"),
           annotationType: byId("annotationTypeSelect"),
           import: byId("paddyImportInput")
         },
@@ -265,6 +269,7 @@
           finishPolygon: byId("finishPaddyPolygonButton"),
           cancelDrawing: byId("cancelPaddyDrawingButton"),
           export: byId("exportAnalysisButton"),
+          recalculateGnss: byId("recalculateGnssAssociationButton"),
           saveNote: byId("saveSelectedNoteButton"),
           saveGrid: byId("saveGridCellButton")
         },
@@ -276,6 +281,14 @@
         selectedNote: byId("selectedFeatureNote"),
         warnings: byId("paddyWarnings"),
         droneWarnings: byId("droneWarnings"),
+        gnss: {
+          total: byId("gnssTotalMetric"),
+          inside: byId("gnssInsideMetric"),
+          outside: byId("gnssOutsideMetric"),
+          nearBoundary: byId("gnssNearBoundaryMetric"),
+          gridAssociation: byId("gnssGridAssociationMetric"),
+          message: byId("gnssAssociationMessage")
+        },
         drawingHint: byId("drawingHint"),
         drawingModeBadge: byId("drawingModeBadge"),
         drawingPointCount: byId("drawingPointCount"),
@@ -291,7 +304,15 @@
     }
 
     bindEvents() {
-      Object.values(this.elements.layers).forEach((input) => input?.addEventListener("change", () => this.syncLayerVisibility()));
+      Object.entries(this.elements.layers).forEach(([key, input]) => {
+        input?.addEventListener("change", () => {
+          if (key === "grid") {
+            this.refresh();
+            return;
+          }
+          this.syncLayerVisibility();
+        });
+      });
       this.elements.buttons.loadDemo?.addEventListener("click", () => this.loadDemoData());
       this.elements.buttons.resetDemo?.addEventListener("click", () => this.loadDemoData());
       this.elements.buttons.clearAnalysis?.addEventListener("click", () => this.clearAnalysis());
@@ -299,6 +320,7 @@
       this.elements.buttons.finishPolygon?.addEventListener("click", () => this.finishPolygon());
       this.elements.buttons.cancelDrawing?.addEventListener("click", () => this.cancelDrawing({ resetMode: true }));
       this.elements.buttons.export?.addEventListener("click", () => this.downloadJson());
+      this.elements.buttons.recalculateGnss?.addEventListener("click", () => this.refresh());
       this.elements.buttons.saveNote?.addEventListener("click", () => this.saveSelectedNote());
       this.elements.buttons.saveGrid?.addEventListener("click", () => this.saveSelectedGridCell());
       this.elements.inputs.import?.addEventListener("change", (event) => this.importJsonFromInput(event));
@@ -311,6 +333,7 @@
         this.elements.inputs.speed,
         this.elements.inputs.angle,
         this.elements.inputs.safetyMargin,
+        this.elements.inputs.gnssThreshold,
         this.elements.inputs.gridSize
       ].forEach((input) => input?.addEventListener("input", () => this.refresh()));
       this.elements.inputs.gridSize?.addEventListener("change", () => this.refresh());
@@ -384,6 +407,7 @@
       this.dronePlan = this.generateDronePath();
       this.renderDronePath();
       this.gridCells = this.generateGridCells();
+      this.updateGnssAssociations();
       this.renderGridCells();
       this.updateMetrics();
       this.renderWarnings();
@@ -510,6 +534,150 @@
           })
           .addTo(this.layers.grid);
       });
+    }
+
+    updateGnssAssociations() {
+      const points = this.getNormalizedGnssPoints();
+      const boundary = this.getBoundaryPoints();
+      const thresholdMeters = Math.max(0, numberFromInput(this.elements.inputs.gnssThreshold, 2));
+      const gridEnabled = this.elements.layers.grid?.checked ?? false;
+      const summary = emptyGnssSummary();
+      summary.total = points.length;
+      summary.nearThreshold_m = thresholdMeters;
+      summary.gridEnabled = gridEnabled;
+
+      this.gridCells.forEach((cell) => {
+        cell.gnssPointCount = 0;
+        cell.latestGnssTimestamp = "";
+        cell.averageFixQuality = null;
+        cell.gnssStatusCounts = {};
+        cell.gnssFixQualitySum = 0;
+        cell.gnssFixQualityCount = 0;
+      });
+
+      if (boundary.length < 3) {
+        summary.message = "No field boundary loaded.";
+        this.gnssSummary = summary;
+        this.gnssAssociations = points.map((point, index) => this.buildGnssAssociation(point, index, "no-field-boundary", false, null));
+        this.renderGnssSummary();
+        return;
+      }
+
+      if (points.length === 0) {
+        summary.message = "No QZ1/GNSS points loaded.";
+        this.gnssSummary = summary;
+        this.gnssAssociations = [];
+        this.renderGnssSummary();
+        return;
+      }
+
+      const projection = createLocalProjection(boundary);
+      const boundaryXY = boundary.map(projection.toXY);
+      this.gnssAssociations = points.map((point, index) => {
+        const pointXY = projection.toXY([point.lat, point.lon]);
+        const inside = pointInPolygonXY(pointXY, boundaryXY);
+        const nearBoundary = distanceToPolygonMeters(pointXY, boundaryXY) <= thresholdMeters;
+        const relation = nearBoundary ? "near-boundary" : inside ? "inside-field" : "outside-field";
+        const gridCell = gridEnabled ? this.findGridCellForPoint(point) : null;
+
+        if (inside) {
+          summary.inside += 1;
+        } else {
+          summary.outside += 1;
+        }
+        if (nearBoundary) {
+          summary.nearBoundary += 1;
+        }
+        if (gridCell) {
+          summary.withGridCell += 1;
+          this.addGnssPointToGridCell(gridCell, point);
+        }
+
+        return this.buildGnssAssociation(point, index, relation, nearBoundary, gridCell?.id || null);
+      });
+
+      this.gridCells.forEach((cell) => {
+        if (cell.gnssFixQualityCount > 0) {
+          cell.averageFixQuality = cell.gnssFixQualitySum / cell.gnssFixQualityCount;
+        }
+        delete cell.gnssFixQualitySum;
+        delete cell.gnssFixQualityCount;
+      });
+
+      summary.message = gridEnabled
+        ? `${summary.withGridCell.toLocaleString()} points associated with grid cells.`
+        : "Grid association is off because the management grid layer is disabled.";
+      this.gnssSummary = summary;
+      this.renderGnssSummary();
+    }
+
+    getNormalizedGnssPoints() {
+      return (this.getGnssPoints?.() || [])
+        .map((point, index) => ({
+          id: point.id || `gnss-${index}`,
+          index,
+          lat: Number(point.lat),
+          lon: Number(point.lon),
+          timestamp: point.timestamp || "",
+          fixQuality: Number.isFinite(Number(point.fixQuality)) ? Number(point.fixQuality) : null,
+          status: point.augmented ? "SLAS/DGNSS" : Number.isFinite(Number(point.fixQuality)) ? `fix=${point.fixQuality}` : "unknown"
+        }))
+        .filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lon));
+    }
+
+    buildGnssAssociation(point, index, relation, nearBoundary, gridCellId) {
+      return {
+        pointId: point.id || `gnss-${index}`,
+        index,
+        coordinates: [point.lat, point.lon],
+        timestamp: point.timestamp || "",
+        fixQuality: point.fixQuality,
+        status: point.status || "unknown",
+        fieldRelation: relation,
+        nearBoundary,
+        gridCellId
+      };
+    }
+
+    findGridCellForPoint(point) {
+      if (this.gridCells.length === 0) {
+        return null;
+      }
+
+      const projection = createLocalProjection(this.getBoundaryPoints());
+      const pointXY = projection.toXY([point.lat, point.lon]);
+      const containingCell = this.gridCells.find((cell) => pointInPolygonXY(pointXY, cell.coordinates.map(projection.toXY)));
+      if (containingCell) {
+        return containingCell;
+      }
+
+      return this.gridCells.reduce((nearest, cell) => {
+        const center = polygonCentroidXY(cell.coordinates.map(projection.toXY));
+        const distance = Math.hypot(pointXY.x - center.x, pointXY.y - center.y);
+        return !nearest || distance < nearest.distance ? { cell, distance } : nearest;
+      }, null)?.cell || null;
+    }
+
+    addGnssPointToGridCell(cell, point) {
+      cell.gnssPointCount += 1;
+      if (point.timestamp) {
+        cell.latestGnssTimestamp = latestTimestampLabel(cell.latestGnssTimestamp, point.timestamp);
+      }
+      const status = point.status || "unknown";
+      cell.gnssStatusCounts[status] = (cell.gnssStatusCounts[status] || 0) + 1;
+      if (Number.isFinite(point.fixQuality)) {
+        cell.gnssFixQualitySum += point.fixQuality;
+        cell.gnssFixQualityCount += 1;
+      }
+    }
+
+    renderGnssSummary() {
+      text(this.elements.gnss.total, this.gnssSummary.total.toLocaleString());
+      text(this.elements.gnss.inside, this.gnssSummary.inside.toLocaleString());
+      text(this.elements.gnss.outside, this.gnssSummary.outside.toLocaleString());
+      text(this.elements.gnss.nearBoundary, this.gnssSummary.nearBoundary.toLocaleString());
+      text(this.elements.gnss.gridAssociation, this.gnssSummary.gridEnabled ? `${this.gnssSummary.withGridCell.toLocaleString()} points` : "grid off");
+      text(this.elements.gnss.message, this.gnssSummary.message);
     }
 
     updateMetrics() {
@@ -883,6 +1051,7 @@
       if (!this.elements.selectedSummary || !this.elements.selectedNote) {
         return;
       }
+      this.revealSelectedPanel();
       const editable = this.isFeatureEditable(feature);
       this.elements.selectedSummary.classList.remove("is-empty");
       this.elements.selectedSummary.innerHTML = `
@@ -912,12 +1081,15 @@
         面積: ${escapeHtml(formatAreaShort(cell.area_m2))}<br>
         水: ${escapeHtml(cell.waterStatus)} / 稲: ${escapeHtml(cell.plantStatus)}<br>
         雑草: ${escapeHtml(cell.weedStatus)} / 病害虫: ${escapeHtml(cell.pestDiseaseStatus)}<br>
+        GNSS点: ${escapeHtml(cell.gnssPointCount || 0)} / 最新: ${escapeHtml(cell.latestGnssTimestamp || "—")}<br>
+        状態: ${escapeHtml(formatStatusCounts(cell.gnssStatusCounts))}<br>
         ${escapeHtml(cell.notes || "")}
       `;
       }
       if (!this.elements.selectedSummary || !this.elements.selectedNote) {
         return;
       }
+      this.revealSelectedPanel();
       this.elements.selectedSummary.classList.remove("is-empty");
       this.elements.selectedSummary.innerHTML = `
         <div class="paddy-detail-grid">
@@ -926,6 +1098,10 @@
           <span>Area</span><strong>${escapeHtml(formatAreaShort(cell.area_m2))}</strong>
           <span>Water</span><strong>${escapeHtml(cell.waterStatus)}</strong>
           <span>Plant</span><strong>${escapeHtml(cell.plantStatus)}</strong>
+          <span>GNSS points</span><strong>${escapeHtml(cell.gnssPointCount || 0)}</strong>
+          <span>Latest GNSS</span><strong>${escapeHtml(cell.latestGnssTimestamp || "—")}</strong>
+          <span>Avg fix</span><strong>${Number.isFinite(cell.averageFixQuality) ? cell.averageFixQuality.toFixed(1) : "—"}</strong>
+          <span>Status</span><strong>${escapeHtml(formatStatusCounts(cell.gnssStatusCounts))}</strong>
         </div>
       `;
       this.elements.selectedNote.value = cell.notes || "";
@@ -941,6 +1117,72 @@
       setControlValue(this.elements.gridWeedStatus, cell.weedStatus);
       setControlValue(this.elements.gridPestDiseaseStatus, cell.pestDiseaseStatus);
       setControlValue(this.elements.gridNotes, cell.notes || "");
+    }
+
+    selectGnssPoint(point) {
+      const normalized = this.getNormalizedGnssPoints().find((candidate) => candidate.id === point.id)
+        || this.getNormalizedGnssPoints().find((candidate) => candidate.index === point.index)
+        || {
+          id: point.id || "gnss-point",
+          index: point.index || 0,
+          lat: Number(point.lat),
+          lon: Number(point.lon),
+          timestamp: point.timestamp || "",
+          fixQuality: Number.isFinite(Number(point.fixQuality)) ? Number(point.fixQuality) : null,
+          status: point.augmented ? "SLAS/DGNSS" : Number.isFinite(Number(point.fixQuality)) ? `fix=${point.fixQuality}` : "unknown"
+        };
+      const association = this.gnssAssociations.find((item) => item.pointId === normalized.id)
+        || this.analyzeSingleGnssPoint(normalized);
+      this.selected = { kind: "gnss", point: normalized, association };
+
+      if (!this.elements.selectedSummary || !this.elements.selectedNote) {
+        return;
+      }
+      this.revealSelectedPanel();
+      this.elements.selectedSummary.classList.remove("is-empty");
+      this.elements.selectedSummary.innerHTML = `
+        <div class="paddy-detail-grid">
+          <span>Type</span><strong>QZ1/GNSS point</strong>
+          <span>Latitude</span><strong>${normalized.lat.toFixed(6)}</strong>
+          <span>Longitude</span><strong>${normalized.lon.toFixed(6)}</strong>
+          <span>Timestamp</span><strong>${escapeHtml(normalized.timestamp || "—")}</strong>
+          <span>Fix/status</span><strong>${escapeHtml(normalized.status || "unknown")}</strong>
+          <span>Field relation</span><strong>${escapeHtml(association.fieldRelation)}</strong>
+          <span>Grid cell</span><strong>${escapeHtml(association.gridCellId || "—")}</strong>
+        </div>
+      `;
+      this.elements.selectedNote.value = "";
+      this.elements.selectedNote.disabled = true;
+      if (this.elements.buttons.saveNote) {
+        this.elements.buttons.saveNote.disabled = true;
+      }
+      if (this.elements.gridEditor) {
+        this.elements.gridEditor.hidden = true;
+      }
+    }
+
+    analyzeSingleGnssPoint(point) {
+      const boundary = this.getBoundaryPoints();
+      if (boundary.length < 3 || !Number.isFinite(point.lat) || !Number.isFinite(point.lon)) {
+        return this.buildGnssAssociation(point, point.index || 0, "no-field-boundary", false, null);
+      }
+
+      const thresholdMeters = Math.max(0, numberFromInput(this.elements.inputs.gnssThreshold, 2));
+      const projection = createLocalProjection(boundary);
+      const pointXY = projection.toXY([point.lat, point.lon]);
+      const boundaryXY = boundary.map(projection.toXY);
+      const inside = pointInPolygonXY(pointXY, boundaryXY);
+      const nearBoundary = distanceToPolygonMeters(pointXY, boundaryXY) <= thresholdMeters;
+      const relation = nearBoundary ? "near-boundary" : inside ? "inside-field" : "outside-field";
+      const gridCell = (this.elements.layers.grid?.checked ?? false) ? this.findGridCellForPoint(point) : null;
+      return this.buildGnssAssociation(point, point.index || 0, relation, nearBoundary, gridCell?.id || null);
+    }
+
+    revealSelectedPanel() {
+      const details = this.elements.selectedSummary?.closest("details");
+      if (details) {
+        details.open = true;
+      }
     }
 
     clearSelection() {
@@ -974,6 +1216,9 @@
 
     saveSelectedNote() {
       if (!this.selected) {
+        return;
+      }
+      if (this.selected.kind === "gnss") {
         return;
       }
       const note = this.elements.selectedNote.value.trim();
@@ -1172,6 +1417,16 @@
           cells: this.gridCells,
           cellData: this.analysis.gridCellData
         },
+        gnssPointSummary: {
+          totalPoints: this.gnssSummary.total,
+          insideFieldCount: this.gnssSummary.inside,
+          outsideFieldCount: this.gnssSummary.outside,
+          nearBoundaryCount: this.gnssSummary.nearBoundary,
+          nearBoundaryThreshold_m: this.gnssSummary.nearThreshold_m,
+          gridEnabled: this.gnssSummary.gridEnabled,
+          gridAssociatedPointCount: this.gnssSummary.withGridCell
+        },
+        gnssPointAssociations: this.gnssAssociations,
         notes: {
           featureNotes: this.collectFeatureNotes()
         },
@@ -1244,6 +1499,10 @@
         gridCellData: data.grid?.cellData || {}
       };
       this.setDefaultInputsFromAnalysis();
+      if (typeof data.grid?.enabled === "boolean" && this.elements.layers.grid) {
+        this.elements.layers.grid.checked = data.grid.enabled;
+      }
+      setInputValue(this.elements.inputs.gnssThreshold, data.gnssPointSummary?.nearBoundaryThreshold_m);
       if (data.dronePath?.settings) {
         const settings = data.dronePath.settings;
         setInputValue(this.elements.inputs.altitude, settings.altitude_m);
@@ -1272,6 +1531,19 @@
       estimatedPhotoCount: 0,
       warningSegments: [],
       warnings: []
+    };
+  }
+
+  function emptyGnssSummary() {
+    return {
+      total: 0,
+      inside: 0,
+      outside: 0,
+      nearBoundary: 0,
+      nearThreshold_m: 2,
+      gridEnabled: false,
+      withGridCell: 0,
+      message: "QZ1/NMEAまたは測量JSONを読み込むと集計されます。"
     };
   }
 
@@ -1389,6 +1661,32 @@
     return `${value.toFixed(value >= 10 ? 0 : 1)} m`;
   }
 
+  function formatStatusCounts(counts) {
+    const entries = Object.entries(counts || {});
+    if (entries.length === 0) {
+      return "—";
+    }
+    return entries
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([status, count]) => `${status}: ${count}`)
+      .join(", ");
+  }
+
+  function latestTimestampLabel(current, next) {
+    if (!current) {
+      return next;
+    }
+    if (!next) {
+      return current;
+    }
+    const currentTime = Date.parse(current);
+    const nextTime = Date.parse(next);
+    if (Number.isFinite(currentTime) && Number.isFinite(nextTime)) {
+      return nextTime >= currentTime ? next : current;
+    }
+    return String(next) >= String(current) ? next : current;
+  }
+
   function createLocalProjection(points) {
     const origin = points[0] || [34.6545, 135.8302];
     const originLat = origin[0];
@@ -1495,6 +1793,38 @@
       }
     }
     return inside;
+  }
+
+  function distanceToPolygonMeters(point, polygon) {
+    if (!Array.isArray(polygon) || polygon.length < 2) {
+      return Infinity;
+    }
+    let shortest = Infinity;
+    for (let i = 0; i < polygon.length; i += 1) {
+      const a = polygon[i];
+      const b = polygon[(i + 1) % polygon.length];
+      shortest = Math.min(shortest, distancePointToSegmentMeters(point, a, b));
+    }
+    return shortest;
+  }
+
+  function distancePointToSegmentMeters(point, a, b) {
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const lengthSquared = dx * dx + dy * dy;
+    if (lengthSquared === 0) {
+      return Math.hypot(point.x - a.x, point.y - a.y);
+    }
+    const t = Math.max(0, Math.min(1, ((point.x - a.x) * dx + (point.y - a.y) * dy) / lengthSquared));
+    return Math.hypot(point.x - (a.x + t * dx), point.y - (a.y + t * dy));
+  }
+
+  function polygonCentroidXY(points) {
+    if (!Array.isArray(points) || points.length === 0) {
+      return { x: 0, y: 0 };
+    }
+    const total = points.reduce((sum, point) => ({ x: sum.x + point.x, y: sum.y + point.y }), { x: 0, y: 0 });
+    return { x: total.x / points.length, y: total.y / points.length };
   }
 
   function lineIntersectsPolygonXY(a, b, polygon) {

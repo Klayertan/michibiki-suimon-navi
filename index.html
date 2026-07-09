@@ -1084,6 +1084,26 @@
         </details>
 
         <details class="card paddy-collapsible">
+          <summary><span class="details-title">QZ1/GNSS Point Association<span class="en">Field relation</span></span></summary>
+          <div class="details-content">
+            <p class="meta">読み込んだQZ1/GNSS測位点が圃場境界・管理グリッドとどう対応するかを確認します。</p>
+            <div class="input-row">
+              <label for="gnssBoundaryThresholdInput">境界付近しきい値 (m)</label>
+              <input id="gnssBoundaryThresholdInput" type="number" min="0" step="0.5" inputmode="decimal" value="2">
+            </div>
+            <div class="metric-grid">
+              <div class="metric"><span>GNSS点</span><strong id="gnssTotalMetric">0</strong></div>
+              <div class="metric"><span>圃場内</span><strong id="gnssInsideMetric">0</strong></div>
+              <div class="metric"><span>圃場外</span><strong id="gnssOutsideMetric">0</strong></div>
+              <div class="metric"><span>境界付近</span><strong id="gnssNearBoundaryMetric">0</strong></div>
+            </div>
+            <div class="kv"><span>グリッド関連付け</span><strong id="gnssGridAssociationMetric">—</strong></div>
+            <p id="gnssAssociationMessage" class="meta">QZ1/NMEAまたは測量JSONを読み込むと集計されます。</p>
+            <button id="recalculateGnssAssociationButton" class="panel-button primary" type="button">Recalculate GNSS Association</button>
+          </div>
+        </details>
+
+        <details class="card paddy-collapsible">
           <summary><span class="details-title">Layer Legend<span class="en">Styles</span></span></summary>
           <div class="details-content">
           <div id="paddyLegend" class="paddy-legend"></div>
@@ -2480,6 +2500,7 @@
       visiblePoints.forEach((point) => {
         L.circleMarker([point.lat, point.lon], markerStyle(point))
           .bindPopup(buildPopup(point), { maxWidth: 360 })
+          .on("click", () => paddyIntelligence?.selectGnssPoint(point))
           .addTo(pointLayer);
       });
 
@@ -2492,6 +2513,7 @@
       exportButton.disabled = parsedPoints.length === 0;
       syncLayerVisibility();
       updateComparisonSummary();
+      paddyIntelligence?.refresh();
     }
 
     function markerStyle(point) {
@@ -3352,6 +3374,7 @@
       paddyIntelligence = new PaddyFieldIntelligence({
         map,
         getBoundary: () => activeBoundary()?.points ?? [],
+        getGnssPoints: () => parsedPoints,
         onMetricsChange: () => {
           fieldAreaEl.textContent = formatFieldArea();
         }
