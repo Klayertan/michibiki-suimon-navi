@@ -740,58 +740,496 @@
         min-height: 0;
       }
     }
+
+    /* Judge-ready field-tech interface */
+    :root {
+      --bg: #f4f1e8;
+      --panel: #fbfaf5;
+      --text: #183128;
+      --muted: #607069;
+      --line: #d8d8ca;
+      --green: #216e49;
+      --orange: #b8621a;
+      --blue: #277a8d;
+      --red: #a53b32;
+      --shadow: 0 12px 28px rgba(35, 56, 45, 0.09);
+    }
+
+    [hidden] {
+      display: none !important;
+    }
+
+    .app {
+      grid-template-rows: auto 1fr;
+    }
+
+    .app-header {
+      background: rgba(251, 250, 245, 0.97);
+      box-shadow: 0 4px 18px rgba(35, 56, 45, 0.07);
+      padding: 12px clamp(16px, 3vw, 32px) 0;
+    }
+
+    .brand-row,
+    .brand-lockup,
+    .header-actions,
+    .section-heading {
+      align-items: center;
+      display: flex;
+    }
+
+    .brand-row,
+    .section-heading {
+      justify-content: space-between;
+    }
+
+    .brand-row {
+      gap: 20px;
+    }
+
+    .brand-lockup {
+      gap: 11px;
+    }
+
+    .brand-mark {
+      align-items: center;
+      background: var(--green);
+      border-radius: 12px 12px 12px 4px;
+      color: #fff;
+      display: inline-flex;
+      font-family: ui-serif, "Yu Mincho", serif;
+      font-size: 1.05rem;
+      font-weight: 800;
+      height: 38px;
+      justify-content: center;
+      width: 38px;
+    }
+
+    .brand-lockup h1 {
+      font-size: 1.16rem;
+      letter-spacing: 0.02em;
+    }
+
+    .app-subtitle {
+      font-size: 0.72rem;
+      letter-spacing: 0.02em;
+    }
+
+    .header-actions {
+      gap: 12px;
+    }
+
+    .data-status {
+      align-items: center;
+      color: var(--muted);
+      display: inline-flex;
+      font-size: 0.78rem;
+      font-weight: 700;
+      gap: 7px;
+      white-space: nowrap;
+    }
+
+    .data-status > span {
+      background: #b8bcb4;
+      border-radius: 50%;
+      height: 8px;
+      width: 8px;
+    }
+
+    .data-status.loaded > span {
+      background: var(--green);
+      box-shadow: 0 0 0 4px rgba(33, 110, 73, 0.12);
+    }
+
+    .action-button,
+    .panel-button,
+    .file-button {
+      border-radius: 9px;
+      min-height: 42px;
+    }
+
+    .action-button,
+    .panel-button.primary,
+    .serial-buttons .panel-button.primary {
+      background: var(--green);
+    }
+
+    .action-button:hover,
+    .panel-button:hover,
+    .workspace-tab:hover,
+    .scenario-row button:hover {
+      filter: brightness(0.95);
+    }
+
+    button:focus-visible,
+    label:focus-within,
+    input:focus-visible,
+    select:focus-visible,
+    textarea:focus-visible,
+    summary:focus-visible {
+      outline: 3px solid rgba(39, 122, 141, 0.28);
+      outline-offset: 2px;
+    }
+
+    .workspace-nav {
+      display: flex;
+      gap: 4px;
+      margin-top: 10px;
+    }
+
+    .workspace-tab {
+      background: transparent;
+      border: 0;
+      border-bottom: 3px solid transparent;
+      color: var(--muted);
+      cursor: pointer;
+      font: inherit;
+      font-size: 0.86rem;
+      font-weight: 750;
+      min-height: 40px;
+      padding: 8px 16px 10px;
+    }
+
+    .workspace-tab.active {
+      border-bottom-color: var(--green);
+      color: var(--text);
+    }
+
+    main {
+      grid-template-columns: minmax(0, 1fr) minmax(380px, 430px);
+    }
+
+    .panel {
+      background: var(--bg);
+      gap: 12px;
+      padding: 18px;
+    }
+
+    .card {
+      background: var(--panel);
+      border-color: var(--line);
+      border-radius: 14px;
+      box-shadow: 0 2px 7px rgba(35, 56, 45, 0.035);
+      padding: 16px;
+    }
+
+    details.card {
+      padding: 0;
+    }
+
+    .eyebrow {
+      color: var(--green);
+      display: block;
+      font-size: 0.7rem;
+      font-weight: 850;
+      letter-spacing: 0.11em;
+      text-transform: uppercase;
+    }
+
+    .gate-card {
+      background: #f7f8ef;
+      border-color: #bfcbbd;
+      gap: 12px;
+    }
+
+    .gate-card h2,
+    .proof-card h2 {
+      font-size: 1.05rem;
+    }
+
+    .verdict {
+      border-radius: 12px;
+      font-size: clamp(1.7rem, 4vw, 2.3rem);
+      letter-spacing: 0.08em;
+      padding: 18px;
+    }
+
+    .verdict.open {
+      background: var(--green);
+    }
+
+    .verdict.close {
+      background: var(--red);
+    }
+
+    .verdict.hold {
+      background: #68766e;
+    }
+
+    .disclaimer {
+      background: #eceee6;
+      border-radius: 8px;
+      color: #4f5e56;
+      padding: 9px 10px;
+    }
+
+    .section-heading {
+      gap: 12px;
+    }
+
+    .source-badge {
+      background: #e8ebe4;
+      border-radius: 999px;
+      color: var(--muted);
+      flex: 0 0 auto;
+      font-size: 0.7rem;
+      font-weight: 800;
+      padding: 6px 9px;
+    }
+
+    .source-badge.loaded {
+      background: #dff0e5;
+      color: #17603d;
+    }
+
+    .proof-grid {
+      display: grid;
+      gap: 8px;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .proof-metric {
+      background: #f5f4ed;
+      border: 1px solid #e0dfd4;
+      border-radius: 10px;
+      display: grid;
+      gap: 3px;
+      padding: 11px;
+    }
+
+    .proof-metric span {
+      color: var(--muted);
+      font-size: 0.7rem;
+      font-weight: 750;
+    }
+
+    .proof-metric strong {
+      font-size: 1.08rem;
+    }
+
+    .proof-metric.emphasis {
+      background: #e6f2e9;
+      border-color: #bdd8c4;
+    }
+
+    .proof-metric.emphasis strong {
+      color: var(--green);
+    }
+
+    .scenario-row {
+      display: grid;
+      gap: 6px;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .scenario-row button {
+      background: #eceee8;
+      border: 1px solid #d2d6ce;
+      border-radius: 8px;
+      color: var(--text);
+      cursor: pointer;
+      font: inherit;
+      font-size: 0.76rem;
+      font-weight: 750;
+      min-height: 38px;
+      padding: 6px;
+    }
+
+    .scenario-note {
+      color: var(--muted);
+      font-size: 0.72rem;
+      margin: -3px 0 2px;
+    }
+
+    .survey-action-grid {
+      display: grid;
+      gap: 8px;
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .survey-action-grid .action-button {
+      font-size: 0.8rem;
+      padding: 8px;
+      width: 100%;
+    }
+
+    .survey-tools .summary {
+      border-top: 1px solid var(--line);
+      margin-top: 2px;
+      padding-top: 10px;
+    }
+
+    .mobile-decision {
+      display: none;
+    }
+
+    @media (max-width: 980px) {
+      main {
+        grid-template-columns: 1fr;
+      }
+
+      .header-actions .data-status {
+        display: none;
+      }
+    }
+
+    @media (max-width: 760px) {
+      html,
+      body {
+        height: auto;
+        min-height: 100%;
+      }
+
+      body {
+        overflow: auto;
+      }
+
+      .app {
+        display: block;
+        height: auto;
+        min-height: 100vh;
+      }
+
+      .app-header {
+        position: sticky;
+        top: 0;
+      }
+
+      .brand-row {
+        align-items: flex-start;
+      }
+
+      .brand-mark {
+        display: none;
+      }
+
+      .brand-lockup h1 {
+        font-size: 1.02rem;
+      }
+
+      .header-actions .action-button {
+        font-size: 0.74rem;
+        min-height: 38px;
+        padding: 7px 9px;
+        width: auto;
+      }
+
+      .workspace-nav {
+        justify-content: stretch;
+      }
+
+      .workspace-tab {
+        flex: 1;
+        font-size: 0.76rem;
+        padding-inline: 5px;
+      }
+
+      .mobile-decision {
+        align-items: center;
+        background: #f7f8ef;
+        border-bottom: 1px solid #cfd6ca;
+        display: flex;
+        gap: 14px;
+        justify-content: space-between;
+        padding: 12px 16px;
+      }
+
+      body:not([data-workspace="decision"]) .mobile-decision {
+        display: none;
+      }
+
+      .mobile-decision strong {
+        color: var(--green);
+        display: block;
+        font-size: 1.35rem;
+        margin-top: 2px;
+      }
+
+      .mobile-decision strong[data-verdict="close"] {
+        color: var(--red);
+      }
+
+      .mobile-decision strong[data-verdict="hold"] {
+        color: #68766e;
+      }
+
+      .mobile-decision p {
+        color: var(--muted);
+        font-size: 0.74rem;
+        line-height: 1.4;
+        margin: 0;
+        max-width: 58%;
+        text-align: right;
+      }
+
+      main {
+        display: grid;
+        grid-template-rows: 44dvh auto;
+        min-height: 0;
+        overflow: visible;
+      }
+
+      .panel {
+        border-top: 1px solid var(--line);
+        gap: 10px;
+        overflow: visible;
+        padding: 12px;
+      }
+
+      .gate-card {
+        display: none;
+      }
+
+      .empty-state {
+        font-size: 0.8rem;
+        top: 16px;
+      }
+
+      .proof-grid,
+      .metric-grid,
+      .layer-grid {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .scenario-row {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .card {
+        border-radius: 12px;
+      }
+    }
   </style>
 </head>
 <body>
   <div class="app">
-    <header>
-      <div class="top-row">
-        <h1>
-          スイスイナビ
-          <span class="app-subtitle">水門ナビ / Suimon Navi — みちびき対応・水門開閉の判断支援</span>
-        </h1>
-        <div class="controls">
-          <label class="action-button">
-            NMEAをアップロード
-            <input id="fileInput" type="file" accept=".nmea,.txt,.log,text/plain">
-          </label>
-          <label class="action-button secondary">
-            測量JSONを読み込み
-            <input id="importInput" type="file" accept=".json,application/json">
-          </label>
-          <button id="exportButton" class="action-button secondary" type="button" disabled>測量JSONを書き出し</button>
-          <button id="locateButton" class="action-button locate" type="button">📍 現在地を表示</button>
-          <button id="recordPhoneButton" class="action-button phone" type="button">📍 スマホGPSを記録</button>
-          <button id="clearPhoneButton" class="action-button secondary" type="button" disabled>スマホGPS点をクリア</button>
-          <label class="filter">
-            <input id="showFieldLayer" type="checkbox" checked>
-            圃場レイヤー
-          </label>
-          <label class="filter">
-            <input id="showQz1Layer" type="checkbox" checked>
-            QZ1レイヤー
-          </label>
-          <label class="filter">
-            <input id="showPhoneLayer" type="checkbox" checked>
-            スマホGPSレイヤー
-          </label>
-          <label class="filter">
-            <input id="augmentedOnly" type="checkbox">
-            補強点のみ表示
-          </label>
+    <header class="app-header">
+      <div class="brand-row">
+        <div class="brand-lockup">
+          <span class="brand-mark" aria-hidden="true">水</span>
+          <h1>
+            スイスイナビ
+            <span class="app-subtitle">みちびきで、水門判断をもっと確かに。</span>
+          </h1>
+        </div>
+        <div class="header-actions">
+          <span id="headerDataStatus" class="data-status"><span aria-hidden="true"></span>実証データ待機中</span>
+          <button id="workspacePrimaryAction" class="action-button" type="button">実測QZ1データを表示</button>
         </div>
       </div>
-      <div id="summary" class="summary" aria-live="polite" hidden>
-        <span class="summary-item">総ポイント: <strong id="totalPoints">0</strong></span>
-        <span class="summary-item"><span class="dot green"></span>SLAS補強: <strong id="augmentedPoints">0</strong></span>
-        <span class="summary-item"><span class="dot orange"></span>GPS単独: <strong id="gpsPoints">0</strong></span>
-        <span class="summary-item">スキップ行: <strong id="skippedLines">0</strong></span>
-        <span class="summary-item">認識外の行: <strong id="ignoredLines">0</strong></span>
-        <span class="summary-item">タグ: <strong id="tagCounts">—</strong></span>
-        <span id="comparisonSummary" class="summary-item" hidden>比較: <strong id="comparisonText"></strong></span>
-      </div>
-      <div id="gpsMessage" class="gps-message" role="status" aria-live="polite" hidden></div>
+      <nav class="workspace-nav" aria-label="作業画面">
+        <button class="workspace-tab active" type="button" data-workspace-target="decision" aria-selected="true">判断デモ</button>
+        <button class="workspace-tab" type="button" data-workspace-target="survey" aria-selected="false">QZ1測量</button>
+        <button class="workspace-tab" type="button" data-workspace-target="analysis" aria-selected="false">詳細解析</button>
+      </nav>
     </header>
+
+    <section class="mobile-decision" aria-live="polite">
+      <div>
+        <span class="eyebrow">今日の水門判断</span>
+        <strong id="mobileVerdictBadge">様子見</strong>
+      </div>
+      <p id="mobileVerdictReason">気象データを確認しています。</p>
+    </section>
 
     <main>
       <div class="map-wrap">
@@ -803,17 +1241,43 @@
       </div>
 
       <aside class="panel">
-        <section class="card">
-          <h2>開閉判断<span class="en">Gate decision</span></h2>
+        <section class="card gate-card" data-workspace="decision">
+          <span class="eyebrow">今日の水門判断</span>
+          <h2>気象と圃場位置からの推奨</h2>
           <div id="verdictBadge" class="verdict hold">様子見</div>
           <p id="verdictReason" class="verdict-reason"></p>
           <p class="disclaimer">※ 本アプリは判断支援です。最終判断と水門の操作は必ず人が行ってください。</p>
         </section>
 
-        <section class="card">
-          <h2>気象入力<span class="en">Weather</span></h2>
+        <section class="card proof-card" data-workspace="decision">
+          <div class="section-heading">
+            <div>
+              <span class="eyebrow">みちびき活用の実証</span>
+              <h2>QZ1 / SLAS 測位品質</h2>
+            </div>
+            <span id="proofSourceBadge" class="source-badge">未読込</span>
+          </div>
+          <div class="proof-grid">
+            <div class="proof-metric"><span>有効測位点</span><strong id="proofTotal">—</strong></div>
+            <div class="proof-metric emphasis"><span>SLAS補強率</span><strong id="proofSlasRate">—</strong></div>
+            <div class="proof-metric"><span>衛星数</span><strong id="proofSatellites">—</strong></div>
+            <div class="proof-metric"><span>HDOP</span><strong id="proofHdop">—</strong></div>
+          </div>
+          <button id="loadProofButton" class="panel-button primary proof-load" type="button">実測QZ1データを表示</button>
+          <p id="proofMessage" class="meta">奈良高専の寮周辺で取得した実測ログです。圃場測量データではありません。</p>
+        </section>
+
+        <section class="card" data-workspace="decision">
+          <h2>気象条件<span class="en">Weather</span></h2>
           <div class="kv"><span>自動取得</span><strong><span id="weatherFetchStatus" class="serial-status">未取得</span></strong></div>
           <button id="weatherFetchButton" class="panel-button primary" type="button">現在地の気象を自動取得（Open-Meteo）</button>
+          <div class="scenario-row" aria-label="デモ用気象条件">
+            <button type="button" data-weather-scenario="open">開ける</button>
+            <button type="button" data-weather-scenario="hold">様子見</button>
+            <button type="button" data-weather-scenario="close">閉める</button>
+            <button id="resetWeatherButton" type="button">元に戻す</button>
+          </div>
+          <p class="scenario-note">デモ条件を選ぶと、判断ロジックをその場で確認できます。</p>
           <div class="input-row">
             <label for="rain24hInput">直近24時間の降雨量 (mm)</label>
             <input id="rain24hInput" type="number" min="0" step="0.5" inputmode="decimal">
@@ -829,8 +1293,9 @@
           <p id="weatherMeta" class="meta"></p>
         </section>
 
-        <section class="card">
-          <h2>判断ルール<span class="en">Thresholds</span></h2>
+        <details class="card" data-workspace="decision">
+          <summary><span class="details-title">判断ルール<span class="en">Thresholds</span></span></summary>
+          <div class="details-content">
           <div class="input-row">
             <label for="thHeavyRainInput">「閉める」判定の降雨量 (mm/24h)</label>
             <input id="thHeavyRainInput" type="number" min="0" step="1" inputmode="decimal">
@@ -848,9 +1313,10 @@
             <input id="thDrySpellInput" type="number" min="0" step="1" inputmode="numeric">
           </div>
           <p class="meta">初期値は営農者の経験則を <code>data/gate_rules.json</code> に記録したもの。ここでの変更は一時的で、確定値はJSONを更新して残します。</p>
-        </section>
+          </div>
+        </details>
 
-        <section class="card">
+        <section class="card" data-workspace="decision">
           <h2>圃場・水門<span class="en">Field &amp; gate</span></h2>
           <div class="kv"><span>圃場</span><strong id="fieldName">—</strong></div>
           <div class="kv"><span>圃場面積</span><strong id="fieldArea">—</strong></div>
@@ -864,15 +1330,51 @@
           <p class="meta">測位点を地図のポップアップで「圃場の角」「水路」「水門」にタグ付けすると、その場で境界線・水路・水門位置が描画されます。圃場の角は外周を歩いた順にタグ付けしてください（3点以上で境界線が描画されます）。</p>
         </section>
 
-        <details class="card paddy-collapsible" open>
-          <summary><span class="details-title">Demo / Layers / Summary<span class="en">Paddy intelligence</span></span></summary>
+        <section class="card survey-tools" data-workspace="survey" hidden>
+          <span class="eyebrow">現地測量ワークフロー</span>
+          <h2>QZ1ログを読み込む</h2>
+          <p class="meta">NMEAログを地図に表示し、測位品質の確認や圃場・水門のタグ付けを行います。</p>
+          <div class="survey-action-grid">
+            <label class="action-button">
+              NMEAをアップロード
+              <input id="fileInput" type="file" accept=".nmea,.txt,.log,text/plain">
+            </label>
+            <label class="action-button secondary">
+              測量JSONを読み込み
+              <input id="importInput" type="file" accept=".json,application/json">
+            </label>
+            <button id="exportButton" class="action-button secondary" type="button" disabled>測量JSONを書き出し</button>
+            <button id="locateButton" class="action-button locate" type="button">現在地を表示</button>
+            <button id="recordPhoneButton" class="action-button phone" type="button">スマホGPSを記録</button>
+            <button id="clearPhoneButton" class="action-button secondary" type="button" disabled>スマホGPS点をクリア</button>
+          </div>
+          <div class="layer-grid">
+            <label class="filter"><input id="showFieldLayer" type="checkbox" checked>圃場</label>
+            <label class="filter"><input id="showQz1Layer" type="checkbox" checked>QZ1</label>
+            <label class="filter"><input id="showPhoneLayer" type="checkbox" checked>スマホGPS</label>
+            <label class="filter"><input id="augmentedOnly" type="checkbox">補強点のみ</label>
+          </div>
+          <div id="summary" class="summary" aria-live="polite" hidden>
+            <span class="summary-item">総ポイント: <strong id="totalPoints">0</strong></span>
+            <span class="summary-item"><span class="dot green"></span>SLAS補強: <strong id="augmentedPoints">0</strong></span>
+            <span class="summary-item"><span class="dot orange"></span>GPS単独: <strong id="gpsPoints">0</strong></span>
+            <span class="summary-item">スキップ行: <strong id="skippedLines">0</strong></span>
+            <span class="summary-item">認識外: <strong id="ignoredLines">0</strong></span>
+            <span class="summary-item">タグ: <strong id="tagCounts">—</strong></span>
+            <span id="comparisonSummary" class="summary-item" hidden>比較: <strong id="comparisonText"></strong></span>
+          </div>
+          <div id="gpsMessage" class="gps-message" role="status" aria-live="polite" hidden></div>
+        </section>
+
+        <details class="card paddy-collapsible" data-workspace="analysis" open hidden>
+          <summary><span class="details-title">圃場解析デモ<span class="en">Paddy intelligence</span></span></summary>
           <div class="details-content">
           <p class="meta">ドローン・GNSS測量・水管理・AI検出結果を重ねて、圃場内の水面、稲株、問題ゾーン、障害物を確認します。</p>
           <div class="paddy-actions">
-            <button id="loadPaddyDemoButton" class="panel-button primary" type="button">Load Demo Data</button>
-            <button id="resetPaddyDemoButton" class="panel-button" type="button">Reset Demo</button>
-            <button id="recalculatePaddyButton" class="panel-button warning" type="button">Recalculate</button>
-            <button id="clearPaddyAnalysisButton" class="panel-button danger" type="button">Clear Analysis</button>
+            <button id="loadPaddyDemoButton" class="panel-button primary" type="button">デモを読み込む</button>
+            <button id="resetPaddyDemoButton" class="panel-button" type="button">初期状態に戻す</button>
+            <button id="recalculatePaddyButton" class="panel-button warning" type="button">再計算</button>
+            <button id="clearPaddyAnalysisButton" class="panel-button danger" type="button">解析をクリア</button>
           </div>
           <div id="paddyWarnings" class="paddy-warning-list" role="status" aria-live="polite"></div>
           <div class="layer-grid">
@@ -893,20 +1395,20 @@
           </div>
           <div class="paddy-import-row">
             <label class="file-button">
-              Import JSON
+              JSONを読み込む
               <input id="paddyImportInput" type="file" accept=".json,application/json">
             </label>
-            <button id="exportAnalysisButton" class="panel-button export" type="button">Download JSON</button>
+            <button id="exportAnalysisButton" class="panel-button export" type="button">JSONを書き出す</button>
           </div>
           </div>
         </details>
 
-        <details class="card paddy-collapsible">
-          <summary><span class="details-title">Manual Annotation<span class="en">Draw / mark</span></span></summary>
+        <details class="card paddy-collapsible" data-workspace="analysis" hidden>
+          <summary><span class="details-title">手動注釈<span class="en">Draw / mark</span></span></summary>
           <div class="details-content">
           <div class="paddy-drawing-status">
-            <span id="drawingModeBadge" class="paddy-mode-badge">No drawing mode</span>
-            <span>Points: <strong id="drawingPointCount">0</strong></span>
+            <span id="drawingModeBadge" class="paddy-mode-badge">描画モードなし</span>
+            <span>点数: <strong id="drawingPointCount">0</strong></span>
           </div>
           <div class="input-row">
             <label for="annotationTypeSelect">注釈タイプ</label>
@@ -932,27 +1434,27 @@
             </select>
           </div>
           <div class="paddy-drawing-actions">
-            <button id="finishPaddyPolygonButton" class="panel-button primary" type="button" disabled>Finish Polygon</button>
-            <button id="cancelPaddyDrawingButton" class="panel-button" type="button">Cancel Drawing</button>
+            <button id="finishPaddyPolygonButton" class="panel-button primary" type="button" disabled>ポリゴンを確定</button>
+            <button id="cancelPaddyDrawingButton" class="panel-button" type="button">描画を中止</button>
           </div>
           <p id="drawingHint" class="paddy-drawing-hint">注釈タイプを選ぶと地図上で追加できます。</p>
           </div>
         </details>
 
-        <details class="card paddy-collapsible">
-          <summary><span class="details-title">Selected Feature<span class="en">Inspect / notes</span></span></summary>
+        <details class="card paddy-collapsible" data-workspace="analysis" hidden>
+          <summary><span class="details-title">選択地物<span class="en">Inspect / notes</span></span></summary>
           <div class="details-content">
           <div id="selectedFeatureSummary" class="paddy-selected-panel">地図上の解析地物をクリックすると詳細を表示します。</div>
           <div class="input-row">
             <label for="selectedFeatureNote">選択地物メモ</label>
             <textarea id="selectedFeatureNote" rows="3" placeholder="短いメモ"></textarea>
           </div>
-          <button id="saveSelectedNoteButton" class="panel-button primary" type="button" disabled>Save Note</button>
+          <button id="saveSelectedNoteButton" class="panel-button primary" type="button" disabled>メモを保存</button>
           </div>
         </details>
 
-        <details class="card paddy-collapsible" open>
-          <summary><span class="details-title">Water Volume<span class="en">Irrigation estimate</span></span></summary>
+        <details class="card paddy-collapsible" data-workspace="analysis" open hidden>
+          <summary><span class="details-title">必要水量<span class="en">Irrigation estimate</span></span></summary>
           <div class="details-content">
           <div class="input-row">
             <label for="targetWaterDepthInput">目標水深 (cm)</label>
@@ -963,8 +1465,8 @@
           </div>
         </details>
 
-        <details class="card paddy-collapsible">
-          <summary><span class="details-title">Category Area Table<span class="en">Plants / problems</span></span></summary>
+        <details class="card paddy-collapsible" data-workspace="analysis" hidden>
+          <summary><span class="details-title">カテゴリ別面積<span class="en">Plants / problems</span></span></summary>
           <div class="details-content">
           <p class="meta">各ポリゴン面積を合算しています。重なりがある場合は重複分も合計されます。</p>
           <table class="data-table">
@@ -982,8 +1484,8 @@
           </div>
         </details>
 
-        <details class="card paddy-collapsible" open>
-          <summary><span class="details-title">Drone Flight Planning<span class="en">Lawnmower path</span></span></summary>
+        <details class="card paddy-collapsible" data-workspace="analysis" open hidden>
+          <summary><span class="details-title">ドローン飛行計画<span class="en">Lawnmower path</span></span></summary>
           <div class="details-content">
           <div id="droneWarnings" class="paddy-warning-list paddy-drone-warning-list" role="status" aria-live="polite"></div>
           <div class="input-row">
@@ -1019,8 +1521,8 @@
           </div>
         </details>
 
-        <details class="card paddy-collapsible">
-          <summary><span class="details-title">Grid Management<span class="en">Management zones</span></span></summary>
+        <details class="card paddy-collapsible" data-workspace="analysis" hidden>
+          <summary><span class="details-title">管理グリッド<span class="en">Management zones</span></span></summary>
           <div class="details-content">
           <div class="input-row">
             <label for="gridSizeSelect">グリッドサイズ</label>
@@ -1036,55 +1538,55 @@
           <div id="gridCellEditor" class="paddy-grid-editor" hidden>
             <div class="paddy-grid-form">
               <div class="input-row">
-                <label for="gridWaterStatus">water status</label>
+                <label for="gridWaterStatus">水の状態</label>
                 <select id="gridWaterStatus">
-                  <option value="unknown">unknown</option>
-                  <option value="dry">dry</option>
-                  <option value="shallow">shallow</option>
-                  <option value="target">target</option>
-                  <option value="deep">deep</option>
+                  <option value="unknown">不明</option>
+                  <option value="dry">乾燥</option>
+                  <option value="shallow">浅い</option>
+                  <option value="target">適正</option>
+                  <option value="deep">深い</option>
                 </select>
               </div>
               <div class="input-row">
-                <label for="gridPlantStatus">plant status</label>
+                <label for="gridPlantStatus">稲の状態</label>
                 <select id="gridPlantStatus">
-                  <option value="unknown">unknown</option>
-                  <option value="healthy">healthy</option>
-                  <option value="weak">weak</option>
-                  <option value="missing">missing</option>
+                  <option value="unknown">不明</option>
+                  <option value="healthy">良好</option>
+                  <option value="weak">生育不良</option>
+                  <option value="missing">欠株</option>
                 </select>
               </div>
               <div class="input-row">
-                <label for="gridWeedStatus">weed status</label>
+                <label for="gridWeedStatus">雑草の状態</label>
                 <select id="gridWeedStatus">
-                  <option value="unknown">unknown</option>
-                  <option value="none">none</option>
-                  <option value="low">low</option>
-                  <option value="medium">medium</option>
-                  <option value="high">high</option>
+                  <option value="unknown">不明</option>
+                  <option value="none">なし</option>
+                  <option value="low">少ない</option>
+                  <option value="medium">中程度</option>
+                  <option value="high">多い</option>
                 </select>
               </div>
               <div class="input-row">
-                <label for="gridPestDiseaseStatus">pest/disease status</label>
+                <label for="gridPestDiseaseStatus">病害虫の状態</label>
                 <select id="gridPestDiseaseStatus">
-                  <option value="unknown">unknown</option>
-                  <option value="none">none</option>
-                  <option value="suspected">suspected</option>
-                  <option value="severe">severe</option>
+                  <option value="unknown">不明</option>
+                  <option value="none">なし</option>
+                  <option value="suspected">疑い</option>
+                  <option value="severe">深刻</option>
                 </select>
               </div>
               <div class="input-row">
-                <label for="gridNotes">grid notes</label>
+                <label for="gridNotes">グリッドメモ</label>
                 <textarea id="gridNotes" rows="3"></textarea>
               </div>
-              <button id="saveGridCellButton" class="panel-button primary" type="button">Save Grid Cell</button>
+              <button id="saveGridCellButton" class="panel-button primary" type="button">セル情報を保存</button>
             </div>
           </div>
           </div>
         </details>
 
-        <details class="card paddy-collapsible">
-          <summary><span class="details-title">QZ1/GNSS Point Association<span class="en">Field relation</span></span></summary>
+        <details class="card paddy-collapsible" data-workspace="analysis" hidden>
+          <summary><span class="details-title">QZ1点と圃場の対応<span class="en">Field relation</span></span></summary>
           <div class="details-content">
             <p class="meta">読み込んだQZ1/GNSS測位点が圃場境界・管理グリッドとどう対応するかを確認します。</p>
             <div class="input-row">
@@ -1099,19 +1601,19 @@
             </div>
             <div class="kv"><span>グリッド関連付け</span><strong id="gnssGridAssociationMetric">—</strong></div>
             <p id="gnssAssociationMessage" class="meta">QZ1/NMEAまたは測量JSONを読み込むと集計されます。</p>
-            <button id="recalculateGnssAssociationButton" class="panel-button primary" type="button">Recalculate GNSS Association</button>
+            <button id="recalculateGnssAssociationButton" class="panel-button primary" type="button">対応を再計算</button>
           </div>
         </details>
 
-        <details class="card paddy-collapsible">
-          <summary><span class="details-title">Layer Legend<span class="en">Styles</span></span></summary>
+        <details class="card paddy-collapsible" data-workspace="analysis" hidden>
+          <summary><span class="details-title">レイヤー凡例<span class="en">Styles</span></span></summary>
           <div class="details-content">
           <div id="paddyLegend" class="paddy-legend"></div>
           </div>
         </details>
 
-        <details class="card paddy-collapsible">
-          <summary><span class="details-title">QZ1 Live Record<span class="en">Web Serial</span></span></summary>
+        <details class="card paddy-collapsible" data-workspace="survey" hidden>
+          <summary><span class="details-title">QZ1ライブ記録<span class="en">Web Serial</span></span></summary>
           <div class="details-content">
           <div class="kv"><span>状態</span><strong><span id="serialStatus" class="serial-status">未接続</span></strong></div>
           <div class="kv"><span>受信行数</span><strong id="serialLineCount">0</strong></div>
@@ -1444,6 +1946,19 @@
     };
     const verdictBadge = document.getElementById("verdictBadge");
     const verdictReason = document.getElementById("verdictReason");
+    const mobileVerdictBadge = document.getElementById("mobileVerdictBadge");
+    const mobileVerdictReason = document.getElementById("mobileVerdictReason");
+    const workspacePrimaryAction = document.getElementById("workspacePrimaryAction");
+    const headerDataStatus = document.getElementById("headerDataStatus");
+    const loadProofButton = document.getElementById("loadProofButton");
+    const proofSourceBadge = document.getElementById("proofSourceBadge");
+    const proofMessage = document.getElementById("proofMessage");
+    const proofEls = {
+      total: document.getElementById("proofTotal"),
+      slasRate: document.getElementById("proofSlasRate"),
+      satellites: document.getElementById("proofSatellites"),
+      hdop: document.getElementById("proofHdop")
+    };
     const weatherMeta = document.getElementById("weatherMeta");
     const weatherFetchButton = document.getElementById("weatherFetchButton");
     const weatherFetchStatusEl = document.getElementById("weatherFetchStatus");
@@ -1530,6 +2045,9 @@
     let fieldData = DEFAULT_FIELD;
     let gateRules = DEFAULT_GATE_RULES;
     let weatherData = DEFAULT_WEATHER;
+    let baselineWeather = { ...DEFAULT_WEATHER };
+    let activeWorkspace = "decision";
+    let activePointSource = "測量データ";
     let surveyedGate = null;
     let surveyedBoundary = [];
     let surveyedChannel = [];
@@ -1743,11 +2261,18 @@
       return Number.isFinite(value) && value >= 0 ? value : fallback;
     }
 
-    function populateDecisionInputs() {
+    function populateDecisionInputs({ remember = true } = {}) {
       const th = thresholds();
       weatherInputs.rain24hMm.value = finiteOr(weatherData.rain24hMm, 0);
       weatherInputs.daysSinceRain.value = finiteOr(weatherData.daysSinceRain, 0);
       weatherInputs.forecastRainProbPct.value = finiteOr(weatherData.forecastRainProbPct, 0);
+      if (remember) {
+        baselineWeather = {
+          rain24hMm: finiteOr(weatherData.rain24hMm, 0),
+          daysSinceRain: finiteOr(weatherData.daysSinceRain, 0),
+          forecastRainProbPct: finiteOr(weatherData.forecastRainProbPct, 0)
+        };
+      }
       thresholdInputs.heavyRain24hMm.value = th.heavyRain24hMm;
       thresholdInputs.lightRain24hMm.value = th.lightRain24hMm;
       thresholdInputs.forecastRainProbPct.value = th.forecastRainProbPct;
@@ -1901,6 +2426,9 @@
       verdictBadge.className = `verdict ${decision.verdict}`;
       verdictBadge.textContent = decision.label;
       verdictReason.textContent = decision.reason;
+      mobileVerdictBadge.textContent = decision.label;
+      mobileVerdictBadge.dataset.verdict = decision.verdict;
+      mobileVerdictReason.textContent = decision.reason;
     }
 
     function activeGate() {
@@ -2712,10 +3240,14 @@
       setLayerVisible(pointLayer, showQz1LayerInput.checked);
       setLayerVisible(phoneLayer, showPhoneLayerInput.checked);
       setLayerVisible(liveLocationLayer, showPhoneLayerInput.checked);
+      const showAnalysisLayers = activeWorkspace === "analysis";
       Object.entries(paddyLayers).forEach(([key, layer]) => {
-        setLayerVisible(layer, paddyLayerInputs[key].checked);
+        setLayerVisible(layer, showAnalysisLayers && paddyLayerInputs[key].checked);
       });
       paddyIntelligence?.syncLayerVisibility();
+      if (!showAnalysisLayers && paddyIntelligence?.layers) {
+        Object.values(paddyIntelligence.layers).forEach((layer) => setLayerVisible(layer, false));
+      }
     }
 
     function setLayerVisible(layer, visible) {
@@ -2907,6 +3439,145 @@
       summaryEls.ignored.textContent = String(lastIgnoredCount);
       summaryEls.tags.textContent = formatFeatureCounts(countFeatures(parsedPoints));
       summary.hidden = false;
+      updateProofMetrics();
+    }
+
+    function updateProofMetrics() {
+      if (parsedPoints.length === 0) {
+        proofEls.total.textContent = "—";
+        proofEls.slasRate.textContent = "—";
+        proofEls.satellites.textContent = "—";
+        proofEls.hdop.textContent = "—";
+        proofSourceBadge.textContent = "未読込";
+        proofSourceBadge.classList.remove("loaded");
+        headerDataStatus.classList.remove("loaded");
+        headerDataStatus.lastChild.textContent = "実証データ待機中";
+        return;
+      }
+
+      const augmentedPoints = parsedPoints.filter((point) => point.augmented);
+      const qualityPoints = augmentedPoints.length > 0 ? augmentedPoints : parsedPoints;
+      const satellites = qualityPoints.map((point) => point.satellites).filter(Number.isFinite);
+      const hdops = qualityPoints.map((point) => point.hdop).filter(Number.isFinite);
+      const average = (values) => values.reduce((sum, value) => sum + value, 0) / values.length;
+      const range = (values, digits = 0) => values.length === 0
+        ? "—"
+        : `${Math.min(...values).toFixed(digits)}–${Math.max(...values).toFixed(digits)}`;
+
+      proofEls.total.textContent = `${parsedPoints.length}点`;
+      proofEls.slasRate.textContent = `${Math.round((augmentedPoints.length / parsedPoints.length) * 100)}%`;
+      proofEls.satellites.textContent = satellites.length > 0
+        ? `${range(satellites)}基（平均 ${average(satellites).toFixed(1)}）`
+        : "—";
+      proofEls.hdop.textContent = hdops.length > 0
+        ? `${range(hdops, 1)}（平均 ${average(hdops).toFixed(2)}）`
+        : "—";
+      proofSourceBadge.textContent = activePointSource;
+      proofSourceBadge.classList.add("loaded");
+      headerDataStatus.classList.add("loaded");
+      headerDataStatus.lastChild.textContent = `${activePointSource}・${parsedPoints.length}点`;
+    }
+
+    function applyNmeaText(text, sourceLabel) {
+      const parseResult = parseNmea(text);
+      parsedPoints = parseResult.points;
+      activePointSource = sourceLabel;
+      lastSkippedCount = parseResult.noFix + parseResult.malformed;
+      lastIgnoredCount = parseResult.ignored;
+      clearSurveyedGate();
+      rebuildSurveyedBoundaryAndChannel();
+      updateSummary();
+      renderPoints();
+      refreshFieldOverlay();
+
+      if (parseResult.points.length === 0) {
+        const sample = parseResult.ignoredSample
+          ? `例: 「${parseResult.ignoredSample}」`
+          : "ファイルが空か、行の区切りを認識できませんでした。";
+        setEmptyState(
+          "有効なGGA文が見つかりませんでした",
+          `${parseResult.ignored}行を認識できずスキップしました。${sample} NMEA形式（$??GGA,...）か確認してください。`
+        );
+        return false;
+      }
+
+      resetEmptyState();
+      return true;
+    }
+
+    async function loadBundledProof() {
+      loadProofButton.disabled = true;
+      workspacePrimaryAction.disabled = true;
+      proofMessage.textContent = "実測ログを読み込んでいます…";
+      try {
+        const response = await fetch("data/samples/qz1-dorm-walk-20260706.txt", { cache: "no-store" });
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        const loaded = applyNmeaText(await response.text(), "校内実測");
+        if (!loaded) {
+          throw new Error("有効なGGA測位点がありません");
+        }
+        proofMessage.textContent = "奈良高専の寮周辺で取得した実測ログです。圃場測量データではありません。";
+      } catch (error) {
+        proofMessage.textContent = `実測ログを読み込めませんでした（${error.message}）。QZ1測量画面からNMEAファイルを選択してください。`;
+      } finally {
+        loadProofButton.disabled = false;
+        workspacePrimaryAction.disabled = false;
+      }
+    }
+
+    function switchWorkspace(workspace, { updateHash = true } = {}) {
+      if (!["decision", "survey", "analysis"].includes(workspace)) {
+        workspace = "decision";
+      }
+      activeWorkspace = workspace;
+      document.body.dataset.workspace = workspace;
+      document.querySelectorAll("[data-workspace]").forEach((section) => {
+        section.hidden = section.dataset.workspace !== workspace;
+      });
+      document.querySelectorAll("[data-workspace-target]").forEach((tab) => {
+        const selected = tab.dataset.workspaceTarget === workspace;
+        tab.classList.toggle("active", selected);
+        tab.setAttribute("aria-selected", String(selected));
+      });
+      workspacePrimaryAction.textContent = {
+        decision: "実測QZ1データを表示",
+        survey: "NMEAをアップロード",
+        analysis: "解析デモを読み込む"
+      }[workspace];
+      document.querySelector(".panel").scrollTop = 0;
+      if (updateHash) {
+        history.replaceState(null, "", `#${workspace}`);
+      }
+      syncLayerVisibility();
+      window.setTimeout(() => map.invalidateSize(), 80);
+    }
+
+    function setWeatherScenario(name) {
+      const th = thresholds();
+      const scenarios = {
+        open: { rain24hMm: 0, daysSinceRain: th.drySpellDays + 1, forecastRainProbPct: 20 },
+        hold: { rain24hMm: 0, daysSinceRain: 1, forecastRainProbPct: Math.min(100, th.forecastRainProbPct + 10) },
+        close: { rain24hMm: th.heavyRain24hMm + 5, daysSinceRain: 0, forecastRainProbPct: 20 }
+      };
+      const scenario = scenarios[name];
+      if (!scenario) {
+        return;
+      }
+      weatherInputs.rain24hMm.value = scenario.rain24hMm;
+      weatherInputs.daysSinceRain.value = scenario.daysSinceRain;
+      weatherInputs.forecastRainProbPct.value = scenario.forecastRainProbPct;
+      setWeatherFetchStatus("デモ条件", "");
+      updateDecision();
+    }
+
+    function resetWeatherConditions() {
+      weatherInputs.rain24hMm.value = baselineWeather.rain24hMm;
+      weatherInputs.daysSinceRain.value = baselineWeather.daysSinceRain;
+      weatherInputs.forecastRainProbPct.value = baselineWeather.forecastRainProbPct;
+      setWeatherFetchStatus(weatherData.source?.includes("Open-Meteo") ? "取得成功" : "初期値", weatherData.source?.includes("Open-Meteo") ? "connected" : "");
+      updateDecision();
     }
 
     function countFeatures(points) {
@@ -3184,6 +3855,7 @@
       const parsed = parseNmea(line);
       if (parsed.points.length === 1) {
         const point = parsed.points[0];
+        activePointSource = "ライブ記録";
         point.id = `live-${serialPointsAdded}`;
         serialPointsAdded += 1;
         parsedPoints.push(point);
@@ -3271,30 +3943,7 @@
       if (!file) {
         return;
       }
-
-      const text = await file.text();
-      const parseResult = parseNmea(text);
-      parsedPoints = parseResult.points;
-      lastSkippedCount = parseResult.noFix + parseResult.malformed;
-      lastIgnoredCount = parseResult.ignored;
-      clearSurveyedGate();
-      rebuildSurveyedBoundaryAndChannel();
-      updateSummary();
-      renderPoints();
-      refreshFieldOverlay();
-
-      if (parseResult.points.length === 0) {
-        const sample = parseResult.ignoredSample
-          ? `例: 「${parseResult.ignoredSample}」`
-          : "ファイルが空か、行の区切りを認識できませんでした。";
-        setEmptyState(
-          "有効なGGA文が見つかりませんでした",
-          `${parseResult.ignored}行を認識できずスキップしました。${sample} NMEA形式（$??GGA,...）か確認してください。`
-        );
-      } else {
-        resetEmptyState();
-      }
-
+      applyNmeaText(await file.text(), "アップロード");
       fileInput.value = "";
     });
 
@@ -3306,6 +3955,7 @@
 
       try {
         parsedPoints = parseSurveyJson(await file.text());
+        activePointSource = "測量JSON";
         lastSkippedCount = 0;
         applySurveyedFieldFromPoints();
         updateSummary();
@@ -3356,6 +4006,23 @@
     weatherFetchButton.addEventListener("click", fetchLiveWeather);
     Object.values(weatherInputs).forEach((input) => input.addEventListener("input", updateDecision));
     Object.values(thresholdInputs).forEach((input) => input.addEventListener("input", updateDecision));
+    loadProofButton.addEventListener("click", loadBundledProof);
+    document.querySelectorAll("[data-workspace-target]").forEach((tab) => {
+      tab.addEventListener("click", () => switchWorkspace(tab.dataset.workspaceTarget));
+    });
+    document.querySelectorAll("[data-weather-scenario]").forEach((button) => {
+      button.addEventListener("click", () => setWeatherScenario(button.dataset.weatherScenario));
+    });
+    document.getElementById("resetWeatherButton").addEventListener("click", resetWeatherConditions);
+    workspacePrimaryAction.addEventListener("click", () => {
+      if (activeWorkspace === "decision") {
+        loadBundledProof();
+      } else if (activeWorkspace === "survey") {
+        fileInput.click();
+      } else {
+        document.getElementById("loadPaddyDemoButton").click();
+      }
+    });
 
     document.addEventListener("submit", (event) => {
       if (!event.target.matches(".survey-form")) {
@@ -3368,6 +4035,7 @@
 
     (async function init() {
       initSerialCard();
+      switchWorkspace(location.hash.slice(1), { updateHash: false });
       await loadStaticData();
       populateDecisionInputs();
       renderFieldLayer();
@@ -3380,6 +4048,7 @@
         }
       });
       window.paddyIntelligence = paddyIntelligence;
+      syncLayerVisibility();
       updateGatePanel();
       updateDecision();
       fitFieldBounds();

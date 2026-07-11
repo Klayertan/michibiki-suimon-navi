@@ -916,7 +916,7 @@
       if (POLYGON_MODES.has(mode)) {
         this.drawing = { mode, points: [] };
         this.map.doubleClickZoom?.disable();
-        this.setDrawingHint(`${STATUS_LABELS[mode] || mode}: 地図をクリックして頂点を追加。3点以上で Finish Polygon が使えます。`);
+        this.setDrawingHint(`${STATUS_LABELS[mode] || mode}: 地図をクリックして頂点を追加。3点以上で「ポリゴンを確定」が使えます。`);
         this.updateDrawingUi();
         return;
       }
@@ -1027,7 +1027,7 @@
       const isPolygon = POLYGON_MODES.has(mode);
       const canFinish = isPolygon && pointCount >= 3;
       if (this.elements.drawingModeBadge) {
-        this.elements.drawingModeBadge.textContent = mode ? `Drawing: ${STATUS_LABELS[mode] || mode}` : "No drawing mode";
+        this.elements.drawingModeBadge.textContent = mode ? `描画中: ${STATUS_LABELS[mode] || mode}` : "描画モードなし";
         this.elements.drawingModeBadge.classList.toggle("active", Boolean(mode));
       }
       text(this.elements.drawingPointCount, String(pointCount));
@@ -1057,7 +1057,7 @@
       this.elements.selectedSummary.innerHTML = `
         <div class="paddy-detail-grid">
           <span>Type</span><strong>${escapeHtml(feature.type || feature.geometry || "feature")}</strong>
-          <span>Category</span><strong>${escapeHtml(STATUS_LABELS[feature.category || feature.type] || feature.category || feature.type || "unknown")}</strong>
+          <span>カテゴリ</span><strong>${escapeHtml(STATUS_LABELS[feature.category || feature.type] || feature.category || feature.type || "不明")}</strong>
           ${area > 0 ? `<span>Area</span><strong>${escapeHtml(formatAreaShort(area))}</strong><span>Field %</span><strong>${escapeHtml(formatPercent(pct))}</strong>` : ""}
           ${coordinateText}
           <span>Notes</span><strong>${editable ? "editable" : "read-only"}</strong>
@@ -1146,7 +1146,7 @@
           <span>Latitude</span><strong>${normalized.lat.toFixed(6)}</strong>
           <span>Longitude</span><strong>${normalized.lon.toFixed(6)}</strong>
           <span>Timestamp</span><strong>${escapeHtml(normalized.timestamp || "—")}</strong>
-          <span>Fix/status</span><strong>${escapeHtml(normalized.status || "unknown")}</strong>
+          <span>Fix / 状態</span><strong>${escapeHtml(normalized.status || "不明")}</strong>
           <span>Field relation</span><strong>${escapeHtml(association.fieldRelation)}</strong>
           <span>Grid cell</span><strong>${escapeHtml(association.gridCellId || "—")}</strong>
         </div>
