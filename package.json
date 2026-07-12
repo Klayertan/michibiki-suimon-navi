@@ -1,0 +1,14 @@
+{
+  "name": "michibiki-suimon-navi",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "serve": "node scripts/dev-server.mjs",
+    "test": "node --test tests/unit/*.test.js",
+    "test:browser": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.55.0"
+  }
+}

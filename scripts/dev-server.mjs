@@ -13,6 +13,8 @@ const TYPES = {
   ".css": "text/css; charset=utf-8",
   ".json": "application/json; charset=utf-8",
   ".nmea": "text/plain; charset=utf-8",
+  ".txt": "text/plain; charset=utf-8",
+  ".log": "text/plain; charset=utf-8",
   ".png": "image/png",
   ".jpg": "image/jpeg",
   ".svg": "image/svg+xml"
@@ -22,7 +24,7 @@ createServer(async (req, res) => {
   try {
     const urlPath = decodeURIComponent(new URL(req.url, "http://localhost").pathname);
     const relative = normalize(urlPath).replace(/^([/\\]|\.\.)+/, "");
-    const filePath = join(ROOT, relative === "" ? "index.html" : relative);
+    const filePath = join(ROOT, relative === "" || urlPath.endsWith("/") ? `${relative}index.html` : relative);
     const body = await readFile(filePath);
     res.writeHead(200, {
       "Content-Type": TYPES[extname(filePath).toLowerCase()] ?? "application/octet-stream",

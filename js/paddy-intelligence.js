@@ -620,7 +620,7 @@
           lon: Number(point.lon),
           timestamp: point.timestamp || "",
           fixQuality: Number.isFinite(Number(point.fixQuality)) ? Number(point.fixQuality) : null,
-          status: point.augmented ? "SLAS/DGNSS" : Number.isFinite(Number(point.fixQuality)) ? `fix=${point.fixQuality}` : "unknown"
+          status: point.augmented ? "DGNSS (method unverified)" : Number.isFinite(Number(point.fixQuality)) ? `fix=${point.fixQuality}` : "unknown"
         }))
         .filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lon));
     }
@@ -1129,7 +1129,7 @@
           lon: Number(point.lon),
           timestamp: point.timestamp || "",
           fixQuality: Number.isFinite(Number(point.fixQuality)) ? Number(point.fixQuality) : null,
-          status: point.augmented ? "SLAS/DGNSS" : Number.isFinite(Number(point.fixQuality)) ? `fix=${point.fixQuality}` : "unknown"
+          status: point.augmented ? "DGNSS (method unverified)" : Number.isFinite(Number(point.fixQuality)) ? `fix=${point.fixQuality}` : "unknown"
         };
       const association = this.gnssAssociations.find((item) => item.pointId === normalized.id)
         || this.analyzeSingleGnssPoint(normalized);

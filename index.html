@@ -894,6 +894,148 @@
       color: var(--text);
     }
 
+    .assurance-lead {
+      background: #f4f7ee;
+      border-color: #aebda9;
+    }
+
+    .assurance-science-note {
+      background: #fff8e7;
+      border-left: 4px solid #a16207;
+      color: #5f4309;
+      font-size: 0.8rem;
+      line-height: 1.55;
+      margin: 0;
+      padding: 10px 12px;
+    }
+
+    .assurance-upload-grid,
+    .assurance-action-grid {
+      display: grid;
+      gap: 8px;
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .assurance-upload-grid .file-button,
+    .assurance-upload-grid .panel-button,
+    .assurance-action-grid .panel-button {
+      align-items: center;
+      display: flex;
+      justify-content: center;
+      text-align: center;
+      width: 100%;
+    }
+
+    .assurance-upload-grid .file-button input {
+      height: 1px;
+      opacity: 0;
+      position: absolute;
+      width: 1px;
+    }
+
+    .assurance-metrics {
+      display: grid;
+      gap: 8px;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .assurance-lead h2,
+    [data-workspace="assurance"] h3 {
+      margin: 0;
+    }
+
+    [data-workspace="assurance"] h3 {
+      font-size: 0.88rem;
+      margin-top: 4px;
+    }
+
+    [data-workspace="assurance"] h3 .en {
+      color: var(--muted);
+      font-size: 0.7rem;
+      font-weight: 600;
+      margin-left: 5px;
+    }
+
+    .assurance-metric {
+      background: #f5f6f1;
+      border: 1px solid #d6dcd2;
+      border-radius: 10px;
+      display: grid;
+      gap: 4px;
+      min-width: 0;
+      padding: 10px;
+    }
+
+    .assurance-metric span {
+      color: var(--muted);
+      font-size: 0.7rem;
+    }
+
+    .assurance-metric strong {
+      font-size: 1rem;
+      overflow-wrap: anywhere;
+    }
+
+    .assurance-legend {
+      display: grid;
+      gap: 6px;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .assurance-key {
+      align-items: center;
+      display: flex;
+      font-size: 0.76rem;
+      gap: 7px;
+    }
+
+    .assurance-key::before {
+      border: 2px solid currentColor;
+      border-radius: 3px;
+      content: "";
+      height: 14px;
+      width: 14px;
+    }
+
+    .assurance-key.green { color: #14532d; }
+    .assurance-key.yellow { color: #854d0e; }
+    .assurance-key.red { color: #991b1b; }
+    .assurance-key.grey { color: #4b5563; }
+    .assurance-key.simulated { color: #5b21b6; }
+    .assurance-key.yellow::before,
+    .assurance-key.grey::before,
+    .assurance-key.simulated::before { border-style: dashed; }
+
+    .assurance-warning-list {
+      display: grid;
+      gap: 6px;
+    }
+
+    .assurance-warning-list:empty { display: none; }
+
+    .assurance-warning-list p {
+      background: #fff5e8;
+      border-left: 3px solid #b45309;
+      color: #713f12;
+      font-size: 0.77rem;
+      line-height: 1.45;
+      margin: 0;
+      padding: 8px 10px;
+    }
+
+    .assurance-detail {
+      background: #f6f7f4;
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      font-size: 0.77rem;
+      line-height: 1.55;
+      margin: 0;
+      min-height: 76px;
+      overflow-wrap: anywhere;
+      padding: 10px;
+      white-space: pre-wrap;
+    }
+
     main {
       grid-template-columns: minmax(0, 1fr) minmax(380px, 430px);
     }
@@ -1119,8 +1261,8 @@
 
       .workspace-tab {
         flex: 1;
-        font-size: 0.76rem;
-        padding-inline: 5px;
+        font-size: 0.7rem;
+        padding-inline: 3px;
       }
 
       .mobile-decision {
@@ -1186,8 +1328,14 @@
 
       .proof-grid,
       .metric-grid,
-      .layer-grid {
+      .layer-grid,
+      .assurance-metrics {
         grid-template-columns: 1fr 1fr;
+      }
+
+      .assurance-upload-grid,
+      .assurance-action-grid {
+        grid-template-columns: 1fr;
       }
 
       .scenario-row {
@@ -1219,6 +1367,7 @@
       <nav class="workspace-nav" aria-label="作業画面">
         <button class="workspace-tab active" type="button" data-workspace-target="decision" aria-selected="true">判断デモ</button>
         <button class="workspace-tab" type="button" data-workspace-target="survey" aria-selected="false">QZ1測量</button>
+        <button class="workspace-tab" type="button" data-workspace-target="assurance" aria-selected="false">信頼性マップ</button>
         <button class="workspace-tab" type="button" data-workspace-target="analysis" aria-selected="false">詳細解析</button>
       </nav>
     </header>
@@ -1253,13 +1402,13 @@
           <div class="section-heading">
             <div>
               <span class="eyebrow">みちびき活用の実証</span>
-              <h2>QZ1 / SLAS 測位品質</h2>
+              <h2>QZ1 / DGNSS 測位品質</h2>
             </div>
             <span id="proofSourceBadge" class="source-badge">未読込</span>
           </div>
           <div class="proof-grid">
             <div class="proof-metric"><span>有効測位点</span><strong id="proofTotal">—</strong></div>
-            <div class="proof-metric emphasis"><span>SLAS補強率</span><strong id="proofSlasRate">—</strong></div>
+            <div class="proof-metric emphasis"><span>fix quality 2率</span><strong id="proofSlasRate">—</strong></div>
             <div class="proof-metric"><span>衛星数</span><strong id="proofSatellites">—</strong></div>
             <div class="proof-metric"><span>HDOP</span><strong id="proofHdop">—</strong></div>
           </div>
@@ -1352,11 +1501,11 @@
             <label class="filter"><input id="showFieldLayer" type="checkbox" checked>圃場</label>
             <label class="filter"><input id="showQz1Layer" type="checkbox" checked>QZ1</label>
             <label class="filter"><input id="showPhoneLayer" type="checkbox" checked>スマホGPS</label>
-            <label class="filter"><input id="augmentedOnly" type="checkbox">補強点のみ</label>
+            <label class="filter"><input id="augmentedOnly" type="checkbox">DGNSS fixのみ</label>
           </div>
           <div id="summary" class="summary" aria-live="polite" hidden>
             <span class="summary-item">総ポイント: <strong id="totalPoints">0</strong></span>
-            <span class="summary-item"><span class="dot green"></span>SLAS補強: <strong id="augmentedPoints">0</strong></span>
+            <span class="summary-item"><span class="dot green"></span>DGNSS fix: <strong id="augmentedPoints">0</strong></span>
             <span class="summary-item"><span class="dot orange"></span>GPS単独: <strong id="gpsPoints">0</strong></span>
             <span class="summary-item">スキップ行: <strong id="skippedLines">0</strong></span>
             <span class="summary-item">認識外: <strong id="ignoredLines">0</strong></span>
@@ -1364,6 +1513,124 @@
             <span id="comparisonSummary" class="summary-item" hidden>比較: <strong id="comparisonText"></strong></span>
           </div>
           <div id="gpsMessage" class="gps-message" role="status" aria-live="polite" hidden></div>
+        </section>
+
+        <section class="card assurance-lead" data-workspace="assurance" hidden>
+          <span class="eyebrow">QZ1 Satellite Assurance Map</span>
+          <h2>測位を「使える場所」まで判断する</h2>
+          <p class="meta">同期したQZ1とM10等の観測を比較し、圃場セルごとに運用上の信頼性と証拠量を表示します。</p>
+          <p class="assurance-science-note"><strong>精度証明ではありません。</strong> 受信機間の一致、短期安定性、補強の証拠、継続性を評価する助言レイヤーです。真値座標がない限り絶対精度を示しません。自動運転や飛行の最終判断は必ず人が行ってください。</p>
+          <div class="assurance-legend" aria-label="信頼性分類">
+            <span class="assurance-key green">緑・条件を満たす</span>
+            <span class="assurance-key yellow">黄・監視／低速</span>
+            <span class="assurance-key red">赤・依存しない</span>
+            <span class="assurance-key grey">灰・証拠なし</span>
+            <span class="assurance-key simulated">SIM・検証専用</span>
+          </div>
+        </section>
+
+        <details class="card" data-workspace="assurance" open hidden>
+          <summary><span class="details-title">1. 受信機データ<span class="en">Receiver provenance</span></span></summary>
+          <div class="details-content">
+            <div class="input-row">
+              <label for="assuranceCaptureDate">捕捉日（NMEAに日付がない場合・UTC）</label>
+              <input id="assuranceCaptureDate" type="date">
+            </div>
+            <div class="assurance-upload-grid">
+              <label class="file-button">QZ1 NMEAを追加<input id="assuranceQz1Input" type="file" accept=".nmea,.txt,.log,text/plain"></label>
+              <label class="file-button">M10 / 基準NMEAを追加<input id="assuranceReferenceInput" type="file" accept=".nmea,.txt,.log,text/plain"></label>
+              <button id="assuranceSimulateReference" class="panel-button" type="button">SIMULATED M10を作成</button>
+            </div>
+            <div class="input-row">
+              <label for="assuranceQz1Session">QZ1データセット</label>
+              <select id="assuranceQz1Session"></select>
+            </div>
+            <div class="input-row">
+              <label for="assuranceReferenceSession">M10 / 基準データセット</label>
+              <select id="assuranceReferenceSession"></select>
+            </div>
+            <p id="assuranceSessionSummary" class="meta" aria-live="polite">データ未読込</p>
+          </div>
+        </details>
+
+        <details class="card" data-workspace="assurance" open hidden>
+          <summary><span class="details-title">2. 点の範囲を圃場に設定<span class="en">Point-to-point field</span></span></summary>
+          <div class="details-content">
+            <p class="meta">外周を歩いたQZ1ログについて、開始点から終了点までを1枚の圃場境界として保存します。保存前に閉合差・自己交差を確認します。</p>
+            <div class="input-row"><label for="assuranceFieldName">圃場名</label><input id="assuranceFieldName" type="text" value="QZ1測量圃場"></div>
+            <div class="input-row"><label for="assuranceFieldStart">開始点</label><select id="assuranceFieldStart"></select></div>
+            <div class="input-row"><label for="assuranceFieldEnd">終了点</label><select id="assuranceFieldEnd"></select></div>
+            <div class="input-row">
+              <label for="assuranceFieldDirection">点の順序</label>
+              <select id="assuranceFieldDirection"><option value="forward">記録順</option><option value="reverse">逆順</option></select>
+            </div>
+            <button id="assuranceSaveField" class="panel-button primary" type="button">この点範囲を1枚の圃場にする</button>
+            <div class="input-row"><label for="assuranceActiveField">解析対象の圃場</label><select id="assuranceActiveField"></select></div>
+            <p id="assuranceFieldMessage" class="meta" role="status" aria-live="polite">既存の圃場境界も選択できます。</p>
+          </div>
+        </details>
+
+        <details class="card" data-workspace="assurance" open hidden>
+          <summary><span class="details-title">3. 同期と運用条件<span class="en">Pairing &amp; profile</span></span></summary>
+          <div class="details-content">
+            <div class="input-row"><label for="assuranceTolerance">対応許容時間 (ms)</label><input id="assuranceTolerance" type="number" min="100" max="2000" step="50" value="750"></div>
+            <div class="input-row"><label for="assuranceQz1Offset">QZ1時計補正 (ms)</label><input id="assuranceQz1Offset" type="number" step="10" value="0"></div>
+            <div class="input-row"><label for="assuranceReferenceOffset">M10時計補正 (ms)</label><input id="assuranceReferenceOffset" type="number" step="10" value="0"></div>
+            <div class="input-row"><label for="assuranceQz1Rate">QZ1期待周期 (Hz)</label><input id="assuranceQz1Rate" type="number" min="0.1" step="0.1" value="1"></div>
+            <div class="input-row"><label for="assuranceReferenceRate">M10期待周期 (Hz)</label><input id="assuranceReferenceRate" type="number" min="0.1" step="0.1" value="1"></div>
+            <div class="input-row"><label for="assuranceProfile">運用プロファイル</label><select id="assuranceProfile"></select></div>
+            <div class="input-row">
+              <label for="assuranceMinimumGrade">最低証拠等級</label>
+              <select id="assuranceMinimumGrade"><option value="">プロファイル既定</option><option value="A">A</option><option value="B">B</option><option value="C">C</option></select>
+            </div>
+            <div class="input-row">
+              <label for="assuranceGridSize">評価セル</label>
+              <select id="assuranceGridSize"><option value="2">2 m</option><option value="5" selected>5 m</option><option value="10">10 m</option></select>
+            </div>
+            <div class="assurance-action-grid">
+              <button id="assuranceRecalculate" class="panel-button primary" type="button">信頼性を再計算</button>
+              <button id="assuranceClear" class="panel-button" type="button">結果だけ消去</button>
+            </div>
+            <div class="layer-grid">
+              <label class="filter"><input id="assuranceShowGrid" type="checkbox" checked>信頼性セル</label>
+              <label class="filter"><input id="assuranceShowPairs" type="checkbox" checked>対応ペア</label>
+              <label class="filter"><input id="assuranceShowQz1" type="checkbox">QZ1生点</label>
+              <label class="filter"><input id="assuranceShowReference" type="checkbox">基準生点</label>
+            </div>
+          </div>
+        </details>
+
+        <section class="card" data-workspace="assurance" hidden>
+          <h2>測定結果<span class="en">Measured statistics</span></h2>
+          <div class="assurance-metrics">
+            <div class="assurance-metric"><span>対応観測</span><strong id="assurancePairedCount">—</strong></div>
+            <div class="assurance-metric"><span>受信機差・中央値</span><strong id="assuranceMedianSeparation">—</strong></div>
+            <div class="assurance-metric"><span>受信機差・最大</span><strong id="assuranceMaximumSeparation">—</strong></div>
+            <div class="assurance-metric"><span>DGNSS/補強推定（全epoch）</span><strong id="assuranceAugmentationRate">—</strong></div>
+            <div class="assurance-metric"><span>QZSS測位使用（有効fix）</span><strong id="assuranceQzssUseRate">—</strong></div>
+            <div class="assurance-metric"><span>QZ1有効fix率</span><strong id="assuranceContinuity">—</strong></div>
+            <div class="assurance-metric"><span>測定済み面積</span><strong id="assuranceMeasuredArea">—</strong></div>
+          </div>
+          <h3>運用上の推奨面積<span class="en">Advisory classification</span></h3>
+          <div class="assurance-metrics">
+            <div class="assurance-metric"><span>緑の面積</span><strong id="assuranceGreenArea">—</strong></div>
+            <div class="assurance-metric"><span>黄の面積</span><strong id="assuranceYellowArea">—</strong></div>
+            <div class="assurance-metric"><span>赤の面積</span><strong id="assuranceRedArea">—</strong></div>
+            <div class="assurance-metric"><span>未測定・証拠不足</span><strong id="assuranceUnknownArea">—</strong></div>
+            <div class="assurance-metric"><span>SIMULATED</span><strong id="assuranceSimulatedArea">—</strong></div>
+          </div>
+          <p class="meta">面積率は圃場内に切り抜いたセルから算出します。未測定位置への補間は行いません。</p>
+          <div id="assuranceWarnings" class="assurance-warning-list" role="status" aria-live="polite"></div>
+        </section>
+
+        <section class="card" data-workspace="assurance" hidden>
+          <h2>選択した証拠<span class="en">Explainability</span></h2>
+          <p id="assuranceSelectedDetail" class="assurance-detail">計算後、セルまたは受信機間の線を選択してください。</p>
+          <div class="assurance-upload-grid">
+            <button id="assuranceExportProject" class="panel-button export" type="button">Assurance JSONを書き出す</button>
+            <label class="file-button">JSONを読み込む<input id="assuranceImportProject" type="file" accept=".json,application/json"></label>
+          </div>
+          <p class="meta">旧形式JSONはそのまま読み込めます。派生した信頼性結果は、読み込み時に現在の計算版で再計算してください。</p>
         </section>
 
         <details class="card paddy-collapsible" data-workspace="analysis" open hidden>
@@ -2056,6 +2323,7 @@
     let dronePlan = { path: [], lineCount: 0, pathLengthMeters: 0, estimatedMinutes: 0 };
     let gridCells = [];
     let paddyIntelligence = null;
+    let assuranceController = null;
 
     // Web Serial live-capture state (QZ1 over Bluetooth SPP virtual port or USB)
     const serialSupported = "serial" in navigator;
@@ -2069,6 +2337,7 @@
     let serialPointsAdded = 0;
     let serialRenderTimer = null;
     let wakeLock = null;
+    let serialAssuranceImportedLines = 0;
 
     function parseNmea(text) {
       const result = {
@@ -3237,9 +3506,10 @@
 
     function syncLayerVisibility() {
       setLayerVisible(fieldLayer, showFieldLayerInput.checked);
-      setLayerVisible(pointLayer, showQz1LayerInput.checked);
-      setLayerVisible(phoneLayer, showPhoneLayerInput.checked);
-      setLayerVisible(liveLocationLayer, showPhoneLayerInput.checked);
+      const showLegacySurveyLayers = activeWorkspace !== "assurance";
+      setLayerVisible(pointLayer, showLegacySurveyLayers && showQz1LayerInput.checked);
+      setLayerVisible(phoneLayer, showLegacySurveyLayers && showPhoneLayerInput.checked);
+      setLayerVisible(liveLocationLayer, showLegacySurveyLayers && showPhoneLayerInput.checked);
       const showAnalysisLayers = activeWorkspace === "analysis";
       Object.entries(paddyLayers).forEach(([key, layer]) => {
         setLayerVisible(layer, showAnalysisLayers && paddyLayerInputs[key].checked);
@@ -3248,6 +3518,7 @@
       if (!showAnalysisLayers && paddyIntelligence?.layers) {
         Object.values(paddyIntelligence.layers).forEach((layer) => setLayerVisible(layer, false));
       }
+      assuranceController?.setWorkspaceActive(activeWorkspace === "assurance");
     }
 
     function setLayerVisible(layer, visible) {
@@ -3345,7 +3616,7 @@
     }
 
     function buildPopup(point) {
-      const label = point.augmented ? "SLAS補強" : "GPS単独";
+      const label = point.augmented ? "DGNSS fix（方式未確認）" : "単独測位";
       const hdop = point.hdop === null || !Number.isFinite(point.hdop) ? "N/A" : point.hdop;
       const satelliteBand = satelliteCountBand(point.satellites);
       const hdopBand = hdopQualityBand(point.hdop);
@@ -3478,7 +3749,7 @@
       headerDataStatus.lastChild.textContent = `${activePointSource}・${parsedPoints.length}点`;
     }
 
-    function applyNmeaText(text, sourceLabel) {
+    function applyNmeaText(text, sourceLabel, options = {}) {
       const parseResult = parseNmea(text);
       parsedPoints = parseResult.points;
       activePointSource = sourceLabel;
@@ -3489,6 +3760,14 @@
       updateSummary();
       renderPoints();
       refreshFieldOverlay();
+      if (assuranceController) {
+        assuranceController.importNmeaText(text, {
+          receiverId: "qz1",
+          sourceName: sourceLabel,
+          sourceType: sourceLabel === "ライブ記録" ? "serial" : "file",
+          captureDate: options.captureDate || null
+        });
+      }
 
       if (parseResult.points.length === 0) {
         const sample = parseResult.ignoredSample
@@ -3514,7 +3793,7 @@
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}`);
         }
-        const loaded = applyNmeaText(await response.text(), "校内実測");
+        const loaded = applyNmeaText(await response.text(), "校内実測", { captureDate: "2026-07-06" });
         if (!loaded) {
           throw new Error("有効なGGA測位点がありません");
         }
@@ -3528,7 +3807,7 @@
     }
 
     function switchWorkspace(workspace, { updateHash = true } = {}) {
-      if (!["decision", "survey", "analysis"].includes(workspace)) {
+      if (!["decision", "survey", "assurance", "analysis"].includes(workspace)) {
         workspace = "decision";
       }
       activeWorkspace = workspace;
@@ -3544,6 +3823,7 @@
       workspacePrimaryAction.textContent = {
         decision: "実測QZ1データを表示",
         survey: "NMEAをアップロード",
+        assurance: "信頼性を再計算",
         analysis: "解析デモを読み込む"
       }[workspace];
       document.querySelector(".panel").scrollTop = 0;
@@ -3860,7 +4140,7 @@
         serialPointsAdded += 1;
         parsedPoints.push(point);
         serialPointCountEl.textContent = String(serialPointsAdded);
-        serialLastFixEl.textContent = `${point.fixQuality}（${point.augmented ? "SLAS補強" : "GPS単独"}）`;
+        serialLastFixEl.textContent = `${point.fixQuality}（${point.augmented ? "DGNSS fix・方式未確認" : "単独測位"}）`;
         scheduleLiveRender();
       } else if (parsed.noFix > 0) {
         serialLastFixEl.textContent = "0（測位なし）";
@@ -3893,6 +4173,19 @@
       serialConnectButton.textContent = "QZ1に接続";
       serialConnectButton.className = "panel-button primary";
       setSerialStatus("未接続", "");
+      if (assuranceController && serialRawLines.length > serialAssuranceImportedLines) {
+        try {
+          assuranceController.importNmeaText(serialRawLines.join("\n"), {
+            receiverId: "qz1",
+            sourceName: `QZ1ライブ記録 ${new Date().toLocaleString("ja-JP")}`,
+            sourceType: "serial",
+            captureDate: new Date().toISOString().slice(0, 10)
+          });
+          serialAssuranceImportedLines = serialRawLines.length;
+        } catch (error) {
+          setSerialMessage(`記録は保持しましたが、信頼性データへの登録に失敗しました: ${error.message}`);
+        }
+      }
       setSerialMessage(serialRawLines.length > 0
         ? "切断しました。「ログを保存 (.nmea)」で受信データを残せます。"
         : "切断しました。");
@@ -3943,7 +4236,7 @@
       if (!file) {
         return;
       }
-      applyNmeaText(await file.text(), "アップロード");
+      applyNmeaText(await file.text(), file.name);
       fileInput.value = "";
     });
 
@@ -4019,6 +4312,8 @@
         loadBundledProof();
       } else if (activeWorkspace === "survey") {
         fileInput.click();
+      } else if (activeWorkspace === "assurance") {
+        assuranceController?.recalculate();
       } else {
         document.getElementById("loadPaddyDemoButton").click();
       }
@@ -4048,6 +4343,32 @@
         }
       });
       window.paddyIntelligence = paddyIntelligence;
+      try {
+        const { SatelliteAssuranceController } = await import("./js/assurance/satellite-assurance-controller.js");
+        assuranceController = new SatelliteAssuranceController({
+          map,
+          getFallbackBoundary: () => activeBoundary()?.points ?? [],
+          onFieldChanged: (field) => {
+            surveyedBoundary = field.boundary.coordinates.map(([lat, lon], index) => ({
+              id: field.boundary.orderedObservationIds?.[index] || `${field.id}:vertex-${index}`,
+              lat,
+              lon,
+              feature: "corner",
+              note: `Satellite Assurance: ${field.name}`,
+              photoRef: ""
+            }));
+            refreshFieldOverlay();
+            paddyIntelligence?.refresh();
+          },
+          onImportLegacy: (data) => paddyIntelligence?.importExportedJson(data)
+        });
+        assuranceController.mount();
+        window.assuranceController = assuranceController;
+      } catch (error) {
+        console.error("Satellite Assurance initialization failed", error);
+        const warning = document.getElementById("assuranceWarnings");
+        if (warning) warning.textContent = `信頼性マップを初期化できませんでした: ${error.message}`;
+      }
       syncLayerVisibility();
       updateGatePanel();
       updateDecision();
