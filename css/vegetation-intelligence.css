@@ -1,0 +1,140 @@
+/* Vegetation Intelligence panel styles.
+   Follows the paddy-intelligence visual language (cards, detail grids,
+   warning lists); colors for the map overlay live in vegetation-core.js. */
+
+.veg-messages {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+}
+
+.veg-messages:empty {
+  display: none;
+}
+
+.veg-message {
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  border-left: 3px solid #fb923c;
+  border-radius: 6px;
+  color: #9a3412;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  padding: 7px 9px;
+}
+
+.veg-message.error {
+  background: #fef2f2;
+  border-color: #fecaca;
+  border-left-color: #dc2626;
+  color: #b91c1c;
+}
+
+.veg-import-message {
+  color: var(--muted);
+  display: grid;
+  font-size: 0.8rem;
+  gap: 3px;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.veg-import-message:empty {
+  display: none;
+}
+
+.veg-import-error {
+  border-left: 3px solid #fb923c;
+  color: #9a3412;
+  padding-left: 7px;
+}
+
+.veg-form-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 1fr 1fr;
+}
+
+.veg-form-grid .input-row.full {
+  grid-column: 1 / -1;
+}
+
+.veg-actions {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 1fr 1fr;
+}
+
+.veg-priority-row {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.veg-priority-score {
+  background: #eef2f7;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 1rem;
+  font-weight: 800;
+  min-height: 30px;
+  padding: 5px 12px;
+}
+
+.veg-priority-reasons {
+  color: var(--muted);
+  display: grid;
+  font-size: 0.8rem;
+  gap: 4px;
+  line-height: 1.45;
+  margin: 0;
+  padding-left: 18px;
+}
+
+.veg-priority-reasons:empty {
+  display: none;
+}
+
+.veg-history-wrap {
+  max-height: 240px;
+  overflow: auto;
+}
+
+.veg-history-row {
+  cursor: pointer;
+}
+
+.veg-history-row:hover td {
+  background: #f1f5f9;
+}
+
+.veg-history-row.selected td {
+  background: #dbeafe;
+}
+
+.veg-chart {
+  background: #f8fafc;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: block;
+  height: auto;
+  width: 100%;
+}
+
+.veg-chart-caption {
+  color: var(--muted);
+  font-size: 0.76rem;
+  margin-top: 4px;
+}
+
+#vegHistoryChart[hidden] {
+  display: none;
+}
+
+@media (max-width: 760px) {
+  .veg-form-grid,
+  .veg-actions {
+    grid-template-columns: 1fr;
+  }
+}

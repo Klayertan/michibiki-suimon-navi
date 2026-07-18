@@ -1075,6 +1075,7 @@
 
     selectGridCell(cell) {
       this.selected = { kind: "grid", cell };
+      this.onSelectionChanged?.(this.selected);
       if (this.elements.gridDetail) {
         this.elements.gridDetail.innerHTML = `
         <strong>${escapeHtml(cell.id)}</strong><br>
@@ -1358,6 +1359,7 @@
       const safeWaterDepthCm = Math.max(0, waterDepthCm);
       const problemAreaByCategory = areaByCategory(this.analysis.problemZones, PROBLEM_CATEGORIES);
       const plantAreaByCategory = areaByCategory(this.analysis.plantPolygons, PLANT_CATEGORIES);
+      const vegetation = this.getVegetationExport?.() || {};
       return {
         schemaVersion: "paddy-intelligence.v1",
         exportedAt: new Date().toISOString(),
@@ -1430,6 +1432,11 @@
         notes: {
           featureNotes: this.collectFeatureNotes()
         },
+        // Vegetation Intelligence data is provided by the vegetation
+        // controller via an optional hook; older exports simply omit values.
+        vegetationObservations: vegetation.vegetationObservations || [],
+        vegetationSettings: vegetation.vegetationSettings || {},
+        vegetationSummary: vegetation.vegetationSummary || {},
         projectMetadata: {
           projectName: "Suimon Navi Paddy Field Area Intelligence",
           source: "michibiki-suimon-navi browser viewer"
@@ -1513,6 +1520,9 @@
         setInputValue(this.elements.inputs.safetyMargin, settings.safetyMargin_m);
       }
       this.clearSelection();
+      // Older exports have no vegetation keys; the hook receives the raw data
+      // and applies safe defaults, so legacy files still load unchanged.
+      this.onVegetationImport?.(data);
       this.refresh();
       this.fitBoundary();
       this.addWarning("Imported analysis JSON. Review field boundary and grid cell IDs if it came from another field.");

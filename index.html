@@ -9,6 +9,7 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" integrity="sha256-YU3qCpj/P06tdPBJGPax0bm6Q1wltfwjsho5TR4+TYc=" crossorigin="">
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" integrity="sha256-YSWCMtmNZNwqex4CEw1nQhvFub2lmU7vcCKP+XVwwXA=" crossorigin="">
   <link rel="stylesheet" href="css/paddy-intelligence.css">
+  <link rel="stylesheet" href="css/vegetation-intelligence.css">
   <style>
     :root {
       color-scheme: light;
@@ -1872,6 +1873,159 @@
           </div>
         </details>
 
+        <details class="card paddy-collapsible" data-workspace="analysis" open hidden>
+          <summary><span class="details-title">植生インテリジェンス<span class="en">Vegetation intelligence</span></span></summary>
+          <div class="details-content">
+            <p class="meta">カメラ・AIが検出した雑草や生育異常の「候補」を、QZ1 / SLASの位置で圃場・管理グリッドに関連付けて記録します。病害虫の確定診断ではありません。現地確認を前提とした一次スクリーニングです。</p>
+            <div class="metric-grid">
+              <div class="metric"><span>植生観測数</span><strong id="vegSummaryTotal">0</strong></div>
+              <div class="metric"><span>観測ありセル</span><strong id="vegSummaryCellsWith">0</strong></div>
+              <div class="metric"><span>観測なしセル</span><strong id="vegSummaryCellsWithout">0</strong></div>
+              <div class="metric"><span>深刻度「高」セル</span><strong id="vegSummaryHighSeverity">0</strong></div>
+              <div class="metric"><span>雑草増加セル</span><strong id="vegSummaryIncreasing">0</strong></div>
+              <div class="metric"><span>要確認の観測</span><strong id="vegSummaryReview">0</strong></div>
+              <div class="metric"><span>平均雑草被覆率</span><strong id="vegSummaryAvgWeed">—</strong></div>
+              <div class="metric"><span>最新観測日時</span><strong id="vegSummaryLatest">—</strong></div>
+            </div>
+            <div class="input-row">
+              <label for="vegMapModeSelect">植生マップ表示</label>
+              <select id="vegMapModeSelect"></select>
+            </div>
+            <div id="vegLegend" class="paddy-legend" aria-live="polite"></div>
+            <div class="input-row">
+              <label for="vegConfidenceThresholdInput">AI信頼度しきい値 (0–1)</label>
+              <input id="vegConfidenceThresholdInput" type="number" min="0" max="1" step="0.05" inputmode="decimal" value="0.7">
+            </div>
+            <div class="input-row">
+              <label for="vegStaleDaysInput">観測が古いと判断する日数</label>
+              <input id="vegStaleDaysInput" type="number" min="1" step="1" inputmode="numeric" value="14">
+            </div>
+            <label class="file-button">
+              AI解析結果を読み込む (JSON / CSV)
+              <input id="vegImportInput" type="file" accept=".json,.csv,application/json,text/csv">
+            </label>
+            <div id="vegImportMessage" class="veg-import-message" role="status" aria-live="polite"></div>
+            <p class="meta">植生データは「圃場解析デモ」のJSON書き出しに含まれます（vegetationObservations / vegetationSettings / vegetationSummary）。</p>
+          </div>
+        </details>
+
+        <details class="card paddy-collapsible" data-workspace="analysis" hidden>
+          <summary><span class="details-title">植生観測の記録<span class="en">Record observation</span></span></summary>
+          <div class="details-content">
+            <div class="kv"><span>選択中の圃場</span><strong id="vegSelectedField">—</strong></div>
+            <div class="kv"><span>選択中のセル</span><strong id="vegSelectedCell">未選択</strong></div>
+            <div class="input-row">
+              <label for="vegFormCellSelect">対象グリッドセル</label>
+              <select id="vegFormCellSelect"></select>
+            </div>
+            <div class="veg-form-grid">
+              <div class="input-row">
+                <label for="vegObservationType">観測タイプ</label>
+                <select id="vegObservationType"></select>
+              </div>
+              <div class="input-row">
+                <label for="vegTimestampInput">観測日時</label>
+                <input id="vegTimestampInput" type="datetime-local" step="60">
+              </div>
+              <div class="input-row">
+                <label for="vegWeedInput">雑草被覆率 (%)</label>
+                <input id="vegWeedInput" type="number" min="0" max="100" step="0.1" inputmode="decimal">
+              </div>
+              <div class="input-row">
+                <label for="vegCropInput">稲被覆率 (%)</label>
+                <input id="vegCropInput" type="number" min="0" max="100" step="0.1" inputmode="decimal">
+              </div>
+              <div class="input-row">
+                <label for="vegBareInput">裸地率 (%)</label>
+                <input id="vegBareInput" type="number" min="0" max="100" step="0.1" inputmode="decimal">
+              </div>
+              <div class="input-row">
+                <label for="vegWaterInput">水面率 (%)</label>
+                <input id="vegWaterInput" type="number" min="0" max="100" step="0.1" inputmode="decimal">
+              </div>
+              <div class="input-row">
+                <label for="vegConfidenceInput">AI信頼度 (0–1)</label>
+                <input id="vegConfidenceInput" type="number" min="0" max="1" step="0.01" inputmode="decimal">
+              </div>
+              <div class="input-row">
+                <label for="vegSeveritySelect">深刻度</label>
+                <select id="vegSeveritySelect"></select>
+              </div>
+              <div class="input-row">
+                <label for="vegImageNameInput">画像ファイル名</label>
+                <input id="vegImageNameInput" type="text" autocomplete="off">
+              </div>
+              <div class="input-row">
+                <label for="vegModelNameInput">モデル名</label>
+                <input id="vegModelNameInput" type="text" autocomplete="off">
+              </div>
+              <div class="input-row full">
+                <label for="vegNotesInput">メモ</label>
+                <textarea id="vegNotesInput" rows="2"></textarea>
+              </div>
+            </div>
+            <div id="vegFormWarnings" class="veg-messages" role="status" aria-live="polite"></div>
+            <div class="veg-actions">
+              <button id="vegAddButton" class="panel-button primary" type="button" disabled>観測を追加</button>
+              <button id="vegUpdateButton" class="panel-button" type="button" disabled>選択中の観測を更新</button>
+              <button id="vegDeleteButton" class="panel-button danger" type="button" disabled>選択中の観測を削除</button>
+              <button id="vegClearButton" class="panel-button" type="button">フォームをクリア</button>
+            </div>
+            <p id="vegFormMessage" class="meta" role="status" aria-live="polite"></p>
+          </div>
+        </details>
+
+        <details class="card paddy-collapsible" data-workspace="analysis" hidden>
+          <summary><span class="details-title">セル植生履歴と比較<span class="en">Cell history</span></span></summary>
+          <div class="details-content">
+            <div id="vegCellSummary" class="paddy-selected-panel" aria-live="polite"></div>
+            <div class="veg-priority-row">
+              <span class="details-title">巡回優先度</span>
+              <span id="vegPriorityScore" class="veg-priority-score">—</span>
+            </div>
+            <ul id="vegPriorityReasons" class="veg-priority-reasons"></ul>
+            <div id="vegComparisonWarnings" class="veg-messages" role="status" aria-live="polite"></div>
+            <div id="vegHistoryChart" hidden></div>
+            <div class="input-row">
+              <label for="vegHistorySort">履歴の並び順</label>
+              <select id="vegHistorySort">
+                <option value="desc" selected>新しい順</option>
+                <option value="asc">古い順</option>
+              </select>
+            </div>
+            <div class="veg-history-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr><th>日時</th><th>タイプ</th><th>雑草</th><th>稲</th><th>信頼度</th><th>深刻度</th><th>位置ソース</th><th>画像</th></tr>
+                </thead>
+                <tbody id="vegHistoryTable"></tbody>
+              </table>
+            </div>
+            <p class="meta">行をクリックすると観測を選択し、フォームで更新・削除できます。被覆率の差は「ポイント (pt)」で表します。</p>
+          </div>
+        </details>
+
+        <details class="card paddy-collapsible" data-workspace="analysis" hidden>
+          <summary><span class="details-title">位置関連付けレビュー<span class="en">Association review</span></span></summary>
+          <div class="details-content">
+            <p class="meta">境界付近・圃場外・グリッド未整備などで自動関連付けが確定できない観測の一覧です。元の緯度経度は変更せず、割当先だけを確認・変更します。</p>
+            <div class="input-row">
+              <label for="vegReviewSelect">要確認の観測</label>
+              <select id="vegReviewSelect"></select>
+            </div>
+            <div id="vegReviewDetail" class="paddy-selected-panel" aria-live="polite"></div>
+            <div class="input-row">
+              <label for="vegReviewCellSelect">割当先セル</label>
+              <select id="vegReviewCellSelect"></select>
+            </div>
+            <div class="veg-actions">
+              <button id="vegConfirmAssociationButton" class="panel-button primary" type="button" disabled>自動割当を確認</button>
+              <button id="vegOverrideAssociationButton" class="panel-button" type="button" disabled>選択セルに割当</button>
+            </div>
+            <p id="vegReviewMessage" class="meta" role="status" aria-live="polite"></p>
+          </div>
+        </details>
+
         <details class="card paddy-collapsible" data-workspace="analysis" hidden>
           <summary><span class="details-title">レイヤー凡例<span class="en">Styles</span></span></summary>
           <div class="details-content">
@@ -2324,6 +2478,7 @@
     let gridCells = [];
     let paddyIntelligence = null;
     let assuranceController = null;
+    let vegetationController = null;
 
     // Web Serial live-capture state (QZ1 over Bluetooth SPP virtual port or USB)
     const serialSupported = "serial" in navigator;
@@ -3519,6 +3674,7 @@
         Object.values(paddyIntelligence.layers).forEach((layer) => setLayerVisible(layer, false));
       }
       assuranceController?.setWorkspaceActive(activeWorkspace === "assurance");
+      vegetationController?.setWorkspaceActive(activeWorkspace === "analysis");
     }
 
     function setLayerVisible(layer, visible) {
@@ -4340,6 +4496,7 @@
         getGnssPoints: () => parsedPoints,
         onMetricsChange: () => {
           fieldAreaEl.textContent = formatFieldArea();
+          vegetationController?.handlePaddyRefresh();
         }
       });
       window.paddyIntelligence = paddyIntelligence;
@@ -4368,6 +4525,41 @@
         console.error("Satellite Assurance initialization failed", error);
         const warning = document.getElementById("assuranceWarnings");
         if (warning) warning.textContent = `信頼性マップを初期化できませんでした: ${error.message}`;
+      }
+      try {
+        const { VegetationIntelligenceController } = await import("./js/vegetation/vegetation-controller.js");
+        vegetationController = new VegetationIntelligenceController({
+          map,
+          getGridCells: () => paddyIntelligence?.gridCells || [],
+          getBoundary: () => paddyIntelligence?.getBoundaryPoints() || [],
+          getBoundaryThresholdM: () => {
+            const threshold = Number.parseFloat(document.getElementById("gnssBoundaryThresholdInput")?.value);
+            return Number.isFinite(threshold) && threshold >= 0 ? threshold : 2;
+          },
+          getActiveField: () => {
+            const assuranceField = assuranceController?.fields?.getActive?.();
+            if (assuranceField) {
+              return { id: assuranceField.id, name: assuranceField.name };
+            }
+            return { id: fieldData?.id || "field-current", name: fieldData?.name || "圃場" };
+          },
+          onSelectCellOnMap: (cellId) => {
+            const cell = paddyIntelligence?.gridCells.find((candidate) => candidate.id === cellId);
+            if (cell) {
+              paddyIntelligence.selectGridCell(cell);
+            }
+          }
+        });
+        vegetationController.mount();
+        paddyIntelligence.getVegetationExport = () => vegetationController.getExportData();
+        paddyIntelligence.onVegetationImport = (data) => vegetationController.applyImportedProject(data);
+        paddyIntelligence.onSelectionChanged = (selected) => vegetationController.handlePaddySelection(selected);
+        vegetationController.handlePaddyRefresh();
+        window.vegetationController = vegetationController;
+      } catch (error) {
+        console.error("Vegetation Intelligence initialization failed", error);
+        const warning = document.getElementById("vegImportMessage");
+        if (warning) warning.textContent = `植生インテリジェンスを初期化できませんでした: ${error.message}`;
       }
       syncLayerVisibility();
       updateGatePanel();

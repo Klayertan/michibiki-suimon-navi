@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "observations": [
+    {
+      "timestamp": "2026-07-10T09:00:00+09:00",
+      "latitude": 34.6545,
+      "longitude": 135.8302,
+      "observationType": "weed",
+      "weedCoveragePercent": 12.4,
+      "cropCoveragePercent": 78.1,
+      "bareSoilPercent": 4.2,
+      "waterSurfacePercent": 5.3,
+      "confidence": 0.88,
+      "severity": "medium",
+      "imageName": "IMG_0101.jpg",
+      "modelName": "weed-segmentation-v1",
+      "positionSource": "QZ1_SLAS",
+      "slasActive": true,
+      "correctionHealthy": true,
+      "satelliteCount": 14,
+      "hdop": 0.9,
+      "estimatedUncertaintyM": 0.8
+    },
+    {
+      "timestamp": "2026-07-18T09:30:00+09:00",
+      "latitude": 34.6544,
+      "longitude": 135.8304,
+      "observationType": "crop_stress",
+      "weedCoveragePercent": 6.0,
+      "cropCoveragePercent": 82.0,
+      "bareSoilPercent": 6.5,
+      "waterSurfacePercent": 5.5,
+      "confidence": 0.64,
+      "severity": "low",
+      "imageName": "IMG_0102.jpg",
+      "modelName": "weed-segmentation-v1",
+      "positionSource": "QZ1_SLAS"
+    },
+    {
+      "timestamp": "2026-07-18T09:31:00+09:00",
+      "latitude": 34.65425,
+      "longitude": 135.8306,
+      "observationType": "weed",
+      "weedCoveragePercent": 21.0,
+      "cropCoveragePercent": 70.0,
+      "bareSoilPercent": 5.0,
+      "waterSurfacePercent": 4.0,
+      "confidence": 0.9,
+      "severity": "high",
+      "imageName": "IMG_0103.jpg",
+      "modelName": "weed-segmentation-v1",
+      "positionSource": "QZ1_SLAS"
+    },
+    {
+      "latitude": 34.6545,
+      "longitude": 135.8302,
+      "observationType": "weed",
+      "imageName": "IMG_0104.jpg"
+    }
+  ]
+}
