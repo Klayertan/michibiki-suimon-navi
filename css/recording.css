@@ -1,0 +1,212 @@
+/* QZ1 field-recording panel.
+   Connection state (serial-status) and recording state are shown as two
+   separate chips on purpose — they are independent state machines. */
+
+.rec-state-row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  justify-content: space-between;
+}
+
+.rec-state-chip {
+  background: #eef2f7;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-weight: 750;
+  padding: 5px 12px;
+}
+
+.rec-connection-note {
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  border-left: 3px solid #fb923c;
+  border-radius: 6px;
+  color: #9a3412;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  padding: 7px 9px;
+}
+
+.rec-connection-note[hidden] {
+  display: none;
+}
+
+.rec-buttons {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 1fr 1fr;
+}
+
+.rec-buttons .panel-button {
+  min-height: 44px;
+}
+
+.rec-record-position {
+  background: #b45309;
+  border: 0;
+  border-radius: 9px;
+  color: #fff;
+  cursor: pointer;
+  font: inherit;
+  font-size: 1.05rem;
+  font-weight: 800;
+  min-height: 52px;
+  padding: 10px 14px;
+  width: 100%;
+}
+
+.rec-record-position:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.rec-diagnostic-banner {
+  border-radius: 8px;
+  font-size: 0.85rem;
+  line-height: 1.45;
+  padding: 9px 10px;
+}
+
+.rec-diagnostic-banner[hidden] {
+  display: none;
+}
+
+/* Neutral: nothing has gone wrong, the session just hasn't reached this
+   milestone yet (no connection, no bytes, or no fix lock so far). */
+.rec-diagnostic-banner[data-tier="not-connected"],
+.rec-diagnostic-banner[data-tier="no-data"],
+.rec-diagnostic-banner[data-tier="no-fix"] {
+  background: #f1f5f9;
+  border: 1px solid var(--line);
+  border-left: 3px solid #94a3b8;
+  color: var(--muted);
+}
+
+/* Alert: a signal was previously observed and then went quiet/degraded. */
+.rec-diagnostic-banner[data-tier="byte"],
+.rec-diagnostic-banner[data-tier="line"] {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-left: 3px solid #dc2626;
+  color: #b91c1c;
+}
+
+.rec-diagnostic-banner[data-tier="stale-fix"] {
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  border-left: 3px solid #fb923c;
+  color: #9a3412;
+}
+
+.rec-detail-list {
+  display: grid;
+  gap: 6px 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.rec-persistence-error {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-left: 3px solid #dc2626;
+  border-radius: 6px;
+  color: #b91c1c;
+  font-size: 0.82rem;
+  padding: 7px 9px;
+}
+
+.rec-persistence-error[hidden] {
+  display: none;
+}
+
+.rec-recovery-card {
+  background: #f8fafc;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding: 10px;
+}
+
+.rec-recovery-actions {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.rec-recovery-actions .panel-button {
+  min-height: 40px;
+}
+
+.rec-observation-row {
+  align-items: center;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  font-size: 0.85rem;
+  gap: 10px;
+  justify-content: space-between;
+  padding: 6px 2px;
+}
+
+.rec-obs-history {
+  max-height: 200px;
+  overflow: auto;
+}
+
+.rec-exports {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 1fr 1fr;
+}
+
+.rec-field-mode-toggle {
+  align-items: center;
+  color: var(--muted);
+  display: inline-flex;
+  font-size: 0.85rem;
+  gap: 6px;
+}
+
+/* Compact field-recording mode: single column, big touch targets, secondary
+   diagnostics/session detail hidden so the essentials stay reachable with a
+   thumb in the field. */
+.field-mode .rec-secondary {
+  display: none;
+}
+
+.field-mode .rec-buttons,
+.field-mode .rec-exports,
+.field-mode .rec-recovery-actions {
+  grid-template-columns: 1fr;
+}
+
+.field-mode .rec-buttons .panel-button,
+.field-mode .rec-exports .panel-button {
+  font-size: 1rem;
+  min-height: 50px;
+}
+
+.field-mode .rec-record-position {
+  font-size: 1.2rem;
+  min-height: 60px;
+}
+
+.field-mode .metric-grid {
+  grid-template-columns: 1fr 1fr;
+}
+
+@media (max-width: 640px) {
+  .rec-buttons,
+  .rec-exports,
+  .rec-recovery-actions,
+  .rec-detail-list {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .rec-buttons .panel-button,
+  .rec-exports .panel-button {
+    min-height: 46px;
+  }
+}

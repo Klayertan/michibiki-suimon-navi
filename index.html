@@ -10,6 +10,7 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" integrity="sha256-YSWCMtmNZNwqex4CEw1nQhvFub2lmU7vcCKP+XVwwXA=" crossorigin="">
   <link rel="stylesheet" href="css/paddy-intelligence.css">
   <link rel="stylesheet" href="css/vegetation-intelligence.css">
+  <link rel="stylesheet" href="css/recording.css">
   <style>
     :root {
       color-scheme: light;
@@ -2064,6 +2065,96 @@
           </ol>
           </div>
         </details>
+
+        <details class="card paddy-collapsible" data-workspace="survey" open hidden>
+          <summary><span class="details-title">フィールド記録<span class="en">Field recording</span></span></summary>
+          <div id="recPanel" class="details-content">
+          <p class="meta">QZ1への接続と記録セッションは別の状態です。接続しても記録は自動的に始まりません。「記録開始」を押すまでデータはIndexedDBに保存されません。</p>
+
+          <label class="rec-field-mode-toggle">
+            <input id="recFieldModeToggle" type="checkbox">
+            フィールド記録モード（スマホ向け・大きいボタン）
+          </label>
+
+          <div id="recRecoveryContainer"></div>
+
+          <div class="rec-state-row">
+            <span>記録状態: <strong id="recRecordingStateLabel" class="rec-state-chip">未記録</strong></span>
+            <span class="rec-secondary">セッションID: <strong id="recSessionIdLabel">—</strong></span>
+            <span>経過時間: <strong id="recElapsedTime">—</strong></span>
+          </div>
+          <p id="recConnectionNote" class="rec-connection-note" hidden></p>
+
+          <div class="input-row rec-secondary">
+            <label for="recFieldNameInput">圃場名（省略時は選択中の圃場を使用）</label>
+            <input id="recFieldNameInput" type="text" autocomplete="off">
+          </div>
+
+          <div class="rec-buttons">
+            <button id="recStartButton" class="panel-button primary" type="button">記録開始</button>
+            <button id="recPauseButton" class="panel-button" type="button" disabled>一時停止</button>
+            <button id="recResumeButton" class="panel-button" type="button" disabled>記録再開</button>
+            <button id="recStopButton" class="panel-button danger" type="button" disabled>記録終了</button>
+          </div>
+          <p id="recMessage" class="meta" role="status" aria-live="polite"></p>
+
+          <div id="recDiagnosticBanner" class="rec-diagnostic-banner" role="status" aria-live="polite" hidden></div>
+          <div class="metric-grid">
+            <div class="metric"><span>緯度</span><strong id="recCurrentLat">—</strong></div>
+            <div class="metric"><span>経度</span><strong id="recCurrentLon">—</strong></div>
+            <div class="metric"><span>Fix quality</span><strong id="recFixQualityLabel">—</strong></div>
+            <div class="metric"><span>衛星数</span><strong id="recSatelliteCountLabel">—</strong></div>
+            <div class="metric"><span>HDOP</span><strong id="recHdopLabel">—</strong></div>
+            <div class="metric"><span>最新Fixの経過</span><strong id="recLastFixAge">—</strong></div>
+          </div>
+          <div class="rec-detail-list rec-secondary">
+            <div class="kv"><span>受信行数</span><strong id="recReceivedLineCount">0</strong></div>
+            <div class="kv"><span>チェックサム失敗</span><strong id="recChecksumFailureCount">0</strong></div>
+            <div class="kv"><span>不正な文</span><strong id="recMalformedLineCount">0</strong></div>
+            <div class="kv"><span>バイト受信</span><strong id="recByteAge">—</strong></div>
+            <div class="kv"><span>NMEA文受信</span><strong id="recLineAge">—</strong></div>
+            <div class="kv"><span>チェックサム有効</span><strong id="recChecksumAge">—</strong></div>
+            <div class="kv"><span>有効な測位</span><strong id="recFixAgeDetail">—</strong></div>
+          </div>
+
+          <div class="rec-detail-list rec-secondary">
+            <div class="kv"><span>未保存の書き込み</span><strong id="recPendingCount">0</strong></div>
+            <div class="kv"><span>推定使用容量</span><strong id="recStorageUsage">—</strong></div>
+            <div class="kv"><span>このセッションの画像容量</span><strong id="recImageStorageUsage">—</strong></div>
+            <div class="kv"><span>最終保存</span><strong id="recLastPersisted">—</strong></div>
+            <div class="kv"><span>Wake Lock</span><strong id="recWakeLockStatus">—</strong></div>
+          </div>
+          <p id="recPersistenceError" class="rec-persistence-error" role="alert" hidden></p>
+
+          <div class="input-row">
+            <label for="recObsTypeSelect">観測タイプ</label>
+            <select id="recObsTypeSelect"></select>
+          </div>
+          <div class="input-row">
+            <label for="recObsWaterLevelInput">水位 (cm・任意)</label>
+            <input id="recObsWaterLevelInput" type="number" step="0.1" inputmode="decimal">
+          </div>
+          <div class="input-row">
+            <label for="recObsNoteInput">メモ</label>
+            <textarea id="recObsNoteInput" rows="2"></textarea>
+          </div>
+          <label class="file-button">
+            写真を撮影・添付（任意）
+            <input id="recObsImageInput" type="file" accept="image/*" capture="environment">
+          </label>
+          <button id="recRecordPositionButton" class="rec-record-position" type="button" disabled>現在地を記録</button>
+          <p id="recObsMessage" class="meta" role="status" aria-live="polite"></p>
+          <div id="recObsHistoryContainer" class="rec-obs-history rec-secondary"></div>
+
+          <div class="rec-exports rec-secondary">
+            <button id="recExportRawButton" class="panel-button export" type="button">生ログ (.nmea)</button>
+            <button id="recExportFixesCsvButton" class="panel-button export" type="button">測位 (.csv)</button>
+            <button id="recExportSessionJsonButton" class="panel-button export" type="button">セッション全体 (.json)</button>
+            <button id="recExportObservationsCsvButton" class="panel-button export" type="button">観測 (.csv)</button>
+            <button id="recExportObservationsJsonButton" class="panel-button export" type="button">観測 (.json)</button>
+          </div>
+          </div>
+        </details>
       </aside>
     </main>
   </div>
@@ -2479,11 +2570,26 @@
     let paddyIntelligence = null;
     let assuranceController = null;
     let vegetationController = null;
+    let recordingController = null;
+    let serialConnectionState = "disconnected";
 
-    // Web Serial live-capture state (QZ1 over Bluetooth SPP virtual port or USB)
+    function currentActiveField() {
+      const assuranceField = assuranceController?.fields?.getActive?.();
+      if (assuranceField) {
+        return { id: assuranceField.id, name: assuranceField.name };
+      }
+      return { id: fieldData?.id || "field-current", name: fieldData?.name || "圃場" };
+    }
+
+    // Web Serial live-capture state (QZ1 over Bluetooth SPP virtual port or USB).
+    // Both transports surface as serial ports, so one read/parse pipeline serves both.
     const serialSupported = "serial" in navigator;
     const CLUSTER_THRESHOLD = 400;
     const SERIAL_TAIL_LINES = 8;
+    const SERIAL_WATCHDOG_INTERVAL_MS = 5000;
+    const SERIAL_STALL_WARN_MS = 10000;
+    const SERIAL_READ_BUFFER_LIMIT = 8192;
+    const SERIAL_MAX_AUTO_RECONNECTS = 2;
     let serialPort = null;
     let serialReader = null;
     let serialConnected = false;
@@ -2493,6 +2599,12 @@
     let serialRenderTimer = null;
     let wakeLock = null;
     let serialAssuranceImportedLines = 0;
+    let serialReadLoopPromise = null;
+    let serialWatchdogTimer = null;
+    let serialLastDataMs = 0;
+    let serialStalled = false;
+    let serialReconnectAttempts = 0;
+    let serialTransportLabel = "";
 
     function parseNmea(text) {
       const result = {
@@ -4174,21 +4286,85 @@
       serialStatusEl.className = `serial-status${tone ? ` ${tone}` : ""}`;
     }
 
+    function safeGetPortInfo(port) {
+      try {
+        return port?.getInfo?.() || {};
+      } catch {
+        return {};
+      }
+    }
+
+    // Formal connection-state machine layered on top of the existing status
+    // display: text/tone stay exactly what each call site already passed, so
+    // this only tags the transition for recordingController and any future
+    // consumer — it does not change what the user sees.
+    function setConnectionState(state, text, tone) {
+      serialConnectionState = state;
+      setSerialStatus(text, tone);
+      recordingController?.handleConnectionStateChange(state, {
+        transportLabel: serialTransportLabel || null,
+        baudRate: Number(baudSelect.value) || null,
+        portInfo: safeGetPortInfo(serialPort)
+      });
+    }
+
     function setSerialMessage(text) {
       serialMessageEl.textContent = text;
     }
 
-    function initSerialCard() {
+    async function initSerialCard() {
       if (!serialSupported) {
         serialConnectButton.disabled = true;
         baudSelect.disabled = true;
-        setSerialStatus("非対応", "error");
-        setSerialMessage("このブラウザは Web Serial 非対応です（Android/iPhoneでは使えません）。スマホでは以下の手順でログを記録してアップロードしてください：");
-        document.getElementById("serialFallbackSteps").hidden = false;
+        setConnectionState("unsupported", "非対応", "error");
+        if (!window.isSecureContext) {
+          // Chrome/Edge hide navigator.serial entirely on insecure origins, so
+          // this is the most common cause on LAN-hosted pages.
+          setSerialMessage("Web Serial はHTTPSまたはlocalhostでのみ利用できます。このページを https:// または http://localhost で開き直してください。");
+        } else if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+          setSerialMessage("このブラウザは Web Serial 非対応です（Android/iPhoneでは使えません）。スマホでは以下の手順でログを記録してアップロードしてください：");
+          document.getElementById("serialFallbackSteps").hidden = false;
+        } else {
+          setSerialMessage("このブラウザは Web Serial 非対応です。デスクトップ版の Chrome / Edge をご利用ください（USB接続・Bluetooth SPP仮想ポートの両方に対応します）。");
+        }
         return;
       }
 
-      setSerialMessage("QZ1をペアリング済みのPC（Chrome/Edge・HTTPSまたはlocalhost）で「QZ1に接続」を押し、シリアルポートを選択してください。Bluetooth SPPは仮想シリアルポートとして表示されます。");
+      await updateSerialConnectLabel();
+      setConnectionState("disconnected", "未接続", "");
+      setSerialMessage("QZ1をペアリング済みのPC（Chrome/Edge・HTTPSまたはlocalhost）で「QZ1に接続」を押し、シリアルポートを選択してください。USBポートも、Bluetooth Classic SPPの仮想シリアルポートも同じ一覧に表示されます。");
+    }
+
+    async function grantedSerialPorts() {
+      try {
+        return await navigator.serial.getPorts();
+      } catch {
+        return [];
+      }
+    }
+
+    async function updateSerialConnectLabel() {
+      if (serialConnected) {
+        return;
+      }
+      const granted = await grantedSerialPorts();
+      serialConnectButton.textContent = granted.length > 0 ? "QZ1に再接続" : "QZ1に接続";
+    }
+
+    // getInfo() carries USB VID/PID for USB adapters and (in newer Chrome) a
+    // Bluetooth service class for SPP/RFCOMM virtual ports. This is display
+    // metadata only — the read/parse pipeline is identical for both.
+    function describeSerialPort(port) {
+      try {
+        const info = port.getInfo();
+        if (info && Number.isFinite(info.usbVendorId)) {
+          return `USBシリアル (VID 0x${info.usbVendorId.toString(16).padStart(4, "0")})`;
+        }
+        if (info && info.bluetoothServiceClassId !== undefined) {
+          return "Bluetooth SPP 仮想ポート";
+        }
+      } catch {}
+      return "シリアルポート（種別不明・Bluetooth仮想ポートの可能性）";
     }
 
     async function requestWakeLock() {
@@ -4212,32 +4388,124 @@
         return;
       }
 
-      let port;
+      serialConnectButton.disabled = true;
       try {
-        port = await navigator.serial.requestPort();
-        await port.open({ baudRate: Number(baudSelect.value) });
+        // Previously granted ports (USB or Bluetooth SPP) reconnect without
+        // the picker; each is tried in turn because a Bluetooth COM port can
+        // be held open by another application.
+        const granted = await grantedSerialPorts();
+        for (const candidate of granted) {
+          if (await openSerialPort(candidate, { silent: true })) {
+            return;
+          }
+        }
+
+        let port;
+        try {
+          // No requestPort() filters on purpose: Bluetooth SPP virtual ports
+          // carry no USB vendor/product id and would be filtered out.
+          setConnectionState("requesting", "選択中…", "");
+          port = await navigator.serial.requestPort();
+        } catch (error) {
+          setConnectionState("error", "未接続", "");
+          if (error.name === "NotFoundError") {
+            setSerialMessage(granted.length > 0
+              ? "許可済みポートを開けず、新しいポートも選択されませんでした。QZ1の電源と、他のアプリがポートを使用していないかを確認してください。"
+              : "ポートが選択されませんでした。");
+          } else {
+            setSerialMessage(`接続できませんでした: ${error.message}`);
+          }
+          return;
+        }
+        await openSerialPort(port, { silent: false });
+      } finally {
+        serialConnectButton.disabled = false;
+        if (!serialConnected) {
+          await updateSerialConnectLabel();
+        }
+      }
+    }
+
+    async function openSerialPort(port, { silent }) {
+      setConnectionState("opening", silent ? "接続中…" : "接続中…", "");
+      try {
+        await port.open({ baudRate: Number(baudSelect.value), bufferSize: 4096 });
       } catch (error) {
-        setSerialStatus("未接続", "");
-        setSerialMessage(`接続できませんでした: ${error.message}`);
-        return;
+        if (!silent) {
+          setConnectionState("error", "未接続", "");
+          setSerialMessage(describeSerialOpenError(error));
+        } else {
+          setConnectionState("disconnected", "未接続", "");
+        }
+        return false;
       }
 
       serialPort = port;
       serialConnected = true;
+      serialReconnectAttempts = 0;
+      serialTransportLabel = describeSerialPort(port);
       serialConnectButton.textContent = "切断";
       serialConnectButton.className = "panel-button danger";
-      setSerialStatus("接続中", "connected");
-      setSerialMessage("受信中… GGA文を解析して地図に追加します。画面はスリープしません。");
+      setConnectionState("connected", "接続中", "connected");
+      setSerialMessage(`${serialTransportLabel} に接続しました。GGA文を解析して地図に追加します。画面はスリープしません。`);
       requestWakeLock();
-      readSerialLoop().finally(() => {
-        if (serialConnected) {
-          disconnectSerial();
-        }
-      });
+      startSerialWatchdog();
+      serialReadLoopPromise = runSerialSession();
+      return true;
     }
 
+    function describeSerialOpenError(error) {
+      if (error.name === "InvalidStateError") {
+        return "ポートは既に開かれています。一度「切断」するか、ページを再読み込みしてください。";
+      }
+      if (error.name === "NetworkError") {
+        return "ポートを開けませんでした。他のアプリ（シリアルロガー等）が同じポートを使用していないか、QZ1の電源とBluetoothペアリングを確認してください。";
+      }
+      return `接続できませんでした: ${error.message}`;
+    }
+
+    // One session = read loop + bounded automatic reopen on transient errors.
+    // Bluetooth SPP links can drop and recover without an OS-level disconnect
+    // event, so a couple of silent retries make live capture far more stable.
+    async function runSerialSession() {
+      while (serialConnected) {
+        await readSerialLoop();
+        if (!serialConnected) {
+          return;
+        }
+        if (serialReconnectAttempts >= SERIAL_MAX_AUTO_RECONNECTS) {
+          setSerialMessage("受信が停止し、自動再接続にも失敗しました。QZ1の電源・Bluetooth接続を確認して「QZ1に再接続」を押してください。受信済みログは保存できます。");
+          await disconnectSerial({ keepMessage: true, fromSession: true });
+          return;
+        }
+        serialReconnectAttempts += 1;
+        setConnectionState("opening", "再接続中", "");
+        setSerialMessage(`受信が途切れました。自動再接続を試みています（${serialReconnectAttempts}/${SERIAL_MAX_AUTO_RECONNECTS}）…`);
+        try {
+          try {
+            await serialPort.close();
+          } catch {}
+          await new Promise((resolve) => setTimeout(resolve, 1000 * serialReconnectAttempts));
+          if (!serialConnected) {
+            return;
+          }
+          await serialPort.open({ baudRate: Number(baudSelect.value), bufferSize: 4096 });
+          setConnectionState("connected", "接続中", "connected");
+          setSerialMessage(`${serialTransportLabel} に再接続しました。受信を再開します。`);
+          serialLastDataMs = Date.now();
+        } catch (error) {
+          setSerialMessage(`自動再接続に失敗しました: ${error.message}。「QZ1に再接続」で手動再接続できます。`);
+          await disconnectSerial({ keepMessage: true, fromSession: true });
+          return;
+        }
+      }
+    }
+
+    // Single shared read pipeline: bytes → TextDecoder → line split → NMEA
+    // parse. USB serial and Bluetooth SPP virtual ports both come through
+    // here — there is intentionally no transport-specific parser.
     async function readSerialLoop() {
-      const decoder = new TextDecoderStream();
+      const decoder = new TextDecoderStream("utf-8");
       const pipePromise = serialPort.readable.pipeTo(decoder.writable).catch(() => {});
       serialReader = decoder.readable.getReader();
       let buffer = "";
@@ -4249,9 +4517,22 @@
             break;
           }
 
+          serialLastDataMs = Date.now();
+          recordingController?.noteSerialByte(serialLastDataMs);
+          if (serialStalled) {
+            serialStalled = false;
+            setConnectionState("connected", "接続中", "connected");
+            setSerialMessage(`${serialTransportLabel} からの受信が再開しました。`);
+          }
           buffer += value;
-          const lines = buffer.split(/\r?\n/);
+          // Some devices/stacks emit CR-only line endings; also guard the
+          // buffer against newline-free garbage (wrong baud rate, binary data).
+          const lines = buffer.split(/\r\n|\r|\n/);
           buffer = lines.pop();
+          if (buffer.length > SERIAL_READ_BUFFER_LIMIT) {
+            buffer = buffer.slice(-256);
+            setSerialMessage("改行のないデータを受信しています。ボーレート設定と接続機器を確認してください。");
+          }
           lines.forEach(handleSerialLine);
         }
       } catch (error) {
@@ -4262,14 +4543,51 @@
         try {
           serialReader.releaseLock();
         } catch {}
+        serialReader = null;
+        // Wait for the pipe to unlock port.readable — closing earlier makes
+        // port.close() fail silently and leaves the port busy.
         await pipePromise;
       }
     }
 
+    function startSerialWatchdog() {
+      stopSerialWatchdog();
+      serialLastDataMs = Date.now();
+      serialStalled = false;
+      serialWatchdogTimer = setInterval(() => {
+        if (!serialConnected) {
+          return;
+        }
+        const silentMs = Date.now() - serialLastDataMs;
+        if (silentMs >= SERIAL_STALL_WARN_MS && !serialStalled) {
+          // Bluetooth SPP drops often produce no OS disconnect event: the
+          // port stays "open" while read() hangs. Surface it instead of
+          // pretending the link is alive.
+          serialStalled = true;
+          setConnectionState("stalled", "受信なし", "error");
+          setSerialMessage(`約${Math.round(silentMs / 1000)}秒間データを受信していません。QZ1の電源・Bluetooth接続を確認してください。復帰しない場合は「切断」→「QZ1に再接続」を試してください。`);
+        }
+      }, SERIAL_WATCHDOG_INTERVAL_MS);
+    }
+
+    function stopSerialWatchdog() {
+      if (serialWatchdogTimer !== null) {
+        clearInterval(serialWatchdogTimer);
+        serialWatchdogTimer = null;
+      }
+      serialStalled = false;
+    }
+
     function handleSerialLine(rawLine) {
-      const line = rawLine.trim();
+      let line = rawLine.trim();
       if (!line) {
         return;
+      }
+      // Same mid-line recovery as parseNmea: tolerate prefixed timestamps or
+      // fragments that occasionally appear on Bluetooth SPP streams.
+      const dollarIndex = line.indexOf("$G");
+      if (dollarIndex > 0) {
+        line = line.slice(dollarIndex);
       }
 
       serialRawLines.push(line);
@@ -4284,23 +4602,28 @@
       serialLineCountEl.textContent = String(serialRawLines.length);
       serialDownloadButton.disabled = false;
 
-      if (!/^\$G[A-Z0-9]GGA,/i.test(line)) {
-        return;
+      // Recording diagnostics track every line (any sentence type), while the
+      // existing map/point behavior below stays GGA-only and unchanged.
+      const isGgaShaped = /^\$G[A-Z0-9]GGA,/i.test(line);
+      let point = null;
+      let noFix = false;
+      if (isGgaShaped) {
+        const parsed = parseNmea(line);
+        noFix = parsed.noFix > 0;
+        if (parsed.points.length === 1) {
+          point = parsed.points[0];
+          activePointSource = "ライブ記録";
+          point.id = `live-${serialPointsAdded}`;
+          serialPointsAdded += 1;
+          parsedPoints.push(point);
+          serialPointCountEl.textContent = String(serialPointsAdded);
+          serialLastFixEl.textContent = `${point.fixQuality}（${point.augmented ? "DGNSS fix・方式未確認" : "単独測位"}）`;
+          scheduleLiveRender();
+        } else if (parsed.noFix > 0) {
+          serialLastFixEl.textContent = "0（測位なし）";
+        }
       }
-
-      const parsed = parseNmea(line);
-      if (parsed.points.length === 1) {
-        const point = parsed.points[0];
-        activePointSource = "ライブ記録";
-        point.id = `live-${serialPointsAdded}`;
-        serialPointsAdded += 1;
-        parsedPoints.push(point);
-        serialPointCountEl.textContent = String(serialPointsAdded);
-        serialLastFixEl.textContent = `${point.fixQuality}（${point.augmented ? "DGNSS fix・方式未確認" : "単独測位"}）`;
-        scheduleLiveRender();
-      } else if (parsed.noFix > 0) {
-        serialLastFixEl.textContent = "0（測位なし）";
-      }
+      recordingController?.ingestSerialLine({ rawLine: line, looksLikeGga: isGgaShaped, point, noFix });
     }
 
     function scheduleLiveRender() {
@@ -4315,20 +4638,37 @@
       }, 1500);
     }
 
-    async function disconnectSerial() {
+    async function disconnectSerial({ keepMessage = false, fromSession = false } = {}) {
+      if (!serialConnected && !serialPort) {
+        return;
+      }
       serialConnected = false;
+      setConnectionState("disconnecting", "切断中", "");
+      stopSerialWatchdog();
       try {
         await serialReader?.cancel();
       } catch {}
+      // Ordering matters: cancelling the reader lets pipeTo() finish and
+      // unlock the stream; only then can the port actually close. Otherwise
+      // the port stays busy and the next connection attempt fails. When the
+      // session itself is the caller its read loop has already finished —
+      // awaiting our own promise there would deadlock.
+      if (!fromSession) {
+        try {
+          await serialReadLoopPromise;
+        } catch {}
+      }
+      serialReadLoopPromise = null;
       try {
         await serialPort?.close();
       } catch {}
       serialReader = null;
       serialPort = null;
       releaseWakeLock();
-      serialConnectButton.textContent = "QZ1に接続";
       serialConnectButton.className = "panel-button primary";
-      setSerialStatus("未接続", "");
+      serialConnectButton.disabled = false;
+      setConnectionState("disconnected", "未接続", "");
+      await updateSerialConnectLabel();
       if (assuranceController && serialRawLines.length > serialAssuranceImportedLines) {
         try {
           assuranceController.importNmeaText(serialRawLines.join("\n"), {
@@ -4340,11 +4680,14 @@
           serialAssuranceImportedLines = serialRawLines.length;
         } catch (error) {
           setSerialMessage(`記録は保持しましたが、信頼性データへの登録に失敗しました: ${error.message}`);
+          return;
         }
       }
-      setSerialMessage(serialRawLines.length > 0
-        ? "切断しました。「ログを保存 (.nmea)」で受信データを残せます。"
-        : "切断しました。");
+      if (!keepMessage) {
+        setSerialMessage(serialRawLines.length > 0
+          ? "切断しました。「ログを保存 (.nmea)」で受信データを残せます。"
+          : "切断しました。");
+      }
     }
 
     function downloadSerialLog() {
@@ -4438,10 +4781,17 @@
     serialDownloadButton.addEventListener("click", downloadSerialLog);
 
     if (serialSupported) {
-      navigator.serial.addEventListener("disconnect", (event) => {
+      navigator.serial.addEventListener("disconnect", async (event) => {
         if (serialPort && event.target === serialPort) {
-          disconnectSerial();
+          await disconnectSerial({ keepMessage: true });
           setSerialMessage("QZ1との接続が切れました（電源・Bluetoothを確認してください）。受信済みログは保存できます。");
+        }
+      });
+      // A previously granted port coming back into range / being replugged.
+      navigator.serial.addEventListener("connect", async () => {
+        if (!serialConnected) {
+          await updateSerialConnectLabel();
+          setSerialMessage("許可済みのシリアルポートが利用可能になりました。「QZ1に再接続」で受信を再開できます。");
         }
       });
     }
@@ -4536,13 +4886,7 @@
             const threshold = Number.parseFloat(document.getElementById("gnssBoundaryThresholdInput")?.value);
             return Number.isFinite(threshold) && threshold >= 0 ? threshold : 2;
           },
-          getActiveField: () => {
-            const assuranceField = assuranceController?.fields?.getActive?.();
-            if (assuranceField) {
-              return { id: assuranceField.id, name: assuranceField.name };
-            }
-            return { id: fieldData?.id || "field-current", name: fieldData?.name || "圃場" };
-          },
+          getActiveField: currentActiveField,
           onSelectCellOnMap: (cellId) => {
             const cell = paddyIntelligence?.gridCells.find((candidate) => candidate.id === cellId);
             if (cell) {
@@ -4560,6 +4904,19 @@
         console.error("Vegetation Intelligence initialization failed", error);
         const warning = document.getElementById("vegImportMessage");
         if (warning) warning.textContent = `植生インテリジェンスを初期化できませんでした: ${error.message}`;
+      }
+      try {
+        const { RecordingSessionController } = await import("./js/recording/recording-controller.js");
+        recordingController = new RecordingSessionController({
+          getActiveField: currentActiveField,
+          getSelectedGridCellId: () => vegetationController?.selectedCellId || null
+        });
+        await recordingController.mount();
+        window.recordingController = recordingController;
+      } catch (error) {
+        console.error("Field recording initialization failed", error);
+        const warning = document.getElementById("recMessage");
+        if (warning) warning.textContent = `フィールド記録を初期化できませんでした: ${error.message}`;
       }
       syncLayerVisibility();
       updateGatePanel();
