@@ -12,6 +12,7 @@
   <link rel="stylesheet" href="css/vegetation-intelligence.css">
   <link rel="stylesheet" href="css/recording.css">
   <link rel="stylesheet" href="css/field-annotation.css">
+  <link rel="stylesheet" href="css/field-report.css">
   <style>
     :root {
       color-scheme: light;
@@ -1939,6 +1940,27 @@
           <p class="meta">旧形式JSONはそのまま読み込めます。派生した信頼性結果は、読み込み時に現在の計算版で再計算してください。</p>
         </section>
 
+        <details id="fieldReportPanel" class="card paddy-collapsible" data-workspace="analysis" open hidden>
+          <summary><span class="details-title">圃場レポート<span class="en">Field report</span></span></summary>
+          <div class="details-content">
+          <p class="meta">登録済みの圃場ごとに、測量・水管理・観察メモ・測量チェック結果をまとめます。</p>
+          <div class="input-row">
+            <label for="reportFieldSelect">対象圃場</label>
+            <select id="reportFieldSelect"></select>
+          </div>
+          <div class="veg-actions">
+            <button id="reportGenerateButton" class="panel-button primary" type="button" disabled>レポートを生成</button>
+            <button id="reportExportJsonButton" class="panel-button export" type="button" disabled>レポートJSONを書き出し</button>
+            <button id="reportExportHtmlButton" class="panel-button export" type="button" disabled>レポートHTMLを書き出し</button>
+            <button id="reportPrintButton" class="panel-button" type="button" disabled>印刷用表示</button>
+            <button id="reportCopyMarkdownButton" class="panel-button" type="button" disabled>Markdownをコピー</button>
+          </div>
+          <p id="reportMessage" class="meta" role="status" aria-live="polite"></p>
+          <p id="reportEmptyState" class="field-annotation-empty">まだ圃場データがありません。QZ1測量でNMEAログをアップロードし、圃場を登録してください。</p>
+          <div id="reportPreview" class="field-report-preview" hidden></div>
+          </div>
+        </details>
+
         <details class="card paddy-collapsible" data-workspace="analysis" open hidden>
           <summary><span class="details-title">圃場解析デモ<span class="en">Paddy intelligence</span></span></summary>
           <div class="details-content">
@@ -2923,6 +2945,7 @@
     let vegetationController = null;
     let recordingController = null;
     let fieldAnnotationController = null;
+    let fieldReportController = null;
     let serialConnectionState = "disconnected";
 
     function currentActiveField() {
@@ -4176,6 +4199,9 @@
       }
       assuranceController?.setWorkspaceActive(activeWorkspace === "assurance");
       vegetationController?.setWorkspaceActive(activeWorkspace === "analysis");
+      if (activeWorkspace === "analysis") {
+        fieldReportController?.refresh();
+      }
     }
 
     function setLayerVisible(layer, visible) {
@@ -5261,6 +5287,18 @@
         console.error("Field annotation initialization failed", error);
         const warning = document.getElementById("fieldCreateMessage");
         if (warning) warning.textContent = `圃場ポリゴン作成を初期化できませんでした: ${error.message}`;
+      }
+      try {
+        const { FieldReportController } = await import("./js/reports/field-report-controller.js");
+        fieldReportController = new FieldReportController({
+          getFieldAnnotationController: () => fieldAnnotationController
+        });
+        fieldReportController.mount();
+        window.fieldReportController = fieldReportController;
+      } catch (error) {
+        console.error("Field report initialization failed", error);
+        const warning = document.getElementById("reportMessage");
+        if (warning) warning.textContent = `圃場レポートを初期化できませんでした: ${error.message}`;
       }
       try {
         const { SatelliteAssuranceController } = await import("./js/assurance/satellite-assurance-controller.js");

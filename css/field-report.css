@@ -1,0 +1,76 @@
+/* 圃場レポート preview panel. */
+
+.field-report-preview[hidden] { display: none; }
+
+.field-report-preview h3 {
+  margin: 4px 0 0;
+}
+
+.field-report-status-badge {
+  background: #f5f6f1;
+  border: 2px solid #4b5563;
+  border-radius: 8px;
+  display: inline-block;
+  font-size: 1.1rem;
+  font-weight: 800;
+  margin: 6px 0 10px;
+  padding: 6px 14px;
+}
+
+.field-report-status-badge[data-status="usable"] { border-color: #14532d; color: #14532d; }
+.field-report-status-badge[data-status="needs_check"] { border-color: #854d0e; color: #854d0e; }
+.field-report-status-badge[data-status="remeasure_recommended"] { border-color: #991b1b; color: #991b1b; }
+.field-report-status-badge[data-status="insufficient_evidence"] { border-color: #4b5563; color: #4b5563; }
+
+.field-report-list-title {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  margin: 0 0 2px;
+}
+
+.field-report-section {
+  border-top: 1px solid var(--line);
+  margin-top: 12px;
+  padding-top: 10px;
+}
+
+.field-report-section h4 {
+  font-size: 0.9rem;
+  margin: 0 0 6px;
+}
+
+.field-report-dl {
+  display: grid;
+  gap: 3px 12px;
+  grid-template-columns: max-content 1fr;
+  margin: 0;
+}
+
+.field-report-dl dt {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.field-report-dl dd {
+  font-size: 0.85rem;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.field-report-note {
+  background: #fff7ed;
+  border-left: 3px solid #fb923c;
+  color: #9a3412;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  margin: 8px 0 0;
+  padding: 8px 10px;
+}
+
+.field-report-preview ul {
+  font-size: 0.85rem;
+  line-height: 1.6;
+  margin: 4px 0;
+  padding-left: 1.3em;
+}
