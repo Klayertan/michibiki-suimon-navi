@@ -33,6 +33,7 @@ import {
   nextBoundaryTrackId,
   nextFieldDefaults,
   nextObservationName,
+  nextWaterControlName,
   normalizeObservationType,
   normalizePersistedStore,
   normalizeSeverity,
@@ -405,6 +406,13 @@ test("nextObservationName sequences per field+type, matching the requested '圃�
   assert.equal(nextObservationName("圃場1", "weed", 0), "圃場1 雑草地点1");
   assert.equal(nextObservationName("圃場1", "weed", 1), "圃場1 雑草地点2");
   assert.equal(nextObservationName("圃場1", "insect", 0), "圃場1 害虫地点1");
+});
+
+test("nextWaterControlName sequences per field+type, matching the requested '圃場1 水門1' shape (no '地点' word)", () => {
+  assert.equal(nextWaterControlName("圃場1", "gate", 0), "圃場1 水門1");
+  assert.equal(nextWaterControlName("圃場1", "gate", 1), "圃場1 水門2");
+  assert.equal(nextWaterControlName("圃場1", "inlet", 0), "圃場1 給水口1");
+  assert.equal(nextWaterControlName("圃場1", "outlet", 0), "圃場1 排水口1");
 });
 
 test("computeWorkflowStatus reports 0/5 with step 1 as the next task on a fully empty state", () => {

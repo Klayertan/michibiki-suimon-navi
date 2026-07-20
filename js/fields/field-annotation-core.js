@@ -167,6 +167,12 @@ export function nextObservationName(fieldName, type, existingCountForFieldAndTyp
   return `${fieldName || ""} ${label}地点${existingCountForFieldAndType + 1}`.trim();
 }
 
+/** Suggested (editable) title for the next water-control point of a given type on a given field, e.g. "圃場1 水門1". */
+export function nextWaterControlName(fieldName, type, existingCountForFieldAndType) {
+  const label = WATER_CONTROL_TYPE_LABELS[normalizeWaterControlType(type)];
+  return `${fieldName || ""} ${label}${existingCountForFieldAndType + 1}`.trim();
+}
+
 // ---------------------------------------------------------------------------
 // Field / track defaults
 // ---------------------------------------------------------------------------

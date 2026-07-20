@@ -45,6 +45,7 @@ import {
   nextBoundaryTrackId,
   nextFieldDefaults,
   nextObservationName,
+  nextWaterControlName,
   normalizeObservationType,
   normalizePersistedStore,
   normalizeSeverity,
@@ -84,6 +85,9 @@ const ELEMENT_IDS = [
   "wcpTargetFieldSelect", "wcpAddGateButton", "wcpAddInletButton", "wcpAddOutletButton",
   "wcpAddSensorButton", "wcpAddPhotoButton", "wcpPositionCurrentButton", "wcpPositionMapClickButton",
   "wcpAddMessage",
+  // Floating map quick-toolbar for water-management points (QZ1測量, fullscreen-friendly).
+  "waterQuickToolbar", "waterQuickActiveField", "waterQuickFieldRow", "waterQuickFieldSelect",
+  "waterQuickNoFieldMessage", "waterQuickStatus", "waterQuickCancelButton",
   // Field-observation (現地観察メモ) add workflow.
   "obsTargetFieldSelect", ...Object.keys(OBSERVATION_TYPE_BUTTON_IDS),
   "obsPositionQz1Button", "obsPositionGpsButton", "obsPositionMapClickButton", "obsAddMessage",
@@ -141,6 +145,22 @@ export class FieldAnnotationController {
     this.layers.observations.addTo(this.map);
     this.map.on("click", (event) => this.handleMapClick(event));
     this.renderAll();
+    this.syncDialogVisibility();
+  }
+
+  /**
+   * switchWorkspace() in index.html unhides every `[data-workspace="survey"]`
+   * section whenever the user (re)enters QZ1測量 — including on first load
+   * straight into #survey, before this controller even exists yet. That
+   * generic pass has no way to know whether an NMEA upload is actually
+   * pending, so it always forces fieldRegDialog open. Call this right after
+   * that generic pass (and once here at mount, for the direct-#survey-load
+   * case) to make the dialog's own pending-registration state win instead.
+   */
+  syncDialogVisibility() {
+    if (this.elements.fieldRegDialog) {
+      this.elements.fieldRegDialog.hidden = !this.pendingUploadRegistration;
+    }
   }
 
   populateStaticOptions() {
@@ -171,7 +191,13 @@ export class FieldAnnotationController {
     el.fieldRegCancelCloseButton?.addEventListener("click", () => this.resolvePendingClosure(this.pendingUploadRegistration, "cancel"));
 
     // Water-management points.
-    el.wcpTargetFieldSelect?.addEventListener("change", () => this.updateWaterPointButtonStates());
+    el.wcpTargetFieldSelect?.addEventListener("change", () => {
+      if (el.waterQuickFieldSelect) {
+        el.waterQuickFieldSelect.value = el.wcpTargetFieldSelect.value;
+      }
+      this.updateWaterPointButtonStates();
+      this.renderQuickToolbar();
+    });
     el.wcpAddGateButton?.addEventListener("click", () => this.beginAddWaterPoint("gate"));
     el.wcpAddInletButton?.addEventListener("click", () => this.beginAddWaterPoint("inlet"));
     el.wcpAddOutletButton?.addEventListener("click", () => this.beginAddWaterPoint("outlet"));
@@ -179,6 +205,20 @@ export class FieldAnnotationController {
     el.wcpAddPhotoButton?.addEventListener("click", () => this.beginAddWaterPoint("photo"));
     el.wcpPositionCurrentButton?.addEventListener("click", () => this.addWaterControlPointAtCurrentPosition());
     el.wcpPositionMapClickButton?.addEventListener("click", () => this.toggleMapClickAddMode());
+
+    // Floating map quick-toolbar (mirrors the water-management panel above, but reachable without hunting the side panel in fullscreen).
+    el.waterQuickFieldSelect?.addEventListener("change", () => {
+      el.wcpTargetFieldSelect.value = el.waterQuickFieldSelect.value;
+      this.updateWaterPointButtonStates();
+      this.renderQuickToolbar();
+    });
+    el.waterQuickToolbar?.addEventListener("click", (event) => {
+      const button = event.target.closest("button[data-water-quick-type]");
+      if (button && !button.disabled) {
+        this.beginQuickAddWaterPoint(button.dataset.waterQuickType);
+      }
+    });
+    el.waterQuickCancelButton?.addEventListener("click", () => this.cancelQuickAddWaterPoint());
 
     // Field observations (現地観察メモ).
     el.obsTargetFieldSelect?.addEventListener("change", () => this.updateObservationButtonStates());
@@ -340,7 +380,7 @@ export class FieldAnnotationController {
     this.hidePendingClosureUi(this.elements.fieldRegCloseWarning);
     el.fieldRegDialog.hidden = false;
     el.fieldRegDialog.dataset.fileName = fileName || "";
-    el.fieldRegDialog.scrollIntoView({ block: "nearest" });
+    scrollWithinPanel(el.fieldRegDialog, { block: "nearest" });
     this.pendingUploadRegistration = { rawPoints: validPoints, fileName: fileName || null, rawText: rawText || null };
   }
 
@@ -662,6 +702,82 @@ export class FieldAnnotationController {
     this.render();
   }
 
+  /**
+   * Floating map-toolbar equivalent of beginAddWaterPoint() + toggleMapClickAddMode()
+   * combined into one click: a farmer working in fullscreen shouldn't need to
+   * find the side panel just to add a water point. Reuses the same
+   * pendingWaterPointType/mapClickAddActive flags handleMapClick() already
+   * watches, so placement/creation logic isn't duplicated.
+   */
+  beginQuickAddWaterPoint(internalType) {
+    if (this.fields.length === 0) {
+      this.renderQuickToolbar();
+      return;
+    }
+    if (!this.elements.wcpTargetFieldSelect.value) {
+      this.setWcpMessage("対象の圃場を選択してください。");
+      this.renderQuickToolbar();
+      return;
+    }
+    this.pendingWaterPointType = internalType;
+    this.mapClickAddActive = true;
+    this.render();
+  }
+
+  cancelQuickAddWaterPoint() {
+    this.pendingWaterPointType = null;
+    this.mapClickAddActive = false;
+    this.setWcpMessage("");
+    this.render();
+  }
+
+  /** Keeps the floating map quick-toolbar in sync with field/target/placement-mode state — called from render()/renderAll(). */
+  renderQuickToolbar() {
+    const el = this.elements;
+    if (!el.waterQuickToolbar) {
+      return;
+    }
+    const hasFields = this.fields.length > 0;
+    const targetFieldId = el.wcpTargetFieldSelect?.value || "";
+    const activeField = this.fields.find((field) => field.id === targetFieldId);
+
+    if (el.waterQuickNoFieldMessage) {
+      el.waterQuickNoFieldMessage.hidden = hasFields;
+    }
+    setText(el.waterQuickActiveField, activeField ? `現在の対象圃場: ${activeField.name} / ${activeField.id}` : "");
+    if (el.waterQuickActiveField) {
+      el.waterQuickActiveField.hidden = !activeField;
+    }
+    if (el.waterQuickFieldRow) {
+      // A single field is auto-selected already (renderFieldTargetOptions) —
+      // only show the picker when there's an actual choice to make.
+      el.waterQuickFieldRow.hidden = this.fields.length <= 1;
+    }
+
+    const canBegin = hasFields && Boolean(targetFieldId);
+    el.waterQuickToolbar.querySelectorAll("button[data-water-quick-type]").forEach((button) => {
+      button.disabled = !canBegin;
+      const isActiveSelection = this.mapClickAddActive && this.pendingWaterPointType === button.dataset.waterQuickType;
+      button.classList.toggle("active", isActiveSelection);
+    });
+
+    if (this.mapClickAddActive && this.pendingWaterPointType) {
+      const label = WATER_CONTROL_TYPE_LABELS[this.pendingWaterPointType];
+      setText(el.waterQuickStatus, `地図をクリックして「${label}」の位置を登録してください。`);
+      el.waterQuickStatus.hidden = false;
+      if (el.waterQuickCancelButton) {
+        el.waterQuickCancelButton.hidden = false;
+      }
+    } else {
+      if (el.waterQuickStatus) {
+        el.waterQuickStatus.hidden = true;
+      }
+      if (el.waterQuickCancelButton) {
+        el.waterQuickCancelButton.hidden = true;
+      }
+    }
+  }
+
   handleMapClick(event) {
     if (this.mapClickAddActive && this.pendingWaterPointType) {
       this.createWaterControlPoint(event.latlng.lat, event.latlng.lng, "manual_map_click");
@@ -677,7 +793,11 @@ export class FieldAnnotationController {
   createWaterControlPoint(lat, lon, sourceType) {
     const type = this.pendingWaterPointType;
     const relatedFieldId = this.elements.wcpTargetFieldSelect.value || null;
-    const point = buildWaterControlPoint({ id: makeId("wcp"), type, lat, lon, relatedFieldId, sourceType });
+    const field = this.fields.find((candidate) => candidate.id === relatedFieldId);
+    const existingCount = this.waterControlPoints.filter((candidate) => candidate.relatedFieldId === relatedFieldId
+      && waterControlInternalType(candidate) === type).length;
+    const name = nextWaterControlName(field ? field.name : relatedFieldId, type, existingCount);
+    const point = buildWaterControlPoint({ id: makeId("wcp"), name, type, lat, lon, relatedFieldId, sourceType });
     this.waterControlPoints.push(point);
     this.persist();
     this.pendingWaterPointType = null;
@@ -891,7 +1011,7 @@ export class FieldAnnotationController {
       }
       this.fieldObservations = this.fieldObservations.filter((candidate) => candidate !== record);
     } else {
-      if (!window.confirm(`${record.name || record.id} を削除しますか？`)) {
+      if (!window.confirm("この水管理ポイントを削除しますか？")) {
         return;
       }
       this.waterControlPoints = this.waterControlPoints.filter((candidate) => candidate !== record);
@@ -1043,22 +1163,22 @@ export class FieldAnnotationController {
     const el = this.elements;
     switch (button.dataset.workflowStep) {
       case "1":
-        el.fileInput?.scrollIntoView({ block: "center" });
+        scrollWithinPanel(el.fileInput, { block: "center" });
         el.fileInput?.focus();
         break;
       case "2":
-        el.registeredFieldsPanel?.scrollIntoView({ block: "start" });
+        scrollWithinPanel(el.registeredFieldsPanel, { block: "start" });
         break;
       case "3":
         if (el.waterControlPanel) {
           el.waterControlPanel.open = true;
-          el.waterControlPanel.scrollIntoView({ block: "start" });
+          scrollWithinPanel(el.waterControlPanel, { block: "start" });
         }
         break;
       case "4":
         if (el.fieldObservationsPanel) {
           el.fieldObservationsPanel.open = true;
-          el.fieldObservationsPanel.scrollIntoView({ block: "start" });
+          scrollWithinPanel(el.fieldObservationsPanel, { block: "start" });
         }
         break;
       case "5":
@@ -1081,7 +1201,9 @@ export class FieldAnnotationController {
     this.renderSummary();
     this.renderRegisteredList();
     this.renderFieldTargetOptions(this.elements.wcpTargetFieldSelect);
+    this.renderFieldTargetOptions(this.elements.waterQuickFieldSelect);
     this.updateWaterPointButtonStates();
+    this.renderQuickToolbar();
     this.renderFieldTargetOptions(this.elements.obsTargetFieldSelect);
     this.updateObservationButtonStates();
     this.renderSelectedFeature();
@@ -1121,6 +1243,7 @@ export class FieldAnnotationController {
         radius: 8, color: "#ffffff", weight: 2, fillColor: style.fillColor, fillOpacity: 0.95
       })
         .bindTooltip(point.name || WATER_CONTROL_TYPE_LABELS[internalType] || internalType)
+        .bindPopup(this.buildWaterControlPopup(point))
         .on("click", (event) => {
           event.originalEvent?.stopPropagation();
           this.selectFeature("point", point);
@@ -1142,6 +1265,51 @@ export class FieldAnnotationController {
         })
         .addTo(this.layers.observations);
     });
+  }
+
+  /** Leaflet popup content for a water-control-point marker: read-only summary + 編集/削除 actions. */
+  buildWaterControlPopup(point) {
+    const container = document.createElement("div");
+    container.className = "obs-popup";
+    const internalType = waterControlInternalType(point);
+    const field = this.fields.find((candidate) => candidate.id === point.relatedFieldId);
+    const rows = [
+      ["名前", point.name || WATER_CONTROL_TYPE_LABELS[internalType]],
+      ["種類", WATER_CONTROL_TYPE_LABELS[internalType]],
+      ["関連圃場", field ? field.name : (point.relatedFieldId || "—")],
+      ["メモ", point.properties?.memo || "—"]
+    ];
+    rows.forEach(([label, value]) => {
+      const row = document.createElement("div");
+      row.className = "obs-popup-row";
+      const strong = document.createElement("strong");
+      strong.textContent = `${label}: `;
+      row.append(strong, document.createTextNode(value));
+      container.append(row);
+    });
+
+    const actions = document.createElement("div");
+    actions.className = "obs-popup-actions";
+    const editButton = document.createElement("button");
+    editButton.type = "button";
+    editButton.className = "panel-button";
+    editButton.textContent = "編集";
+    editButton.addEventListener("click", () => {
+      this.selectFeature("point", point);
+      this.map.closePopup();
+    });
+    const deleteButton = document.createElement("button");
+    deleteButton.type = "button";
+    deleteButton.className = "panel-button danger";
+    deleteButton.textContent = "削除";
+    deleteButton.addEventListener("click", () => {
+      this.map.closePopup();
+      this.selected = { kind: "point", record: point };
+      this.deleteSelectedFeature();
+    });
+    actions.append(editButton, deleteButton);
+    container.append(actions);
+    return container;
   }
 
   /** Leaflet popup content for a field-observation marker: read-only summary + 編集/削除 actions. */
@@ -1291,7 +1459,12 @@ export class FieldAnnotationController {
     return card;
   }
 
-  /** Shared by the water-control-point and observation "対象圃場" selects. */
+  /**
+   * Shared by the water-control-point / observation / map-toolbar "対象圃場"
+   * selects. Preserves a still-valid previous selection; otherwise
+   * auto-selects the one field when there's only one, so a farmer with a
+   * single registered field never has to pick it manually.
+   */
   renderFieldTargetOptions(select) {
     if (!select) {
       return;
@@ -1301,6 +1474,8 @@ export class FieldAnnotationController {
     this.fields.forEach((field) => select.append(new Option(`${field.name}（${field.id}）`, field.id)));
     if (this.fields.some((field) => field.id === previous)) {
       select.value = previous;
+    } else if (this.fields.length === 1) {
+      select.value = this.fields[0].id;
     }
   }
 
@@ -1453,6 +1628,7 @@ export class FieldAnnotationController {
   render() {
     this.updateWaterPointButtonStates();
     this.updateObservationButtonStates();
+    this.renderQuickToolbar();
   }
 
   // -------------------------------------------------------------------------
@@ -1519,6 +1695,40 @@ function setText(element, value) {
   if (element) {
     element.textContent = value;
   }
+}
+
+/**
+ * Scrolls `element` into view within its nearest .panel ancestor only.
+ * Never delegates to the native Element.scrollIntoView() for panel
+ * content: that method walks every scrollable ancestor including
+ * `documentElement`, and — despite `body { overflow: hidden }` — still
+ * moves `documentElement.scrollTop` as a side effect in this app's layout.
+ * Since `.panel` is the only container meant to scroll (the map/header sit
+ * in a fixed 100vh grid), that side effect desyncs the outer page from
+ * .panel's own scroll position and renders as a large blank gap. Computing
+ * the offset against .panel directly and calling panel.scrollTo() avoids
+ * touching any ancestor outside .panel.
+ */
+function scrollWithinPanel(element, { block = "start" } = {}) {
+  if (!element) {
+    return;
+  }
+  const panel = element.closest(".panel");
+  if (!panel) {
+    element.scrollIntoView({ block });
+    return;
+  }
+  const offsetWithinPanel = element.getBoundingClientRect().top - panel.getBoundingClientRect().top;
+  let target = panel.scrollTop + offsetWithinPanel;
+  if (block === "center") {
+    target -= (panel.clientHeight - element.clientHeight) / 2;
+  } else if (block === "nearest") {
+    const alreadyVisible = offsetWithinPanel >= 0 && offsetWithinPanel + element.clientHeight <= panel.clientHeight;
+    if (alreadyVisible) {
+      return;
+    }
+  }
+  panel.scrollTo({ top: Math.max(0, target), behavior: "auto" });
 }
 
 function appendDetailRow(grid, label, value) {

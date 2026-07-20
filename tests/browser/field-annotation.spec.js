@@ -249,16 +249,152 @@ test("map-click placement works for 水位センサ and 撮影地点", async ({ 
   await expect(page.locator("#fieldAnnotationSummaryPoints")).toHaveText("2");
 });
 
-test("water-management buttons stay disabled until a field exists and a target is chosen", async ({ page }) => {
+test("water-management buttons stay disabled with no field, and auto-select the target once exactly one field is registered", async ({ page }) => {
   await openSurveyWorkspace(page);
   await expect(page.locator("#wcpAddGateButton")).toBeDisabled();
 
   await uploadNmea(page, TIGHT_LOOP_NMEA);
   await page.locator("#fieldRegConfirmButton").click();
-  // A field exists now, but no target field has been chosen yet.
-  await expect(page.locator("#wcpAddGateButton")).toBeDisabled();
-  await page.locator("#wcpTargetFieldSelect").selectOption("paddy-001");
+  // Exactly one field now exists, so it's auto-selected as the target —
+  // the farmer never has to pick it manually in the common single-field case.
+  await expect(page.locator("#wcpTargetFieldSelect")).toHaveValue("paddy-001");
   await expect(page.locator("#wcpAddGateButton")).toBeEnabled();
+});
+
+test("with multiple fields, the target field selection is preserved (not reset) and the user can switch explicitly", async ({ page }) => {
+  await openSurveyWorkspace(page);
+  await uploadNmea(page, TIGHT_LOOP_NMEA, "walk-1.txt");
+  await page.locator("#fieldRegConfirmButton").click();
+  // paddy-001 was auto-selected as the only field at the time.
+  await expect(page.locator("#wcpTargetFieldSelect")).toHaveValue("paddy-001");
+
+  await uploadNmea(page, TIGHT_LOOP_NMEA, "walk-2.txt");
+  await page.locator("#fieldRegConfirmButton").click();
+  // Registering a second field does not clear an already-valid selection —
+  // the map quick-toolbar's field picker becomes visible so the user can switch.
+  await expect(page.locator("#wcpTargetFieldSelect")).toHaveValue("paddy-001");
+  await expect(page.locator("#waterQuickFieldRow")).toBeVisible();
+  await page.locator("#wcpTargetFieldSelect").selectOption("paddy-002");
+  await expect(page.locator("#wcpAddGateButton")).toBeEnabled();
+  await expect(page.locator("#waterQuickFieldSelect")).toHaveValue("paddy-002");
+});
+
+// -------------------------------------------------------------------------
+// Floating map quick-toolbar for water-management points (fullscreen UX)
+// -------------------------------------------------------------------------
+
+/** Finds the Leaflet circleMarker for a given water-control point and opens its popup, returning the popup content locator. */
+async function openWaterPointPopup(page, pointId) {
+  await page.evaluate((id) => {
+    const controller = window.fieldAnnotationController;
+    const point = controller.waterControlPoints.find((candidate) => candidate.id === id);
+    let target = null;
+    controller.layers.waterPoints.eachLayer((marker) => {
+      const latLng = marker.getLatLng();
+      if (latLng.lat === point.coordinates[0] && latLng.lng === point.coordinates[1]) {
+        target = marker;
+      }
+    });
+    target.openPopup();
+  }, pointId);
+  return page.locator(".leaflet-popup-content");
+}
+
+test("水管理ポイント quick toolbar appears on the map and shows 先に圃場を登録してください until a field exists", async ({ page }) => {
+  await openSurveyWorkspace(page);
+  await expect(page.locator("#waterQuickToolbar")).toBeVisible();
+  await expect(page.locator("#waterQuickToolbar")).toContainText("水管理ポイント");
+  await expect(page.locator("#waterQuickNoFieldMessage")).toHaveText("先に圃場を登録してください。");
+  await expect(page.locator('#waterQuickToolbar button[data-water-quick-type="gate"]')).toBeDisabled();
+
+  await uploadNmea(page, TIGHT_LOOP_NMEA);
+  await page.locator("#fieldRegConfirmButton").click();
+  await expect(page.locator("#waterQuickNoFieldMessage")).toBeHidden();
+  await expect(page.locator("#waterQuickActiveField")).toHaveText("現在の対象圃場: 圃場1 / paddy-001");
+  await expect(page.locator('#waterQuickToolbar button[data-water-quick-type="gate"]')).toBeEnabled();
+  // Exactly one field — the picker itself stays out of the way.
+  await expect(page.locator("#waterQuickFieldRow")).toBeHidden();
+});
+
+for (const [dataType, buttonLabel, exportedType] of [
+  ["gate", "水門", "water_gate"],
+  ["inlet", "給水口", "water_inlet"],
+  ["outlet", "排水口", "water_outlet"]
+]) {
+  test(`clicking ${buttonLabel} on the quick toolbar enters map-click placement mode and creates a linked ${exportedType} marker`, async ({ page }) => {
+    await openSurveyWorkspace(page);
+    await uploadNmea(page, TIGHT_LOOP_NMEA);
+    await page.locator("#fieldRegConfirmButton").click();
+
+    await page.locator(`#waterQuickToolbar button[data-water-quick-type="${dataType}"]`).click();
+    await expect(page.locator("#waterQuickStatus")).toHaveText(`地図をクリックして「${buttonLabel}」の位置を登録してください。`);
+    await expect(page.locator("#waterQuickCancelButton")).toBeVisible();
+    await expect(page.locator(`#waterQuickToolbar button[data-water-quick-type="${dataType}"]`)).toHaveClass(/active/);
+
+    await page.locator("#map").click({ position: { x: 300, y: 200 } });
+
+    await expect(page.locator("#waterQuickStatus")).toBeHidden();
+    await expect(page.locator("#waterQuickCancelButton")).toBeHidden();
+    const point = await page.evaluate(() => window.fieldAnnotationController.waterControlPoints.at(-1));
+    expect(point.type).toBe(exportedType);
+    expect(point.relatedFieldId).toBe("paddy-001");
+    expect(point.name).toBe(`圃場1 ${buttonLabel}1`);
+  });
+}
+
+test("キャンセル on the quick toolbar exits placement mode without creating a marker", async ({ page }) => {
+  await openSurveyWorkspace(page);
+  await uploadNmea(page, TIGHT_LOOP_NMEA);
+  await page.locator("#fieldRegConfirmButton").click();
+
+  await page.locator('#waterQuickToolbar button[data-water-quick-type="sensor"]').click();
+  await expect(page.locator("#waterQuickCancelButton")).toBeVisible();
+  await page.locator("#waterQuickCancelButton").click();
+  await expect(page.locator("#waterQuickStatus")).toBeHidden();
+  await expect(page.locator("#waterQuickCancelButton")).toBeHidden();
+  expect(await page.evaluate(() => window.fieldAnnotationController.waterControlPoints.length)).toBe(0);
+});
+
+test("a water-control marker's popup shows 編集/削除; 削除 removes it from the map, the store, workflow step 3, and the field report", async ({ page }) => {
+  await openSurveyWorkspace(page);
+  await uploadNmea(page, TIGHT_LOOP_NMEA);
+  await page.locator("#fieldRegConfirmButton").click();
+  await page.locator('#waterQuickToolbar button[data-water-quick-type="gate"]').click();
+  await page.locator("#map").click({ position: { x: 300, y: 200 } });
+
+  await expect(workflowStep(page, 3)).toContainText("✅");
+
+  const pointId = await page.evaluate(() => window.fieldAnnotationController.waterControlPoints[0].id);
+  const popup = await openWaterPointPopup(page, pointId);
+  await expect(popup).toContainText("名前: 圃場1 水門1");
+  await expect(popup).toContainText("種類: 水門");
+  await expect(popup).toContainText("関連圃場: 圃場1");
+  await expect(popup.getByRole("button", { name: "編集" })).toBeVisible();
+  const deleteButton = popup.getByRole("button", { name: "削除" });
+  await expect(deleteButton).toBeVisible();
+
+  let confirmMessage = null;
+  page.once("dialog", (dialog) => {
+    confirmMessage = dialog.message();
+    dialog.accept();
+  });
+  await deleteButton.click();
+  expect(confirmMessage).toBe("この水管理ポイントを削除しますか？");
+  expect(await page.evaluate(() => window.fieldAnnotationController.waterControlPoints.length)).toBe(0);
+  await expect(page.locator("#fieldAnnotationSummaryPoints")).toHaveText("0");
+
+  // Workflow step 3 reverts to incomplete once the only water point is gone.
+  await expect(workflowStep(page, 3)).toContainText("⬜");
+  await expect(page.locator("#workflowProgressLabel")).toHaveText("進捗: 2 / 5 完了");
+
+  // 圃場レポート no longer lists the deleted point.
+  await page.getByRole("button", { name: "詳細解析" }).click();
+  await page.evaluate(() => {
+    document.querySelectorAll("details[data-workspace='analysis']").forEach((card) => { card.open = true; });
+  });
+  await page.locator("#reportFieldSelect").selectOption("paddy-001");
+  await page.locator("#reportGenerateButton").click();
+  await expect(page.locator("#reportPreview")).toContainText("水管理ポイントはまだ登録されていません。");
 });
 
 test("export JSON includes fields, boundaryTracks, waterControlPoints, surveySessions, measurements and metadata", async ({ page }) => {
@@ -368,14 +504,14 @@ test("map-click placement works for an observation, and スマホGPS位置を使
   expect(gateProblem.coordinates[1]).toBeCloseTo(135.831, 3);
 });
 
-test("observation buttons stay disabled until a field exists and a target is chosen", async ({ page }) => {
+test("observation buttons stay disabled with no field, and auto-select the target once exactly one field is registered", async ({ page }) => {
   await openSurveyWorkspace(page);
   await expect(page.locator("#obsAddWeedButton")).toBeDisabled();
 
   await uploadNmea(page, TIGHT_LOOP_NMEA);
   await page.locator("#fieldRegConfirmButton").click();
-  await expect(page.locator("#obsAddWeedButton")).toBeDisabled();
-  await page.locator("#obsTargetFieldSelect").selectOption("paddy-001");
+  // Exactly one field exists, so it's auto-selected as the target.
+  await expect(page.locator("#obsTargetFieldSelect")).toHaveValue("paddy-001");
   await expect(page.locator("#obsAddWeedButton")).toBeEnabled();
 });
 
@@ -667,6 +803,76 @@ test("exporting marks step 5 done, shows the completion message, persists lastEx
 
   const stored = await page.evaluate(() => JSON.parse(localStorage.getItem("suimonNaviFieldAnnotationsV2")).workflowState);
   expect(stored.lastExportedAt).toBeTruthy();
+});
+
+// Regression coverage for a layout bug: Element.scrollIntoView() on content
+// inside .panel also moves documentElement's own scroll position, even
+// though body/html declare overflow: hidden specifically so .panel is the
+// only scrolling container (the fixed 100vh header/map sit outside it).
+// That desync rendered as a large blank gap after the workflow panel. The
+// fix routes all in-app scrolling through scrollWithinPanel(), which never
+// touches document/window scroll.
+test("workflow step cards are compact — consecutive steps sit close together with no excessive gap", async ({ page }) => {
+  await openSurveyWorkspace(page);
+  const gaps = await page.evaluate(() => {
+    const steps = [...document.querySelectorAll("#workflowStepsContainer .workflow-step")];
+    return steps.slice(1).map((step, index) => step.getBoundingClientRect().top - steps[index].getBoundingClientRect().bottom);
+  });
+  expect(gaps).toHaveLength(4);
+  gaps.forEach((gap) => expect(gap).toBeLessThan(20));
+});
+
+test("step 5 follows step 4 directly in normal document flow, and no survey card leaves a large blank block", async ({ page }) => {
+  await openSurveyWorkspace(page);
+  await uploadNmea(page, TIGHT_LOOP_NMEA);
+  await page.locator("#fieldRegConfirmButton").click();
+
+  const gaps = await page.evaluate(() => {
+    const cards = [...document.querySelectorAll("[data-workspace='survey']")]
+      .filter((card) => !card.hidden && card.getBoundingClientRect().height > 0);
+    return cards.slice(1).map((card, index) => ({
+      afterId: cards[index].id || cards[index].className,
+      beforeId: card.id || card.className,
+      gap: card.getBoundingClientRect().top - cards[index].getBoundingClientRect().bottom
+    }));
+  });
+  gaps.forEach(({ gap, afterId, beforeId }) => {
+    expect(gap, `gap between "${afterId}" and "${beforeId}" should be small, not a layout hole`).toBeLessThan(40);
+  });
+});
+
+test("hidden panels (e.g. the NMEA registration dialog before any upload) occupy zero layout height", async ({ page }) => {
+  await openSurveyWorkspace(page);
+  const dialogBox = await page.evaluate(() => {
+    const dialog = document.getElementById("fieldRegDialog");
+    return { hidden: dialog.hidden, height: dialog.getBoundingClientRect().height, display: getComputedStyle(dialog).display };
+  });
+  expect(dialogBox.hidden).toBe(true);
+  expect(dialogBox.display).toBe("none");
+  expect(dialogBox.height).toBe(0);
+});
+
+test("clicking workflow step buttons that scroll never moves documentElement/window — only .panel scrolls", async ({ page }) => {
+  await openSurveyWorkspace(page);
+  await uploadNmea(page, TIGHT_LOOP_NMEA);
+  await page.locator("#fieldRegConfirmButton").click();
+
+  for (const stepId of [3, 4]) {
+    await page.evaluate(() => { document.documentElement.scrollTop = 0; window.scrollTo(0, 0); });
+    await workflowStep(page, stepId).locator("button").click();
+    const scroll = await page.evaluate(() => ({ html: document.documentElement.scrollTop, windowY: window.scrollY }));
+    expect(scroll.html, `step ${stepId} button must not scroll documentElement`).toBe(0);
+    expect(scroll.windowY, `step ${stepId} button must not scroll window`).toBe(0);
+  }
+
+  // Step 2's "登録済み圃場を確認" button, and the NMEA-upload dialog's own auto-scroll, share the same fix.
+  await page.evaluate(() => { document.documentElement.scrollTop = 0; window.scrollTo(0, 0); });
+  await workflowStep(page, 2).locator("button").click();
+  expect(await page.evaluate(() => document.documentElement.scrollTop)).toBe(0);
+
+  await page.evaluate(() => { document.documentElement.scrollTop = 0; window.scrollTo(0, 0); });
+  await uploadNmea(page, TIGHT_LOOP_NMEA, "walk-2.txt");
+  expect(await page.evaluate(() => document.documentElement.scrollTop)).toBe(0);
 });
 
 test("the advanced manual card in 詳細解析 still works and offers the same three-way closure choice", async ({ page }) => {
