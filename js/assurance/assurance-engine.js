@@ -1,4 +1,4 @@
-import { pairObservations, distanceMeters } from "./pairing.js";
+import { pairObservations, summarizeContinuity, distanceMeters } from "./pairing.js";
 
 export const ASSURANCE_PROFILES = {
   survey: { id: "survey", label: "一般圃場測量", minPairs: 5, greenSeparationM: 2, yellowSeparationM: 5, minContinuity: 0.9, correctionRequired: false, minimumGrade: "B", maxSpeedMps: 3 },
@@ -10,6 +10,19 @@ export const ASSURANCE_PROFILES = {
 
 const WEIGHTS = { augmentation: 20, fix: 10, hdop: 15, satellites: 5, agreement: 20, continuity: 15, stability: 15 };
 const GRADE_RANK = { D: 0, C: 1, B: 2, A: 3 };
+
+// Farmer-facing result vocabulary (測量チェック). Internal classification
+// keys (green/yellow/red/grey/simulated) are unchanged — only the label
+// shown to the user is simplified here, in one place.
+export const RESULT_STATUS_LABELS = {
+  green: "使用可能",
+  yellow: "要確認",
+  red: "再測量推奨",
+  grey: "証拠不足",
+  simulated: "テスト用"
+};
+
+export const QZ1_ONLY_MODE_MESSAGE = "比較用GPSログがないため、QZ1単独の簡易チェックを行います。絶対精度や受信機間誤差は評価できません。";
 
 export function calculateAssurance(input) {
   const baseProfile = ASSURANCE_PROFILES[input.profileId] || ASSURANCE_PROFILES.survey;
@@ -46,10 +59,12 @@ export function calculateAssurance(input) {
   const qzssVisibleCount = validQz1.filter((observation) => Number(observation.qzss?.visibleCount) > 0).length;
   const qzssUsedCount = validQz1.filter((observation) => observation.qzss?.usedInFix === true).length;
   const separations = pairing.pairs.map((pair) => pair.separationM);
+  const pointMetrics = computeQz1PointMetrics(input.qz1Observations);
 
   return {
     calculationVersion: "satellite-assurance.v1",
     calculatedAt: new Date().toISOString(),
+    mode: "comparison",
     profile,
     simulated,
     pairing,
@@ -77,10 +92,146 @@ export function calculateAssurance(input) {
       simulatedAreaPercent: percent(areaByStatus.simulated, fieldAreaM2),
       statusCounts: Object.fromEntries(Object.keys(areaByStatus).map((status) => [status, cells.filter((cell) => cell.classification === status).length])),
       problematicCells: cells.filter((cell) => cell.classification === "red" || cell.classification === "yellow")
-        .sort((a, b) => (a.score ?? 100) - (b.score ?? 100)).slice(0, 5).map((cell) => cell.id)
+        .sort((a, b) => (a.score ?? 100) - (b.score ?? 100)).slice(0, 5).map((cell) => cell.id),
+      pointMetrics
     },
     warnings: buildWarnings(pairing, cells, profile, simulated)
   };
+}
+
+/**
+ * Point-quality counts shared by both check modes (QZ1-only and
+ * comparison), so 有効な測位点/GPS単独の点/DGPS・補強ありの点/QZSSを使った点
+ * mean exactly the same thing regardless of which mode produced them.
+ */
+export function computeQz1PointMetrics(observations) {
+  const list = observations || [];
+  const valid = list.filter((observation) => observation.fixValid);
+  const gpsOnlyCount = valid.filter((observation) => observation.fixQuality === 1).length;
+  const dgpsCount = valid.filter((observation) => observation.fixQuality === 2
+    || ["active", "inferred"].includes(observation.augmentation?.status)).length;
+  const qzssUsedCount = valid.filter((observation) => observation.qzss?.usedInFix === true).length;
+  return {
+    totalCount: list.length,
+    validCount: valid.length,
+    validRatio: list.length ? valid.length / list.length : null,
+    gpsOnlyCount,
+    dgpsCount,
+    qzssUsedCount
+  };
+}
+
+/**
+ * Flags consecutive-point jumps by raw distance rather than distance/time,
+ * because imported legacy/registered-session points often carry only an
+ * NMEA time-of-day string (no parseable date), so a speed-based check would
+ * silently see every gap as infinite speed. At ~1 Hz walking-survey logging,
+ * a >maxJumpM gap between consecutive fixes is anomalous regardless of the
+ * exact elapsed time.
+ */
+export function countPositionJumps(observations, maxJumpM = 50) {
+  const valid = (observations || []).filter((observation) => observation.fixValid
+    && Number.isFinite(observation.lat) && Number.isFinite(observation.lon));
+  let count = 0;
+  for (let index = 1; index < valid.length; index += 1) {
+    const step = distanceMeters(valid[index - 1].lat, valid[index - 1].lon, valid[index].lat, valid[index].lon);
+    if (step > maxJumpM) count += 1;
+  }
+  return count;
+}
+
+/**
+ * Simplified single-receiver 測量チェック for when no comparison GPS log is
+ * available. Never leaves the result blank — always derives a
+ * classification and farmer-readable reasons from what QZ1 alone shows:
+ * valid-fix rate, GPS単独 vs DGPS/補強 vs QZSS evidence, point count,
+ * position jumps, and (when a boundary is given) how well it closes.
+ */
+export function calculateQz1OnlyCheck(input) {
+  const observations = input.qz1Observations || [];
+  const metrics = computeQz1PointMetrics(observations);
+  const continuity = summarizeContinuity(observations, input.qz1ExpectedRateHz || 1);
+  const jumpCount = countPositionJumps(observations, input.maxJumpM || 50);
+  const boundary = input.boundary || [];
+  const closureGapM = boundary.length >= 3
+    ? distanceMeters(boundary[0][0], boundary[0][1], boundary[boundary.length - 1][0], boundary[boundary.length - 1][1])
+    : null;
+  const rawNmeaStored = Boolean(input.rawNmeaStored);
+  const dgpsRatio = metrics.validCount ? metrics.dgpsCount / metrics.validCount : 0;
+
+  const reasons = [];
+  let classification;
+
+  if (metrics.totalCount === 0) {
+    classification = "grey";
+    reasons.push("測位点がありません。");
+  } else {
+    if (dgpsRatio < 0.3) reasons.push("GPS単独の測位が多い");
+    reasons.push("比較用GPSログがありません");
+    if (closureGapM !== null && closureGapM > 10) reasons.push("圃場範囲が完全に閉じていません");
+    if (jumpCount > 0) reasons.push(`急な位置ジャンプを${jumpCount}件検出しました`);
+    if (!rawNmeaStored) reasons.push("元のNMEAログは保存されていません");
+    reasons.push(`有効な測位点は${metrics.validCount}点あります`);
+
+    if (metrics.validCount < 3 || metrics.validRatio < 0.5 || jumpCount > 0) {
+      classification = "red";
+    } else if (metrics.validCount >= 5 && dgpsRatio >= 0.5
+      && (closureGapM === null || closureGapM <= 10)) {
+      classification = "green";
+    } else {
+      classification = "yellow";
+    }
+  }
+
+  return {
+    calculationVersion: "satellite-assurance.v1",
+    calculatedAt: new Date().toISOString(),
+    mode: "qz1_only",
+    message: QZ1_ONLY_MODE_MESSAGE,
+    classification,
+    reasons,
+    metrics: { ...metrics, continuity, jumpCount, closureGapM, rawNmeaStored }
+  };
+}
+
+/**
+ * Derives one overall 総合判定 + farmer-readable reasons from a comparison
+ * (calculateAssurance) result, mirroring what calculateQz1OnlyCheck
+ * produces for the no-comparison-data path so the controller can render
+ * both modes through the same summary card.
+ */
+export function summarizeComparisonResult(result) {
+  const { summary, simulated } = result;
+  const reasons = [];
+  let classification;
+
+  if (simulated) {
+    classification = "simulated";
+    reasons.push("SIMULATEDデータを含むため、テスト用の結果です。運用判断には使えません。");
+  } else if (summary.pairedCount === 0) {
+    classification = "grey";
+    reasons.push("比較できた点がありません。時刻・圃場範囲・データセットを確認してください。");
+  } else {
+    reasons.push(`比較できた点は${summary.pairedCount}組です`);
+    if (Number.isFinite(summary.medianSeparationM)) reasons.push(`位置差の中央値は${summary.medianSeparationM.toFixed(2)}mです`);
+    if (summary.unmatchedQz1Count || summary.unmatchedReferenceCount) {
+      reasons.push(`対応しなかった点があります（QZ1 ${summary.unmatchedQz1Count} / 比較用 ${summary.unmatchedReferenceCount}）`);
+    }
+    if (summary.redAreaPercent > 0) {
+      classification = "red";
+      reasons.push("再測量推奨の範囲があります");
+    } else if (summary.unknownAreaPercent >= 50) {
+      classification = "grey";
+      reasons.push("証拠不足の範囲が多くあります");
+    } else if (summary.yellowAreaPercent > 0 || summary.greenAreaPercent < 50) {
+      classification = "yellow";
+      reasons.push("要確認の範囲があります");
+    } else {
+      classification = "green";
+    }
+  }
+
+  return { classification, reasons };
 }
 
 function scorePair(pair, profile, pairing, jump, simulated) {

@@ -5,7 +5,7 @@ export class GnssStore extends EventTarget {
     this.sessions = new Map();
     this.observations = new Map();
     this.registerReceiver({ id: "qz1", displayName: "QZ1", role: "qz1", capabilities: { qzssL1S: true, qzssGsv: true, explicitSlasStatus: false, dcrOutput: null } });
-    this.registerReceiver({ id: "reference", displayName: "M10 / 基準受信機", role: "reference", capabilities: { qzssL1S: null, qzssGsv: null, explicitSlasStatus: false, dcrOutput: null } });
+    this.registerReceiver({ id: "reference", displayName: "比較用GPS受信機", role: "reference", capabilities: { qzssL1S: null, qzssGsv: null, explicitSlasStatus: false, dcrOutput: null } });
     this.registerReceiver({ id: "legacy-unknown", displayName: "旧形式・受信機不明", role: "unknown", capabilities: {} });
   }
 

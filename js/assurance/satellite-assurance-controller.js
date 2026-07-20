@@ -1,7 +1,9 @@
 import { parseNmeaSession } from "../gnss/nmea-parser.js";
 import { GnssStore, makeId } from "../gnss/gnss-store.js";
 import { FieldRegistry } from "../fields/field-registry.js";
-import { ASSURANCE_PROFILES, calculateAssurance } from "./assurance-engine.js";
+import {
+  ASSURANCE_PROFILES, RESULT_STATUS_LABELS, calculateAssurance, calculateQz1OnlyCheck, summarizeComparisonResult
+} from "./assurance-engine.js";
 
 const STATUS_STYLE = {
   green: { color: "#14532d", fillColor: "#2f855a", dashArray: null },
@@ -15,6 +17,8 @@ export class SatelliteAssuranceController {
   constructor(options) {
     this.map = options.map;
     this.getFallbackBoundary = options.getFallbackBoundary || (() => []);
+    this.getRegisteredSurveySessions = options.getRegisteredSurveySessions || (() => []);
+    this.getRegisteredFieldRecords = options.getRegisteredFieldRecords || (() => []);
     this.onFieldChanged = options.onFieldChanged || (() => {});
     this.onImportLegacy = options.onImportLegacy || (() => {});
     this.store = new GnssStore();
@@ -40,9 +44,11 @@ export class SatelliteAssuranceController {
       "assuranceQz1Rate", "assuranceReferenceRate", "assuranceMinimumGrade",
       "assuranceClear", "assuranceShowGrid", "assuranceShowPairs", "assuranceShowQz1", "assuranceShowReference",
       "assurancePairedCount", "assuranceMedianSeparation", "assuranceMaximumSeparation", "assuranceAugmentationRate",
-      "assuranceQzssUseRate", "assuranceContinuity", "assuranceMeasuredArea", "assuranceGreenArea", "assuranceYellowArea",
+      "assuranceQzssUseRate", "assuranceContinuity", "assuranceGpsOnlyRate", "assuranceMeasuredArea",
+      "assuranceGreenArea", "assuranceYellowArea",
       "assuranceRedArea", "assuranceUnknownArea", "assuranceSimulatedArea", "assuranceWarnings", "assuranceSelectedDetail",
-      "assuranceExportProject", "assuranceImportProject"
+      "assuranceExportProject", "assuranceImportProject",
+      "assuranceOverallStatus", "assuranceOverallReasons", "assuranceQz1OnlyNotice"
     ];
     ids.forEach((id) => { this.elements[id] = document.getElementById(id); });
     if (!this.elements.assuranceQz1Session) return;
@@ -60,7 +66,32 @@ export class SatelliteAssuranceController {
     } else {
       this.refreshFieldControls();
     }
+    this.importRegisteredData();
     this.refreshDatasetControls();
+  }
+
+  /**
+   * Seeds the QZ1 dataset selector and field selector from data already
+   * registered in QZ1測量, so the farmer never has to re-upload the same
+   * NMEA file here just to run a 測量チェック. One-time import at mount —
+   * not a live sync, since acceptance only requires the data to be
+   * available for selection, not to track further QZ1測量 edits.
+   */
+  importRegisteredData() {
+    this.getRegisteredSurveySessions().forEach((session) => {
+      if (!session.rawPoints?.length) return;
+      const sessionId = `registered:${session.id}`;
+      if (this.store.getSession(sessionId)) return;
+      this.store.addLegacyPoints(session.rawPoints, {
+        sessionId, receiverId: "qz1", sourceName: session.name || sessionId
+      });
+    });
+    this.getRegisteredFieldRecords().forEach((record) => {
+      if (!Array.isArray(record.coordinates) || record.coordinates.length < 3) return;
+      const fieldId = `registered:${record.id}`;
+      if (this.fields.fields.has(fieldId)) return;
+      this.fields.addCoordinateField({ id: fieldId, name: record.name, coordinates: record.coordinates, sourceType: "registered" });
+    });
   }
 
   bindEvents() {
@@ -159,24 +190,24 @@ export class SatelliteAssuranceController {
         receiverId: "reference",
         captureGroupId: this.store.getSession(sessionId)?.captureGroupId || "capture-default",
         sourceType: "simulation",
-        sourceName: "SIMULATED M10（計算確認用）",
+        sourceName: "テスト用比較ログ（デモ・動作確認用）",
         simulated: true,
         expectedRateHz: this.store.getSession(sessionId)?.expectedRateHz || 1,
         captureDate: this.store.getSession(sessionId)?.captureDate || null,
         manualClockOffsetMs: 0,
         parserSummary: { observationCount: observations.length, validFixCount: observations.filter((point) => point.fixValid).length, noFixCount: observations.filter((point) => !point.fixValid).length, sentenceCounts: {} },
-        warnings: ["SIMULATED: 実機M10性能を示すデータではありません。"]
+        warnings: ["これは実測データではありません。デモや動作確認用です。"]
       },
       observations
     });
     this.elements.assuranceReferenceSession.value = syntheticSessionId;
     this.renderRawLayers();
-    this.setWarnings(["SIMULATED M10を作成しました。UI・計算確認専用で、運用判断には使えません。"]);
+    this.setWarnings(["テスト用比較ログを作成しました。これは実測データではありません。運用判断には使えません。"]);
   }
 
   refreshDatasetControls() {
     this.populateSessionSelect(this.elements.assuranceQz1Session, this.store.getSessionsByRole("qz1"), "QZ1データを選択");
-    this.populateSessionSelect(this.elements.assuranceReferenceSession, this.store.getSessionsByRole("reference"), "M10 / 基準データを選択");
+    this.populateSessionSelect(this.elements.assuranceReferenceSession, this.store.getSessionsByRole("reference"), "比較用GPSデータを選択");
     this.refreshRangeOptions();
     this.renderSessionSummary();
   }
@@ -187,7 +218,7 @@ export class SatelliteAssuranceController {
     select.replaceChildren(new Option(placeholder, ""));
     sessions.forEach((session) => {
       const receiver = this.store.getReceiver(session.receiverId);
-      const simulated = session.simulated ? " [SIMULATED]" : "";
+      const simulated = session.simulated ? " [テスト用]" : "";
       select.append(new Option(`${receiver?.displayName || session.receiverId} — ${session.sourceName}${simulated}`, session.id));
     });
     select.value = sessions.some((session) => session.id === previous) ? previous : sessions.at(-1)?.id || "";
@@ -251,13 +282,39 @@ export class SatelliteAssuranceController {
     select.value = this.fields.activeFieldId || "";
   }
 
+  /** True when sessionId came from importRegisteredData() and its source survey session stored the original raw NMEA text. */
+  resolveRawNmeaStored(sessionId) {
+    if (!sessionId?.startsWith("registered:")) return false;
+    const originalId = sessionId.slice("registered:".length);
+    return Boolean(this.getRegisteredSurveySessions().find((session) => session.id === originalId)?.rawNmeaStored);
+  }
+
   recalculate() {
     try {
       const qz1Session = this.store.getSession(this.elements.assuranceQz1Session.value);
+      if (!qz1Session) throw new Error("QZ1ログを選択してください。");
       const referenceSession = this.store.getSession(this.elements.assuranceReferenceSession.value);
-      if (!qz1Session || !referenceSession) throw new Error("QZ1とM10 / 基準受信機の両データセットを選択してください。");
       const field = this.fields.getActive();
       const boundary = field?.boundary.coordinates || this.getFallbackBoundary();
+
+      if (!referenceSession) {
+        // Mode A: QZ1-only simple check — never blocked on a comparison
+        // GPS log that may not exist yet for this MVP.
+        this.result = calculateQz1OnlyCheck({
+          qz1Observations: this.store.getObservations(qz1Session.id),
+          qz1ExpectedRateHz: Number(this.elements.assuranceQz1Rate.value) || qz1Session.expectedRateHz,
+          boundary: boundary && boundary.length >= 3 ? boundary : [],
+          rawNmeaStored: this.resolveRawNmeaStored(qz1Session.id)
+        });
+        const warnings = [this.result.message];
+        if (field?.validation?.warnings?.length) warnings.push(...field.validation.warnings.map((warning) => `圃場境界: ${warning}`));
+        this.result.warnings = warnings;
+        this.renderResult();
+        this.setWarnings(warnings);
+        return;
+      }
+
+      // Mode B: QZ1 + comparison GPS check.
       if (!boundary || boundary.length < 3) throw new Error("圃場境界を設定してください。QZ1点の開始・終了範囲から作成できます。");
       this.result = calculateAssurance({
         qz1Observations: this.store.getObservations(qz1Session.id),
@@ -293,10 +350,50 @@ export class SatelliteAssuranceController {
     this.layers.grid.clearLayers();
     this.layers.pairs.clearLayers();
     if (!this.result) return;
+    if (this.result.mode === "qz1_only") {
+      this.renderQz1OnlyResult();
+    } else {
+      this.renderComparisonResult();
+    }
+  }
+
+  /** Mode A rendering: no grid/pairs exist yet, but the summary card is never left blank. */
+  renderQz1OnlyResult() {
+    const el = this.elements;
+    if (el.assuranceQz1OnlyNotice) {
+      el.assuranceQz1OnlyNotice.textContent = this.result.message;
+      el.assuranceQz1OnlyNotice.hidden = false;
+    }
+    const metrics = this.result.metrics;
+    const values = {
+      assurancePairedCount: "比較用GPSなし",
+      assuranceMedianSeparation: "比較用GPSなし",
+      assuranceMaximumSeparation: "比較用GPSなし",
+      assuranceAugmentationRate: formatCountPercent(metrics.dgpsCount, metrics.validCount),
+      assuranceQzssUseRate: formatCountPercent(metrics.qzssUsedCount, metrics.validCount),
+      assuranceContinuity: formatCountPercent(metrics.validCount, metrics.totalCount),
+      assuranceGpsOnlyRate: formatCountPercent(metrics.gpsOnlyCount, metrics.validCount),
+      assuranceMeasuredArea: "—",
+      assuranceGreenArea: "—",
+      assuranceYellowArea: "—",
+      assuranceRedArea: "—",
+      assuranceUnknownArea: "—",
+      assuranceSimulatedArea: "—"
+    };
+    Object.entries(values).forEach(([id, value]) => { if (this.elements[id]) this.elements[id].textContent = value; });
+    this.renderOverallSummary(this.result.classification, this.result.reasons);
+    this.elements.assuranceSelectedDetail.textContent = "QZ1単独の簡易チェックのため、場所ごとの詳細はありません。比較用GPSログを追加すると、地図上で場所ごとに確認できます。";
+    this.syncLayerVisibility();
+  }
+
+  /** Mode B rendering: original cell/pair grid plus the same 総合判定 summary card Mode A uses. */
+  renderComparisonResult() {
+    const el = this.elements;
+    if (el.assuranceQz1OnlyNotice) el.assuranceQz1OnlyNotice.hidden = true;
     this.result.cells.forEach((cell) => {
       const style = STATUS_STYLE[cell.classification] || STATUS_STYLE.grey;
       L.polygon(cell.coordinates, { ...style, weight: 2, fillOpacity: cell.classification === "grey" ? 0.18 : 0.48 })
-        .bindTooltip(`${statusLabel(cell.classification)} · ${cell.evidenceGrade} · ${cell.sampleCount || 0}ペア`)
+        .bindTooltip(`${RESULT_STATUS_LABELS[cell.classification] || cell.classification} · ${cell.evidenceGrade} · ${cell.sampleCount || 0}ペア`)
         .on("click", () => this.inspectCell(cell))
         .addTo(this.layers.grid);
     });
@@ -309,13 +406,15 @@ export class SatelliteAssuranceController {
         .addTo(this.layers.pairs);
     });
     const summary = this.result.summary;
+    const pm = summary.pointMetrics;
     const values = {
       assurancePairedCount: `${summary.pairedCount}組`,
       assuranceMedianSeparation: formatMeters(summary.medianSeparationM),
       assuranceMaximumSeparation: formatMeters(summary.maximumSeparationM),
-      assuranceAugmentationRate: formatPercent(summary.qz1AugmentationPercent),
-      assuranceQzssUseRate: formatPercent(summary.qzssUsedPercent),
-      assuranceContinuity: formatPercent((summary.qz1Continuity.validFixRatio ?? 0) * 100),
+      assuranceAugmentationRate: formatCountPercent(pm.dgpsCount, pm.validCount),
+      assuranceQzssUseRate: formatCountPercent(pm.qzssUsedCount, pm.validCount),
+      assuranceContinuity: formatCountPercent(pm.validCount, pm.totalCount),
+      assuranceGpsOnlyRate: formatCountPercent(pm.gpsOnlyCount, pm.validCount),
       assuranceMeasuredArea: formatPercent(summary.measuredAreaPercent),
       assuranceGreenArea: formatPercent(summary.greenAreaPercent),
       assuranceYellowArea: formatPercent(summary.yellowAreaPercent),
@@ -324,10 +423,29 @@ export class SatelliteAssuranceController {
       assuranceSimulatedArea: formatPercent(summary.simulatedAreaPercent)
     };
     Object.entries(values).forEach(([id, value]) => { this.elements[id].textContent = value; });
+    const { classification, reasons } = summarizeComparisonResult(this.result);
+    this.renderOverallSummary(classification, reasons);
     this.elements.assuranceSelectedDetail.textContent = this.result.simulated
-      ? "SIMULATED結果です。セルまたは受信機間の線を選ぶと根拠を確認できます。"
-      : "セルまたは受信機間の線を選ぶと、分類根拠を確認できます。";
+      ? "テスト用データの結果です。セルまたは受信機間の線を選ぶと、この場所の判定を確認できます。"
+      : "セルまたは受信機間の線を選ぶと、この場所の判定とおすすめが確認できます。";
     this.syncLayerVisibility();
+  }
+
+  /** Shared by both modes: the 測量チェック結果 総合判定 + 理由 card. */
+  renderOverallSummary(classification, reasons) {
+    const el = this.elements;
+    if (el.assuranceOverallStatus) {
+      el.assuranceOverallStatus.textContent = RESULT_STATUS_LABELS[classification] || classification;
+      el.assuranceOverallStatus.dataset.status = classification;
+    }
+    if (el.assuranceOverallReasons) {
+      el.assuranceOverallReasons.replaceChildren();
+      (reasons || []).forEach((reason) => {
+        const item = document.createElement("li");
+        item.textContent = reason;
+        el.assuranceOverallReasons.append(item);
+      });
+    }
   }
 
   renderRawLayers() {
@@ -360,21 +478,29 @@ export class SatelliteAssuranceController {
     this.elements.assuranceSelectedDetail.textContent = lines.join("\n");
   }
 
+  /** なぜこの判定？: この場所の判定 / 理由 / おすすめ, farmer-readable. */
   inspectCell(cell) {
-    const action = recommendationFor(cell.classification, this.result.profile);
+    const label = RESULT_STATUS_LABELS[cell.classification] || cell.classification;
     const lines = [
-      `${cell.id} — ${statusLabel(cell.classification)}`,
-      `サンプル ${cell.sampleCount || 0}組 / 証拠等級 ${cell.evidenceGrade} / Assurance ${cell.score ?? "—"}`,
-      `受信機差 中央値 ${formatMeters(cell.medianSeparationM)} / 最大 ${formatMeters(cell.maximumSeparationM)}`,
-      `補正・補強推定 ${formatPercent(cell.augmentationPercent)} / HDOP中央値 ${cell.medianHdop?.toFixed(2) ?? "—"} / ジャンプ ${cell.jumpCount || 0}件`,
-      ...cell.explanation,
-      `推奨: ${action}`
+      `この場所の判定: ${label}`,
+      "",
+      "理由:",
+      ...cell.explanation.map((line) => `- ${line}`),
+      `- 受信機差 中央値 ${formatMeters(cell.medianSeparationM)} / 最大 ${formatMeters(cell.maximumSeparationM)}`,
+      "",
+      "おすすめ:",
+      ...recommendationsFor(cell.classification).map((line) => `- ${line}`)
     ];
     this.elements.assuranceSelectedDetail.textContent = lines.join("\n");
   }
 
   setWorkspaceActive(active) {
     this.active = active;
+    // Re-scan for newly registered QZ1測量 sessions/fields each time the
+    // farmer switches into this tab — not just once at mount — so a field
+    // registered earlier in the same visit is already selectable here
+    // without re-uploading the same NMEA file.
+    if (active) this.importRegisteredData();
     this.syncLayerVisibility();
   }
 
@@ -397,8 +523,14 @@ export class SatelliteAssuranceController {
     this.result = null;
     this.layers.grid.clearLayers();
     this.layers.pairs.clearLayers();
-    ["assurancePairedCount", "assuranceMedianSeparation", "assuranceMaximumSeparation", "assuranceAugmentationRate", "assuranceQzssUseRate", "assuranceContinuity", "assuranceMeasuredArea", "assuranceGreenArea", "assuranceYellowArea", "assuranceRedArea", "assuranceUnknownArea", "assuranceSimulatedArea"]
-      .forEach((id) => { this.elements[id].textContent = "—"; });
+    ["assurancePairedCount", "assuranceMedianSeparation", "assuranceMaximumSeparation", "assuranceAugmentationRate", "assuranceQzssUseRate", "assuranceContinuity", "assuranceGpsOnlyRate", "assuranceMeasuredArea", "assuranceGreenArea", "assuranceYellowArea", "assuranceRedArea", "assuranceUnknownArea", "assuranceSimulatedArea"]
+      .forEach((id) => { if (this.elements[id]) this.elements[id].textContent = "—"; });
+    if (this.elements.assuranceOverallStatus) {
+      this.elements.assuranceOverallStatus.textContent = "—";
+      delete this.elements.assuranceOverallStatus.dataset.status;
+    }
+    this.elements.assuranceOverallReasons?.replaceChildren();
+    if (this.elements.assuranceQz1OnlyNotice) this.elements.assuranceQz1OnlyNotice.hidden = true;
     this.elements.assuranceSelectedDetail.textContent = "結果を消去しました。読み込んだ観測データは保持しています。";
     this.setWarnings([]);
   }
@@ -414,10 +546,23 @@ export class SatelliteAssuranceController {
     });
   }
 
-  exportProject() {
-    const compactResult = this.result ? {
+  /** Mode-branching compact result for 測量チェックJSONを書き出す — QZ1-only results have no pairs/cells to compact. */
+  buildCompactResult() {
+    if (!this.result) return null;
+    if (this.result.mode === "qz1_only") {
+      return {
+        calculationVersion: this.result.calculationVersion,
+        calculatedAt: this.result.calculatedAt,
+        mode: "qz1_only",
+        classification: this.result.classification,
+        reasons: this.result.reasons,
+        metrics: this.result.metrics
+      };
+    }
+    return {
       calculationVersion: this.result.calculationVersion,
       calculatedAt: this.result.calculatedAt,
+      mode: "comparison",
       profileId: this.result.profile.id,
       simulated: this.result.simulated,
       summary: this.result.summary,
@@ -433,7 +578,11 @@ export class SatelliteAssuranceController {
         gridCellId: entry.gridCellId
       })),
       gridResults: this.result.cells.map(({ pairs, ...cell }) => cell)
-    } : null;
+    };
+  }
+
+  exportProject() {
+    const compactResult = this.buildCompactResult();
     const payload = {
       schemaVersion: "2.0.0",
       application: "michibiki-suimon-navi",
@@ -518,20 +667,24 @@ export class SatelliteAssuranceController {
   }
 }
 
-function recommendationFor(status, profile) {
-  if (status === "green") return `${profile.label}で条件付き運用を検討できます。最終判断と現場監視は人が行ってください。`;
-  if (status === "yellow") return "低速・監視付き運用、または手動確認を行ってください。";
-  if (status === "red") return "自律測位に依存しないでください。手動確認が必要です。";
-  if (status === "simulated") return "シミュレーションのため運用判断は禁止です。";
-  return "測定を追加するまで自律運用の判断対象にしないでください。";
-}
-
-function statusLabel(status) {
-  return { green: "緑・十分", yellow: "黄・要注意", red: "赤・使用不可", grey: "灰・証拠なし", simulated: "SIM・検証用" }[status] || status;
+// Farmer-friendly, manual-survey-focused recommendations — this MVP has no
+// autonomous driving/flight, so deliberately avoids that vocabulary
+// ("依存しない" / "監視・低速").
+function recommendationsFor(classification) {
+  if (classification === "green") return ["このまま利用できます。", "定期的に再測量すると精度を保てます。"];
+  if (classification === "yellow") return ["もう一度QZ1で測量する", "可能なら比較用GPSログも取る", "圃場の角では少し止まって記録する"];
+  if (classification === "red") return ["もう一度QZ1で測量する", "電波の開けた場所で再測量する", "可能なら比較用GPSログも取る"];
+  if (classification === "simulated") return ["これはテスト用データです。実際の判断には使わないでください。"];
+  return ["測位点を増やす（もう少し長く記録する）", "圃場範囲やデータセットの選択を確認する"];
 }
 
 function formatMeters(value) { return Number.isFinite(value) ? `${value.toFixed(2)} m` : "—"; }
 function formatPercent(value) { return Number.isFinite(value) ? `${value.toFixed(1)}%` : "—"; }
+function formatCountPercent(count, total) {
+  return Number.isFinite(count) && Number.isFinite(total) && total > 0
+    ? `${count}点（${(count / total * 100).toFixed(1)}%）`
+    : "—";
+}
 function formatCoordinate(point) { return Number.isFinite(point.lat) ? `${point.lat.toFixed(7)}, ${point.lon.toFixed(7)}` : "座標なし"; }
 function formatTime(point) { return Number.isFinite(point.timestampUtcMs) ? new Date(point.timestampUtcMs).toISOString() : point.timeOfDay || "時刻不明"; }
 

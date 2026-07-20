@@ -1039,6 +1039,127 @@
       white-space: pre-wrap;
     }
 
+    .assurance-guide {
+      background: #eef4ea;
+      border-color: #aebda9;
+    }
+
+    .assurance-guide-steps {
+      display: grid;
+      gap: 5px;
+      font-size: 0.82rem;
+      line-height: 1.5;
+      margin: 6px 0 0;
+      padding-left: 1.3em;
+    }
+
+    .assurance-qz1-only-notice {
+      background: #eef6fb;
+      border-left: 3px solid #0e7490;
+      color: #0c4a6e;
+      font-size: 0.8rem;
+      line-height: 1.5;
+      margin: 0 0 10px;
+      padding: 8px 10px;
+    }
+
+    .assurance-qz1-only-notice[hidden] { display: none; }
+
+    .assurance-overall-card {
+      background: #f5f6f1;
+      border: 1px solid #d6dcd2;
+      border-radius: 10px;
+      display: grid;
+      gap: 4px;
+      margin-bottom: 12px;
+      padding: 12px;
+    }
+
+    .assurance-overall-label {
+      color: var(--muted);
+      font-size: 0.72rem;
+      font-weight: 700;
+      margin: 4px 0 0;
+    }
+
+    .assurance-overall-label:first-child { margin-top: 0; }
+
+    .assurance-overall-status {
+      font-size: 1.35rem;
+      font-weight: 800;
+      margin: 0;
+    }
+
+    .assurance-overall-status[data-status="green"] { color: #14532d; }
+    .assurance-overall-status[data-status="yellow"] { color: #854d0e; }
+    .assurance-overall-status[data-status="red"] { color: #991b1b; }
+    .assurance-overall-status[data-status="grey"] { color: #4b5563; }
+    .assurance-overall-status[data-status="simulated"] { color: #5b21b6; }
+
+    .assurance-overall-reasons {
+      display: grid;
+      gap: 3px;
+      font-size: 0.8rem;
+      line-height: 1.5;
+      margin: 0;
+      padding-left: 1.2em;
+    }
+
+    .assurance-overall-reasons:empty {
+      list-style: none;
+      padding-left: 0;
+    }
+
+    .assurance-overall-reasons:empty::before {
+      content: "測量チェックを実行すると表示されます。";
+      color: var(--muted);
+    }
+
+    .assurance-advanced-settings {
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      margin-bottom: 10px;
+      padding: 4px 10px;
+    }
+
+    .assurance-advanced-settings summary {
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 0.82rem;
+      font-weight: 700;
+      padding: 6px 0;
+    }
+
+    .assurance-advanced-settings[open] summary { margin-bottom: 4px; }
+
+    .assurance-dev-tools {
+      border: 1px dashed #b45309;
+      border-radius: 9px;
+      margin-top: 10px;
+      padding: 4px 10px;
+    }
+
+    .assurance-dev-tools summary {
+      color: #92400e;
+      cursor: pointer;
+      font-size: 0.78rem;
+      font-weight: 700;
+      padding: 6px 0;
+    }
+
+    .assurance-dev-warning {
+      color: #92400e;
+      font-size: 0.76rem;
+      line-height: 1.5;
+      margin: 0 0 8px;
+    }
+
+    .panel-button.secondary {
+      background: transparent;
+      border: 1px solid var(--line);
+      color: var(--muted);
+    }
+
     main {
       grid-template-columns: minmax(0, 1fr) minmax(380px, 430px);
     }
@@ -1370,7 +1491,7 @@
       <nav class="workspace-nav" aria-label="作業画面">
         <button class="workspace-tab active" type="button" data-workspace-target="decision" aria-selected="true">判断デモ</button>
         <button class="workspace-tab" type="button" data-workspace-target="survey" aria-selected="false">QZ1測量</button>
-        <button class="workspace-tab" type="button" data-workspace-target="assurance" aria-selected="false">信頼性マップ</button>
+        <button class="workspace-tab" type="button" data-workspace-target="assurance" aria-selected="false">測量チェック</button>
         <button class="workspace-tab" type="button" data-workspace-target="analysis" aria-selected="false">詳細解析</button>
       </nav>
     </header>
@@ -1675,45 +1796,60 @@
         </details>
 
         <section class="card assurance-lead" data-workspace="assurance" hidden>
-          <span class="eyebrow">QZ1 Satellite Assurance Map</span>
-          <h2>測位を「使える場所」まで判断する</h2>
-          <p class="meta">同期したQZ1とM10等の観測を比較し、圃場セルごとに運用上の信頼性と証拠量を表示します。</p>
+          <span class="eyebrow">QZ1測量チェック</span>
+          <h2>測量データの使える範囲を確認する</h2>
+          <p class="meta">この測量データは使えるか、どこを再測量すべきかを確認します。QZ1単独でも、比較用GPSログがあってもチェックできます。</p>
           <p class="assurance-science-note"><strong>精度証明ではありません。</strong> 受信機間の一致、短期安定性、補強の証拠、継続性を評価する助言レイヤーです。真値座標がない限り絶対精度を示しません。自動運転や飛行の最終判断は必ず人が行ってください。</p>
-          <div class="assurance-legend" aria-label="信頼性分類">
-            <span class="assurance-key green">緑・条件を満たす</span>
-            <span class="assurance-key yellow">黄・監視／低速</span>
-            <span class="assurance-key red">赤・依存しない</span>
-            <span class="assurance-key grey">灰・証拠なし</span>
-            <span class="assurance-key simulated">SIM・検証専用</span>
+          <div class="assurance-legend" aria-label="測量チェック結果の分類">
+            <span class="assurance-key green">緑：使用可能</span>
+            <span class="assurance-key yellow">黄：要確認</span>
+            <span class="assurance-key red">赤：再測量推奨</span>
+            <span class="assurance-key grey">灰：証拠不足</span>
+            <span class="assurance-key simulated">紫：テスト用データ</span>
           </div>
         </section>
 
+        <section class="card assurance-guide" data-workspace="assurance" hidden>
+          <h2>測量チェックの使い方</h2>
+          <ol class="assurance-guide-steps">
+            <li>QZ1ログを追加します。</li>
+            <li>比較用GPSログがあれば追加します。ない場合はQZ1単独でも簡易チェックできます。</li>
+            <li>測量した点の範囲を選び、圃場範囲を作ります。</li>
+            <li>「測量チェックを実行」を押します。</li>
+            <li>緑は使用可能、黄は要確認、赤は再測量推奨、灰は証拠不足です。</li>
+          </ol>
+        </section>
+
         <details class="card" data-workspace="assurance" open hidden>
-          <summary><span class="details-title">1. 受信機データ<span class="en">Receiver provenance</span></span></summary>
+          <summary><span class="details-title">1. 測量ログ<span class="en">Receiver provenance</span></span></summary>
           <div class="details-content">
             <div class="input-row">
               <label for="assuranceCaptureDate">捕捉日（NMEAに日付がない場合・UTC）</label>
               <input id="assuranceCaptureDate" type="date">
             </div>
             <div class="assurance-upload-grid">
-              <label class="file-button">QZ1 NMEAを追加<input id="assuranceQz1Input" type="file" accept=".nmea,.txt,.log,text/plain"></label>
-              <label class="file-button">M10 / 基準NMEAを追加<input id="assuranceReferenceInput" type="file" accept=".nmea,.txt,.log,text/plain"></label>
-              <button id="assuranceSimulateReference" class="panel-button" type="button">SIMULATED M10を作成</button>
+              <label class="file-button">QZ1ログを追加<input id="assuranceQz1Input" type="file" accept=".nmea,.txt,.log,text/plain"></label>
+              <label class="file-button">比較用GPSログを追加<input id="assuranceReferenceInput" type="file" accept=".nmea,.txt,.log,text/plain"></label>
             </div>
             <div class="input-row">
               <label for="assuranceQz1Session">QZ1データセット</label>
               <select id="assuranceQz1Session"></select>
             </div>
             <div class="input-row">
-              <label for="assuranceReferenceSession">M10 / 基準データセット</label>
+              <label for="assuranceReferenceSession">比較用GPSデータセット（任意）</label>
               <select id="assuranceReferenceSession"></select>
             </div>
             <p id="assuranceSessionSummary" class="meta" aria-live="polite">データ未読込</p>
+            <details class="assurance-dev-tools">
+              <summary>開発・テスト用</summary>
+              <p class="assurance-dev-warning">これは実測データではありません。デモや動作確認用です。</p>
+              <button id="assuranceSimulateReference" class="panel-button secondary" type="button">テスト用比較ログを作成</button>
+            </details>
           </div>
         </details>
 
         <details class="card" data-workspace="assurance" open hidden>
-          <summary><span class="details-title">2. 点の範囲を圃場に設定<span class="en">Point-to-point field</span></span></summary>
+          <summary><span class="details-title">2. 圃場範囲を作る<span class="en">Point-to-point field</span></span></summary>
           <div class="details-content">
             <p class="meta">外周を歩いたQZ1ログについて、開始点から終了点までを1枚の圃場境界として保存します。保存前に閉合差・自己交差を確認します。</p>
             <div class="input-row"><label for="assuranceFieldName">圃場名</label><input id="assuranceFieldName" type="text" value="QZ1測量圃場"></div>
@@ -1723,70 +1859,81 @@
               <label for="assuranceFieldDirection">点の順序</label>
               <select id="assuranceFieldDirection"><option value="forward">記録順</option><option value="reverse">逆順</option></select>
             </div>
-            <button id="assuranceSaveField" class="panel-button primary" type="button">この点範囲を1枚の圃場にする</button>
+            <button id="assuranceSaveField" class="panel-button primary" type="button">選んだ点で圃場範囲を作る</button>
             <div class="input-row"><label for="assuranceActiveField">解析対象の圃場</label><select id="assuranceActiveField"></select></div>
             <p id="assuranceFieldMessage" class="meta" role="status" aria-live="polite">既存の圃場境界も選択できます。</p>
           </div>
         </details>
 
         <details class="card" data-workspace="assurance" open hidden>
-          <summary><span class="details-title">3. 同期と運用条件<span class="en">Pairing &amp; profile</span></span></summary>
+          <summary><span class="details-title">3. 測量チェックを実行<span class="en">Pairing &amp; profile</span></span></summary>
           <div class="details-content">
-            <div class="input-row"><label for="assuranceTolerance">対応許容時間 (ms)</label><input id="assuranceTolerance" type="number" min="100" max="2000" step="50" value="750"></div>
-            <div class="input-row"><label for="assuranceQz1Offset">QZ1時計補正 (ms)</label><input id="assuranceQz1Offset" type="number" step="10" value="0"></div>
-            <div class="input-row"><label for="assuranceReferenceOffset">M10時計補正 (ms)</label><input id="assuranceReferenceOffset" type="number" step="10" value="0"></div>
-            <div class="input-row"><label for="assuranceQz1Rate">QZ1期待周期 (Hz)</label><input id="assuranceQz1Rate" type="number" min="0.1" step="0.1" value="1"></div>
-            <div class="input-row"><label for="assuranceReferenceRate">M10期待周期 (Hz)</label><input id="assuranceReferenceRate" type="number" min="0.1" step="0.1" value="1"></div>
-            <div class="input-row"><label for="assuranceProfile">運用プロファイル</label><select id="assuranceProfile"></select></div>
-            <div class="input-row">
-              <label for="assuranceMinimumGrade">最低証拠等級</label>
-              <select id="assuranceMinimumGrade"><option value="">プロファイル既定</option><option value="A">A</option><option value="B">B</option><option value="C">C</option></select>
-            </div>
-            <div class="input-row">
-              <label for="assuranceGridSize">評価セル</label>
-              <select id="assuranceGridSize"><option value="2">2 m</option><option value="5" selected>5 m</option><option value="10">10 m</option></select>
-            </div>
+            <details class="assurance-advanced-settings">
+              <summary>詳細設定</summary>
+              <div class="input-row"><label for="assuranceTolerance">時刻ずれ許容 (ms)</label><input id="assuranceTolerance" type="number" min="100" max="2000" step="50" value="750"></div>
+              <div class="input-row"><label for="assuranceQz1Offset">QZ1時刻補正 (ms)</label><input id="assuranceQz1Offset" type="number" step="10" value="0"></div>
+              <div class="input-row"><label for="assuranceReferenceOffset">比較GPS時刻補正 (ms)</label><input id="assuranceReferenceOffset" type="number" step="10" value="0"></div>
+              <div class="input-row"><label for="assuranceQz1Rate">QZ1記録周期 (Hz)</label><input id="assuranceQz1Rate" type="number" min="0.1" step="0.1" value="1"></div>
+              <div class="input-row"><label for="assuranceReferenceRate">比較GPS記録周期 (Hz)</label><input id="assuranceReferenceRate" type="number" min="0.1" step="0.1" value="1"></div>
+              <div class="input-row"><label for="assuranceProfile">測量モード</label><select id="assuranceProfile"></select></div>
+              <div class="input-row">
+                <label for="assuranceMinimumGrade">判定の厳しさ</label>
+                <select id="assuranceMinimumGrade"><option value="">標準（モードの既定）</option><option value="A">厳しい（A）</option><option value="B">標準（B）</option><option value="C">緩い（C）</option></select>
+              </div>
+              <div class="input-row">
+                <label for="assuranceGridSize">判定メッシュ</label>
+                <select id="assuranceGridSize"><option value="2">2 m</option><option value="5" selected>5 m</option><option value="10">10 m</option></select>
+              </div>
+            </details>
             <div class="assurance-action-grid">
-              <button id="assuranceRecalculate" class="panel-button primary" type="button">信頼性を再計算</button>
+              <button id="assuranceRecalculate" class="panel-button primary" type="button">測量チェックを実行</button>
               <button id="assuranceClear" class="panel-button" type="button">結果だけ消去</button>
             </div>
             <div class="layer-grid">
-              <label class="filter"><input id="assuranceShowGrid" type="checkbox" checked>信頼性セル</label>
+              <label class="filter"><input id="assuranceShowGrid" type="checkbox" checked>判定メッシュ</label>
               <label class="filter"><input id="assuranceShowPairs" type="checkbox" checked>対応ペア</label>
               <label class="filter"><input id="assuranceShowQz1" type="checkbox">QZ1生点</label>
-              <label class="filter"><input id="assuranceShowReference" type="checkbox">基準生点</label>
+              <label class="filter"><input id="assuranceShowReference" type="checkbox">比較用生点</label>
             </div>
           </div>
         </details>
 
         <section class="card" data-workspace="assurance" hidden>
-          <h2>測定結果<span class="en">Measured statistics</span></h2>
-          <div class="assurance-metrics">
-            <div class="assurance-metric"><span>対応観測</span><strong id="assurancePairedCount">—</strong></div>
-            <div class="assurance-metric"><span>受信機差・中央値</span><strong id="assuranceMedianSeparation">—</strong></div>
-            <div class="assurance-metric"><span>受信機差・最大</span><strong id="assuranceMaximumSeparation">—</strong></div>
-            <div class="assurance-metric"><span>DGNSS/補強推定（全epoch）</span><strong id="assuranceAugmentationRate">—</strong></div>
-            <div class="assurance-metric"><span>QZSS測位使用（有効fix）</span><strong id="assuranceQzssUseRate">—</strong></div>
-            <div class="assurance-metric"><span>QZ1有効fix率</span><strong id="assuranceContinuity">—</strong></div>
-            <div class="assurance-metric"><span>測定済み面積</span><strong id="assuranceMeasuredArea">—</strong></div>
+          <h2>測量チェック結果<span class="en">Check result</span></h2>
+          <p id="assuranceQz1OnlyNotice" class="assurance-qz1-only-notice" role="status" aria-live="polite" hidden></p>
+          <div class="assurance-overall-card">
+            <p class="assurance-overall-label">総合判定</p>
+            <p id="assuranceOverallStatus" class="assurance-overall-status">—</p>
+            <p class="assurance-overall-label">理由</p>
+            <ul id="assuranceOverallReasons" class="assurance-overall-reasons"></ul>
           </div>
-          <h3>運用上の推奨面積<span class="en">Advisory classification</span></h3>
+          <div class="assurance-metrics">
+            <div class="assurance-metric"><span>有効な測位点</span><strong id="assuranceContinuity">—</strong></div>
+            <div class="assurance-metric"><span>GPS単独の点</span><strong id="assuranceGpsOnlyRate">—</strong></div>
+            <div class="assurance-metric"><span>DGPS/補強ありの点</span><strong id="assuranceAugmentationRate">—</strong></div>
+            <div class="assurance-metric"><span>QZSSを使った点</span><strong id="assuranceQzssUseRate">—</strong></div>
+            <div class="assurance-metric"><span>比較できた点</span><strong id="assurancePairedCount">—</strong></div>
+            <div class="assurance-metric"><span>位置差の中央値</span><strong id="assuranceMedianSeparation">—</strong></div>
+            <div class="assurance-metric"><span>位置差の最大値</span><strong id="assuranceMaximumSeparation">—</strong></div>
+            <div class="assurance-metric"><span>測量できた面積</span><strong id="assuranceMeasuredArea">—</strong></div>
+          </div>
+          <h3>使える範囲<span class="en">Advisory classification</span></h3>
           <div class="assurance-metrics">
             <div class="assurance-metric"><span>緑の面積</span><strong id="assuranceGreenArea">—</strong></div>
             <div class="assurance-metric"><span>黄の面積</span><strong id="assuranceYellowArea">—</strong></div>
             <div class="assurance-metric"><span>赤の面積</span><strong id="assuranceRedArea">—</strong></div>
             <div class="assurance-metric"><span>未測定・証拠不足</span><strong id="assuranceUnknownArea">—</strong></div>
-            <div class="assurance-metric"><span>SIMULATED</span><strong id="assuranceSimulatedArea">—</strong></div>
+            <div class="assurance-metric"><span>テスト用</span><strong id="assuranceSimulatedArea">—</strong></div>
           </div>
           <p class="meta">面積率は圃場内に切り抜いたセルから算出します。未測定位置への補間は行いません。</p>
           <div id="assuranceWarnings" class="assurance-warning-list" role="status" aria-live="polite"></div>
         </section>
 
         <section class="card" data-workspace="assurance" hidden>
-          <h2>選択した証拠<span class="en">Explainability</span></h2>
+          <h2>なぜこの判定？<span class="en">Explainability</span></h2>
           <p id="assuranceSelectedDetail" class="assurance-detail">計算後、セルまたは受信機間の線を選択してください。</p>
           <div class="assurance-upload-grid">
-            <button id="assuranceExportProject" class="panel-button export" type="button">Assurance JSONを書き出す</button>
+            <button id="assuranceExportProject" class="panel-button export" type="button">測量チェックJSONを書き出す</button>
             <label class="file-button">JSONを読み込む<input id="assuranceImportProject" type="file" accept=".json,application/json"></label>
           </div>
           <p class="meta">旧形式JSONはそのまま読み込めます。派生した信頼性結果は、読み込み時に現在の計算版で再計算してください。</p>
@@ -4333,7 +4480,7 @@
       workspacePrimaryAction.textContent = {
         decision: "実測QZ1データを表示",
         survey: "NMEAをアップロード",
-        assurance: "信頼性を再計算",
+        assurance: "測量チェックを実行",
         analysis: "解析デモを読み込む"
       }[workspace];
       document.querySelector(".panel").scrollTop = 0;
@@ -5098,10 +5245,33 @@
       });
       window.paddyIntelligence = paddyIntelligence;
       try {
+        const { FieldAnnotationController } = await import("./js/fields/field-annotation-controller.js");
+        fieldAnnotationController = new FieldAnnotationController({
+          map,
+          getParsedPoints: () => parsedPoints,
+          getPhonePoints: () => phonePoints,
+          getSourceLabel: () => activePointSource,
+          getSmartphonePosition: getSmartphoneGeolocation
+        });
+        fieldAnnotationController.mount();
+        paddyIntelligence.getFieldAnnotationExport = () => fieldAnnotationController.getExportData();
+        paddyIntelligence.onFieldAnnotationImport = (data) => fieldAnnotationController.applyImportedProject(data);
+        window.fieldAnnotationController = fieldAnnotationController;
+      } catch (error) {
+        console.error("Field annotation initialization failed", error);
+        const warning = document.getElementById("fieldCreateMessage");
+        if (warning) warning.textContent = `圃場ポリゴン作成を初期化できませんでした: ${error.message}`;
+      }
+      try {
         const { SatelliteAssuranceController } = await import("./js/assurance/satellite-assurance-controller.js");
         assuranceController = new SatelliteAssuranceController({
           map,
           getFallbackBoundary: () => activeBoundary()?.points ?? [],
+          getRegisteredSurveySessions: () => fieldAnnotationController?.surveySessions || [],
+          getRegisteredFieldRecords: () => [
+            ...(fieldAnnotationController?.fields || []),
+            ...(fieldAnnotationController?.boundaryTracks || [])
+          ],
           onFieldChanged: (field) => {
             surveyedBoundary = field.boundary.coordinates.map(([lat, lon], index) => ({
               id: field.boundary.orderedObservationIds?.[index] || `${field.id}:vertex-${index}`,
@@ -5121,7 +5291,7 @@
       } catch (error) {
         console.error("Satellite Assurance initialization failed", error);
         const warning = document.getElementById("assuranceWarnings");
-        if (warning) warning.textContent = `信頼性マップを初期化できませんでした: ${error.message}`;
+        if (warning) warning.textContent = `測量チェックを初期化できませんでした: ${error.message}`;
       }
       try {
         const { VegetationIntelligenceController } = await import("./js/vegetation/vegetation-controller.js");
@@ -5164,24 +5334,6 @@
         console.error("Field recording initialization failed", error);
         const warning = document.getElementById("recMessage");
         if (warning) warning.textContent = `フィールド記録を初期化できませんでした: ${error.message}`;
-      }
-      try {
-        const { FieldAnnotationController } = await import("./js/fields/field-annotation-controller.js");
-        fieldAnnotationController = new FieldAnnotationController({
-          map,
-          getParsedPoints: () => parsedPoints,
-          getPhonePoints: () => phonePoints,
-          getSourceLabel: () => activePointSource,
-          getSmartphonePosition: getSmartphoneGeolocation
-        });
-        fieldAnnotationController.mount();
-        paddyIntelligence.getFieldAnnotationExport = () => fieldAnnotationController.getExportData();
-        paddyIntelligence.onFieldAnnotationImport = (data) => fieldAnnotationController.applyImportedProject(data);
-        window.fieldAnnotationController = fieldAnnotationController;
-      } catch (error) {
-        console.error("Field annotation initialization failed", error);
-        const warning = document.getElementById("fieldCreateMessage");
-        if (warning) warning.textContent = `圃場ポリゴン作成を初期化できませんでした: ${error.message}`;
       }
       syncLayerVisibility();
       updateGatePanel();
