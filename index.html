@@ -1518,6 +1518,13 @@
           <div id="gpsMessage" class="gps-message" role="status" aria-live="polite" hidden></div>
         </section>
 
+        <section id="workflowGuidePanel" class="card workflow-guide" data-workspace="survey" hidden>
+          <h2>現地調査ワークフロー</h2>
+          <p id="workflowProgressLabel" class="workflow-progress-label"></p>
+          <p id="workflowNextTask" class="workflow-next-task" role="status" aria-live="polite"></p>
+          <div id="workflowStepsContainer" class="workflow-steps"></div>
+        </section>
+
         <section id="fieldRegDialog" class="card field-reg-dialog" data-workspace="survey" hidden>
           <h2>圃場として登録<span class="en">Register field</span></h2>
           <p class="meta">このNMEAログをどの圃場として登録しますか？</p>
@@ -1555,7 +1562,7 @@
           </div>
         </section>
 
-        <details class="card paddy-collapsible" data-workspace="survey" open hidden>
+        <details id="registeredFieldsPanel" class="card paddy-collapsible" data-workspace="survey" open hidden>
           <summary><span class="details-title">登録済み圃場・測量ログ<span class="en">Registered fields &amp; logs</span></span></summary>
           <div class="details-content">
           <div class="metric-grid">
@@ -1569,7 +1576,7 @@
           </div>
         </details>
 
-        <details class="card paddy-collapsible" data-workspace="survey" hidden>
+        <details id="waterControlPanel" class="card paddy-collapsible" data-workspace="survey" hidden>
           <summary><span class="details-title">水管理ポイント<span class="en">Water management points</span></span></summary>
           <div class="details-content">
             <div class="input-row">
@@ -1591,7 +1598,7 @@
           </div>
         </details>
 
-        <details class="card paddy-collapsible" data-workspace="survey" hidden>
+        <details id="fieldObservationsPanel" class="card paddy-collapsible" data-workspace="survey" hidden>
           <summary><span class="details-title">現地観察メモ<span class="en">Field observations</span></span></summary>
           <div class="details-content">
             <div class="input-row">

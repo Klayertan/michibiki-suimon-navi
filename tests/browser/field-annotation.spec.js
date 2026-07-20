@@ -561,6 +561,114 @@ test("export JSON includes rawNmeaText for a stored session, and import restores
   expect(reimportedSession.rawNmeaStored).toBe(true);
 });
 
+function workflowStep(page, id) {
+  return page.locator(`.workflow-step:has(button[data-workflow-step="${id}"])`);
+}
+
+test("現地調査ワークフロー panel appears in QZ1測量 with 0/5 progress and step 1 as the next task on a fresh load", async ({ page }) => {
+  await openSurveyWorkspace(page);
+  await expect(page.locator("#workflowGuidePanel")).toBeVisible();
+  await expect(page.locator("#workflowGuidePanel h2")).toHaveText("現地調査ワークフロー");
+  await expect(page.locator("#workflowProgressLabel")).toHaveText("進捗: 0 / 5 完了");
+  await expect(page.locator("#workflowNextTask")).toHaveText("次の作業: NMEAログをアップロードしてください。");
+  await expect(page.locator(".workflow-step")).toHaveCount(5);
+  await expect(workflowStep(page, 1)).toContainText("⬜");
+  await expect(workflowStep(page, 5).locator("button")).toBeDisabled();
+  await expect(workflowStep(page, 5)).toContainText("書き出す圃場データがありません。");
+});
+
+test("step 3 and step 4 buttons are disabled with 先に圃場を登録してください until a field exists", async ({ page }) => {
+  await openSurveyWorkspace(page);
+  await expect(workflowStep(page, 3).locator("button")).toBeDisabled();
+  await expect(workflowStep(page, 3)).toContainText("先に圃場を登録してください。");
+  await expect(workflowStep(page, 4).locator("button")).toBeDisabled();
+  await expect(workflowStep(page, 4)).toContainText("先に圃場を登録してください。");
+});
+
+test("step 3 button opens and scrolls to 水管理ポイント once a field exists", async ({ page }) => {
+  await openSurveyWorkspace(page);
+  await uploadNmea(page, TIGHT_LOOP_NMEA);
+  await page.locator("#fieldRegConfirmButton").click();
+
+  await expect(workflowStep(page, 3).locator("button")).toBeEnabled();
+  await workflowStep(page, 3).locator("button").click();
+  await expect(page.locator("#waterControlPanel")).toHaveJSProperty("open", true);
+  await expect(page.locator("#waterControlPanel")).toBeInViewport();
+});
+
+test("step 4 button opens and scrolls to 現地観察メモ once a field exists", async ({ page }) => {
+  await openSurveyWorkspace(page);
+  await uploadNmea(page, TIGHT_LOOP_NMEA);
+  await page.locator("#fieldRegConfirmButton").click();
+
+  await workflowStep(page, 4).locator("button").click();
+  await expect(page.locator("#fieldObservationsPanel")).toHaveJSProperty("open", true);
+  await expect(page.locator("#fieldObservationsPanel")).toBeInViewport();
+});
+
+test("uploading and registering a field marks steps 1-2 done, and the next task points at step 3", async ({ page }) => {
+  await openSurveyWorkspace(page);
+  await uploadNmea(page, TIGHT_LOOP_NMEA);
+  await page.locator("#fieldRegConfirmButton").click();
+
+  await expect(page.locator("#workflowProgressLabel")).toHaveText("進捗: 2 / 5 完了");
+  await expect(page.locator("#workflowNextTask")).toHaveText("次の作業: 水門・給水口・排水口を登録してください。");
+  await expect(workflowStep(page, 1)).toContainText("✅");
+  await expect(workflowStep(page, 2)).toContainText("✅");
+  await expect(workflowStep(page, 3)).toContainText("⬜");
+});
+
+test("adding a water-control point marks step 3 done, and adding an observation marks step 4 done", async ({ page }) => {
+  await openSurveyWorkspace(page);
+  await uploadNmea(page, TIGHT_LOOP_NMEA);
+  await page.locator("#fieldRegConfirmButton").click();
+
+  await page.locator("#wcpTargetFieldSelect").selectOption("paddy-001");
+  await page.locator("#wcpAddGateButton").click();
+  await page.locator("#wcpPositionCurrentButton").click();
+  await expect(page.locator("#workflowProgressLabel")).toHaveText("進捗: 3 / 5 完了");
+  await expect(workflowStep(page, 3)).toContainText("✅");
+  await expect(page.locator("#workflowNextTask")).toHaveText("次の作業: 雑草・害虫・病気などの観察メモを記録してください。");
+
+  await page.locator("#obsTargetFieldSelect").selectOption("paddy-001");
+  await page.locator("#obsAddWeedButton").click();
+  await page.locator("#obsPositionQz1Button").click();
+  await page.locator("#selFeatureSaveButton").click();
+  await expect(page.locator("#workflowProgressLabel")).toHaveText("進捗: 4 / 5 完了");
+  await expect(workflowStep(page, 4)).toContainText("✅");
+  await expect(page.locator("#workflowNextTask")).toHaveText("次の作業: 測量JSONを書き出してください。");
+});
+
+test("exporting marks step 5 done, shows the completion message, persists lastExportedAt, and the export JSON metadata carries workflow progress", async ({ page }) => {
+  await openSurveyWorkspace(page);
+  await uploadNmea(page, TIGHT_LOOP_NMEA);
+  await page.locator("#fieldRegConfirmButton").click();
+  await page.locator("#wcpTargetFieldSelect").selectOption("paddy-001");
+  await page.locator("#wcpAddGateButton").click();
+  await page.locator("#wcpPositionCurrentButton").click();
+  await page.locator("#obsTargetFieldSelect").selectOption("paddy-001");
+  await page.locator("#obsAddWeedButton").click();
+  await page.locator("#obsPositionQz1Button").click();
+  await page.locator("#selFeatureSaveButton").click();
+
+  const downloadPromise = page.waitForEvent("download");
+  await workflowStep(page, 5).locator("button").click(); // forwards to #exportAnalysisButton
+  const download = await downloadPromise;
+  const dir = await mkdtemp(path.join(tmpdir(), "field-annotation-workflow-"));
+  const exportPath = path.join(dir, "export.json");
+  await download.saveAs(exportPath);
+  const exported = JSON.parse(await readFile(exportPath, "utf8"));
+  expect(exported.metadata.workflowCompletedSteps).toBe(5);
+  expect(exported.metadata.workflowLastExportedAt).toBeTruthy();
+
+  await expect(page.locator("#workflowProgressLabel")).toHaveText("進捗: 5 / 5 完了");
+  await expect(page.locator("#workflowNextTask")).toHaveText("現地調査ワークフローは完了しています。");
+  await expect(workflowStep(page, 5)).toContainText("✅");
+
+  const stored = await page.evaluate(() => JSON.parse(localStorage.getItem("suimonNaviFieldAnnotationsV2")).workflowState);
+  expect(stored.lastExportedAt).toBeTruthy();
+});
+
 test("the advanced manual card in 詳細解析 still works and offers the same three-way closure choice", async ({ page }) => {
   await openSurveyWorkspace(page);
   await uploadNmea(page, OPEN_L_SHAPE_NMEA);

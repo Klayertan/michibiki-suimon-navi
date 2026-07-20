@@ -20,6 +20,8 @@ import {
   FEATURE_TYPE_LABELS,
   FIELD_POLYGON_STYLE,
   LOCAL_STORAGE_KEY,
+  NEEDS_EXPORT_DATA_MESSAGE,
+  NEEDS_FIELD_MESSAGE,
   OBSERVATION_STYLES,
   OBSERVATION_TYPE_LABELS,
   RAW_NMEA_SIZE_WARNING,
@@ -35,6 +37,7 @@ import {
   buildMetadata,
   buildSurveySession,
   buildWaterControlPoint,
+  computeWorkflowStatus,
   evaluateClosure,
   isObservationType,
   isWaterControlType,
@@ -73,7 +76,10 @@ const ELEMENT_IDS = [
   "fieldRegCloseWarning", "fieldRegCloseWarningText",
   "fieldRegForceCloseButton", "fieldRegSaveAsTrackButton", "fieldRegCancelCloseButton",
   // Registered fields/logs panel.
-  "registeredFieldsContainer", "registeredListMessage",
+  "registeredFieldsContainer", "registeredListMessage", "registeredFieldsPanel",
+  // 現地調査ワークフロー guide panel.
+  "workflowGuidePanel", "workflowProgressLabel", "workflowNextTask", "workflowStepsContainer",
+  "fileInput", "exportAnalysisButton", "waterControlPanel", "fieldObservationsPanel",
   // Water-management-point add workflow.
   "wcpTargetFieldSelect", "wcpAddGateButton", "wcpAddInletButton", "wcpAddOutletButton",
   "wcpAddSensorButton", "wcpAddPhotoButton", "wcpPositionCurrentButton", "wcpPositionMapClickButton",
@@ -108,6 +114,7 @@ export class FieldAnnotationController {
     this.waterControlPoints = [];
     this.surveySessions = [];
     this.fieldObservations = [];
+    this.workflowState = { lastExportedAt: null };
 
     this.selected = null; // { kind: "field" | "track" | "point" | "observation", record }
     this.pendingUploadRegistration = null; // gathered inputs awaiting a closure decision
@@ -196,6 +203,9 @@ export class FieldAnnotationController {
 
     // Registered fields/logs panel (event delegation — rows are rebuilt on render).
     el.registeredFieldsContainer?.addEventListener("click", (event) => this.handleRegisteredListClick(event));
+
+    // 現地調査ワークフロー guide (event delegation — steps are rebuilt on render).
+    el.workflowStepsContainer?.addEventListener("click", (event) => this.handleWorkflowStepClick(event));
   }
 
   // -------------------------------------------------------------------------
@@ -217,6 +227,7 @@ export class FieldAnnotationController {
       this.waterControlPoints = this.rehydrateWaterControlPoints(parsed.waterControlPoints);
       this.surveySessions = this.rehydrateSurveySessions(parsed.surveySessions);
       this.fieldObservations = this.rehydrateFieldObservations(parsed.fieldObservations);
+      this.workflowState = parsed.workflowState;
     } catch {
       // Corrupted localStorage must never crash the app — start empty.
       this.fields = [];
@@ -224,6 +235,7 @@ export class FieldAnnotationController {
       this.waterControlPoints = [];
       this.surveySessions = [];
       this.fieldObservations = [];
+      this.workflowState = { lastExportedAt: null };
     }
   }
 
@@ -297,7 +309,8 @@ export class FieldAnnotationController {
         boundaryTracks: this.boundaryTracks,
         waterControlPoints: this.waterControlPoints,
         surveySessions: this.surveySessions,
-        fieldObservations: this.fieldObservations
+        fieldObservations: this.fieldObservations,
+        workflowState: this.workflowState
       }));
     } catch {
       // Quota exceeded / private-browsing storage denial: keep working
@@ -959,6 +972,104 @@ export class FieldAnnotationController {
   }
 
   // -------------------------------------------------------------------------
+  // 現地調査ワークフロー guide panel (QZ1測量 progress checklist)
+  // -------------------------------------------------------------------------
+
+  renderWorkflowPanel() {
+    const el = this.elements;
+    if (!el.workflowStepsContainer) {
+      return;
+    }
+    const status = this.computeWorkflowSnapshot();
+    setText(el.workflowProgressLabel, status.progressLabel);
+    setText(el.workflowNextTask, status.nextTaskLine);
+
+    const hasField = this.fields.length > 0;
+    const hasExportableData = hasField || this.boundaryTracks.length > 0 || this.surveySessions.length > 0;
+    const disabledMessageByStep = { 3: hasField ? null : NEEDS_FIELD_MESSAGE, 4: hasField ? null : NEEDS_FIELD_MESSAGE, 5: hasExportableData ? null : NEEDS_EXPORT_DATA_MESSAGE };
+
+    el.workflowStepsContainer.replaceChildren();
+    status.steps.forEach((step) => {
+      el.workflowStepsContainer.append(this.buildWorkflowStepCard(step, status.nextStepId, disabledMessageByStep[step.id]));
+    });
+  }
+
+  buildWorkflowStepCard(step, nextStepId, disabledMessage) {
+    const card = document.createElement("div");
+    card.className = "workflow-step";
+    card.classList.toggle("done", step.done);
+    card.classList.toggle("current", !step.done && step.id === nextStepId);
+    card.classList.toggle("locked", Boolean(disabledMessage));
+
+    const icon = document.createElement("span");
+    icon.className = "workflow-step-icon";
+    icon.setAttribute("aria-hidden", "true");
+    icon.textContent = step.done ? "✅" : "⬜";
+
+    const body = document.createElement("div");
+    body.className = "workflow-step-body";
+    const title = document.createElement("p");
+    title.className = "workflow-step-title";
+    title.textContent = `${step.id}. ${step.title}`;
+    const description = document.createElement("p");
+    description.className = "workflow-step-description";
+    description.textContent = step.description;
+    body.append(title, description);
+
+    if (disabledMessage) {
+      const note = document.createElement("p");
+      note.className = "workflow-step-note";
+      note.textContent = disabledMessage;
+      body.append(note);
+    }
+
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "panel-button";
+    button.textContent = step.actionLabel;
+    button.dataset.workflowStep = String(step.id);
+    button.disabled = Boolean(disabledMessage);
+    body.append(button);
+
+    card.append(icon, body);
+    return card;
+  }
+
+  handleWorkflowStepClick(event) {
+    const button = event.target.closest("button[data-workflow-step]");
+    if (!button || button.disabled) {
+      return;
+    }
+    const el = this.elements;
+    switch (button.dataset.workflowStep) {
+      case "1":
+        el.fileInput?.scrollIntoView({ block: "center" });
+        el.fileInput?.focus();
+        break;
+      case "2":
+        el.registeredFieldsPanel?.scrollIntoView({ block: "start" });
+        break;
+      case "3":
+        if (el.waterControlPanel) {
+          el.waterControlPanel.open = true;
+          el.waterControlPanel.scrollIntoView({ block: "start" });
+        }
+        break;
+      case "4":
+        if (el.fieldObservationsPanel) {
+          el.fieldObservationsPanel.open = true;
+          el.fieldObservationsPanel.scrollIntoView({ block: "start" });
+        }
+        break;
+      case "5":
+        el.exportAnalysisButton?.click();
+        break;
+      default:
+        break;
+    }
+  }
+
+  // -------------------------------------------------------------------------
   // Rendering
   // -------------------------------------------------------------------------
 
@@ -974,6 +1085,7 @@ export class FieldAnnotationController {
     this.renderFieldTargetOptions(this.elements.obsTargetFieldSelect);
     this.updateObservationButtonStates();
     this.renderSelectedFeature();
+    this.renderWorkflowPanel();
   }
 
   renderMapLayers() {
@@ -1347,8 +1459,30 @@ export class FieldAnnotationController {
   // Export / import (paddy-intelligence.js optional hooks)
   // -------------------------------------------------------------------------
 
+  /** Shared by getExportData() and the 現地調査ワークフロー panel so both read the same live counts. */
+  computeWorkflowSnapshot() {
+    const measurements = this.getParsedPoints() || [];
+    return computeWorkflowStatus({
+      surveySessionCount: this.surveySessions.length,
+      measurementCount: measurements.length,
+      fieldCount: this.fields.length,
+      boundaryTrackCount: this.boundaryTracks.length,
+      waterControlPointCount: this.waterControlPoints.length,
+      fieldObservationCount: this.fieldObservations.length,
+      lastExportedAt: this.workflowState.lastExportedAt
+    });
+  }
+
   getExportData() {
     const measurements = this.getParsedPoints() || [];
+    // Calling getExportData() *is* the export action (paddy-intelligence.js
+    // calls this the instant the user clicks a JSON-export button), so this
+    // is the correct place to mark 現地調査ワークフロー's step 5 done.
+    const exportedAt = new Date().toISOString();
+    this.workflowState.lastExportedAt = exportedAt;
+    this.persist();
+    const status = this.computeWorkflowSnapshot();
+    this.renderWorkflowPanel();
     return {
       fields: this.fields,
       boundaryTracks: this.boundaryTracks,
@@ -1358,9 +1492,11 @@ export class FieldAnnotationController {
       measurements,
       metadata: {
         ...buildMetadata({ sourceFileName: this.getSourceLabel?.() || null, points: measurements }),
-        exportedAt: new Date().toISOString(),
+        exportedAt,
         appName: "スイスイナビ",
-        dataMode: "real_user_data"
+        dataMode: "real_user_data",
+        workflowCompletedSteps: status.completedCount,
+        workflowLastExportedAt: exportedAt
       }
     };
   }
@@ -1372,6 +1508,7 @@ export class FieldAnnotationController {
     this.waterControlPoints = this.rehydrateWaterControlPoints(normalized.waterControlPoints);
     this.surveySessions = this.rehydrateSurveySessions(normalized.surveySessions);
     this.fieldObservations = this.rehydrateFieldObservations(normalized.fieldObservations);
+    this.workflowState = normalized.workflowState;
     this.persist();
     this.clearSelection();
     this.renderAll();

@@ -424,7 +424,7 @@ export function buildMetadata({ sourceFileName = null, points = [], nowIso = new
 export function emptyPersistedStore() {
   return {
     schemaVersion: SCHEMA_VERSION, fields: [], boundaryTracks: [], waterControlPoints: [],
-    surveySessions: [], fieldObservations: []
+    surveySessions: [], fieldObservations: [], workflowState: { lastExportedAt: null }
   };
 }
 
@@ -444,6 +444,84 @@ export function normalizePersistedStore(raw) {
     boundaryTracks: Array.isArray(raw.boundaryTracks) ? raw.boundaryTracks : [],
     waterControlPoints: Array.isArray(raw.waterControlPoints) ? raw.waterControlPoints : [],
     surveySessions: Array.isArray(raw.surveySessions) ? raw.surveySessions : [],
-    fieldObservations: Array.isArray(raw.fieldObservations) ? raw.fieldObservations : []
+    fieldObservations: Array.isArray(raw.fieldObservations) ? raw.fieldObservations : [],
+    // Falls back to metadata.workflowLastExportedAt (the shape a previously
+    // exported project JSON carries it in — it has no top-level
+    // workflowState key of its own) so re-importing an export doesn't
+    // regress step 5 back to "not done".
+    workflowState: {
+      lastExportedAt: typeof raw.workflowState?.lastExportedAt === "string"
+        ? raw.workflowState.lastExportedAt
+        : (typeof raw.metadata?.workflowLastExportedAt === "string" ? raw.metadata.workflowLastExportedAt : null)
+    }
+  };
+}
+
+// -------------------------------------------------------------------------
+// 現地調査ワークフロー guide (QZ1測量 progress checklist)
+// -------------------------------------------------------------------------
+
+export const WORKFLOW_STEPS = [
+  {
+    id: 1, title: "NMEAログをアップロード", actionLabel: "NMEAをアップロード",
+    description: "QZ1/NMEAログを読み込み、測位点を確認します。"
+  },
+  {
+    id: 2, title: "圃場として登録", actionLabel: "登録済み圃場を確認",
+    description: "測位点を圃場ポリゴンまたは境界トラックとして登録します。"
+  },
+  {
+    id: 3, title: "水門・給水口・排水口を登録", actionLabel: "水管理ポイントを追加",
+    description: "水門・給水口・排水口・水位センサ位置を地図上に登録します。"
+  },
+  {
+    id: 4, title: "雑草・害虫・病気などを記録", actionLabel: "観察メモを追加",
+    description: "雑草・害虫・病気・水不足などの現地観察メモを記録します。"
+  },
+  {
+    id: 5, title: "JSONを書き出し", actionLabel: "測量JSONを書き出し",
+    description: "圃場・測量ログ・水管理ポイント・観察メモをJSONとして保存します。"
+  }
+];
+
+const NEXT_TASK_MESSAGES = [
+  "NMEAログをアップロードしてください。",
+  "測位点を圃場として登録してください。",
+  "水門・給水口・排水口を登録してください。",
+  "雑草・害虫・病気などの観察メモを記録してください。",
+  "測量JSONを書き出してください。"
+];
+
+const WORKFLOW_COMPLETE_MESSAGE = "現地調査ワークフローは完了しています。";
+export const NEEDS_FIELD_MESSAGE = "先に圃場を登録してください。";
+export const NEEDS_EXPORT_DATA_MESSAGE = "書き出す圃場データがありません。";
+
+/**
+ * Derives the five-step 現地調査ワークフロー checklist from live app state.
+ * Pure and side-effect-free so it can be unit-tested and re-run on every
+ * render without worrying about staleness.
+ */
+export function computeWorkflowStatus({
+  surveySessionCount = 0, measurementCount = 0, fieldCount = 0, boundaryTrackCount = 0,
+  waterControlPointCount = 0, fieldObservationCount = 0, lastExportedAt = null
+} = {}) {
+  const done = [
+    surveySessionCount > 0 || measurementCount > 0,
+    fieldCount > 0 || boundaryTrackCount > 0,
+    waterControlPointCount > 0,
+    fieldObservationCount > 0,
+    Boolean(lastExportedAt)
+  ];
+  const completedCount = done.filter(Boolean).length;
+  const nextIndex = done.findIndex((value) => !value);
+  const isComplete = nextIndex === -1;
+  return {
+    steps: WORKFLOW_STEPS.map((step, index) => ({ ...step, done: done[index] })),
+    completedCount,
+    totalSteps: WORKFLOW_STEPS.length,
+    isComplete,
+    nextStepId: isComplete ? null : WORKFLOW_STEPS[nextIndex].id,
+    progressLabel: `進捗: ${completedCount} / ${WORKFLOW_STEPS.length} 完了`,
+    nextTaskLine: isComplete ? WORKFLOW_COMPLETE_MESSAGE : `次の作業: ${NEXT_TASK_MESSAGES[nextIndex]}`
   };
 }
