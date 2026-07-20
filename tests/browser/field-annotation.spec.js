@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { readFile, mkdtemp } from "node:fs/promises";
+import { readFile, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -23,6 +23,13 @@ const OPEN_L_SHAPE_NMEA = [
 ].join("\r\n");
 
 const REAL_DATA_MEMO = "2026/07/19 QZ1徒歩測量。圃場境界の一部を測定。次回、全周測量予定。";
+
+// TIGHT_LOOP_NMEA plus enough padding (non-GGA, safely ignored by the
+// parser) to push the raw file text past MAX_RAW_NMEA_STORAGE_BYTES
+// (2,000,000 bytes) while keeping parsedPoints at exactly 5, so the upload
+// still registers a valid field polygon quickly.
+const PADDING_LINE = "NOOP padding line to inflate file size for the large-file storage test\r\n";
+const OVERSIZED_NMEA = TIGHT_LOOP_NMEA + "\r\n" + PADDING_LINE.repeat(Math.ceil(2_100_000 / PADDING_LINE.length));
 
 async function openSurveyWorkspace(page) {
   await page.goto("/#survey");
@@ -462,6 +469,96 @@ test("export JSON includes fieldObservations with type/severity/memo/fieldId pre
   expect(obs.properties.memo).toBe("畦道側に雑草が多い");
   expect(obs.properties.createdAt).toBeTruthy();
   expect(exported.metadata.dataMode).toBe("real_user_data");
+});
+
+test("a small NMEA upload stores rawNmeaText, and the registered card shows 保存済み and the line count", async ({ page }) => {
+  await openSurveyWorkspace(page);
+  await uploadNmea(page, TIGHT_LOOP_NMEA, "walk.txt");
+  await page.locator("#fieldRegConfirmButton").click();
+
+  const session = await page.evaluate(() => window.fieldAnnotationController.surveySessions[0]);
+  expect(session.rawNmeaStored).toBe(true);
+  expect(session.rawNmeaText).toContain("$GNGGA,120000.00");
+  expect(session.rawNmeaLineCount).toBe(5);
+  expect(session.rawNmeaStorageReason).toBeNull();
+  expect(session.uploadedAt).toBeTruthy();
+
+  await expect(page.locator("#registeredFieldsContainer")).toContainText("元NMEA");
+  await expect(page.locator("#registeredFieldsContainer")).toContainText("保存済み");
+  await expect(page.locator("#registeredFieldsContainer")).toContainText("行数");
+  await expect(page.locator("#registeredFieldsContainer")).toContainText("5");
+  await expect(page.locator("button", { hasText: "元NMEAを書き出し" })).toBeVisible();
+});
+
+test("an oversized NMEA upload does not store rawNmeaText, shows the exact size warning, and the card shows 未保存（サイズ超過）", async ({ page }) => {
+  await openSurveyWorkspace(page);
+  await uploadNmea(page, OVERSIZED_NMEA, "big-walk.txt");
+  await page.locator("#fieldRegConfirmButton").click({ timeout: 30_000 });
+
+  const session = await page.evaluate(() => window.fieldAnnotationController.surveySessions[0]);
+  expect(session.rawNmeaStored).toBe(false);
+  expect(session.rawNmeaText).toBeNull();
+  expect(session.rawNmeaStorageReason).toBe("size_limit");
+  expect(session.rawNmeaLineCount).toBeGreaterThan(5);
+
+  await expect(page.locator("#registeredListMessage")).toContainText(
+    "NMEAログが大きいため、元ファイル全文は保存せず、解析済みデータのみ保存しました。"
+  );
+  await expect(page.locator("#registeredFieldsContainer")).toContainText("未保存（サイズ超過）");
+  await expect(page.locator("button", { hasText: "元NMEAを書き出し" })).toHaveCount(0);
+});
+
+test("元NMEAを書き出し downloads the exact original NMEA text when it was stored", async ({ page }) => {
+  await openSurveyWorkspace(page);
+  await uploadNmea(page, TIGHT_LOOP_NMEA, "walk.txt");
+  await page.locator("#fieldRegConfirmButton").click();
+
+  const downloadPromise = page.waitForEvent("download");
+  await page.locator("button", { hasText: "元NMEAを書き出し" }).click();
+  const download = await downloadPromise;
+  const dir = await mkdtemp(path.join(tmpdir(), "field-annotation-raw-nmea-"));
+  const savedPath = path.join(dir, "raw.txt");
+  await download.saveAs(savedPath);
+  const savedText = await readFile(savedPath, "utf8");
+  expect(savedText).toBe(TIGHT_LOOP_NMEA);
+  expect(download.suggestedFilename()).toBe("walk.txt");
+});
+
+test("export JSON includes rawNmeaText for a stored session, and import restores it", async ({ page }) => {
+  await openSurveyWorkspace(page);
+  await uploadNmea(page, TIGHT_LOOP_NMEA, "walk.txt");
+  await page.locator("#fieldRegConfirmButton").click();
+
+  await page.getByRole("button", { name: "詳細解析" }).click();
+  await page.evaluate(() => {
+    document.querySelectorAll("details[data-workspace='analysis']").forEach((card) => { card.open = true; });
+  });
+  const downloadPromise = page.waitForEvent("download");
+  await page.locator("#exportAnalysisButton").click();
+  const download = await downloadPromise;
+  const dir = await mkdtemp(path.join(tmpdir(), "field-annotation-raw-nmea-export-"));
+  const exportPath = path.join(dir, "export.json");
+  await download.saveAs(exportPath);
+  const exported = JSON.parse(await readFile(exportPath, "utf8"));
+
+  expect(exported.surveySessions).toHaveLength(1);
+  const exportedSession = exported.surveySessions[0];
+  expect(exportedSession.rawNmeaText).toBe(TIGHT_LOOP_NMEA);
+  expect(exportedSession.rawNmeaStored).toBe(true);
+  expect(exportedSession.rawNmeaLineCount).toBe(5);
+
+  // A fresh reload (empty localStorage) followed by re-importing the same
+  // export file must restore rawNmeaText, not just the parsed points.
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
+  await page.getByRole("button", { name: "詳細解析" }).click();
+  await page.evaluate(() => {
+    document.querySelectorAll("details[data-workspace='analysis']").forEach((card) => { card.open = true; });
+  });
+  await page.locator("#paddyImportInput").setInputFiles(exportPath);
+  const reimportedSession = await page.evaluate(() => window.fieldAnnotationController.surveySessions[0]);
+  expect(reimportedSession.rawNmeaText).toBe(TIGHT_LOOP_NMEA);
+  expect(reimportedSession.rawNmeaStored).toBe(true);
 });
 
 test("the advanced manual card in 詳細解析 still works and offers the same three-way closure choice", async ({ page }) => {

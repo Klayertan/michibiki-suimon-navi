@@ -1564,6 +1564,7 @@
             <div class="metric"><span>水利ポイント数</span><strong id="fieldAnnotationSummaryPoints">0</strong></div>
             <div class="metric"><span>観察記録数</span><strong id="fieldAnnotationSummaryObservations">0</strong></div>
           </div>
+          <p id="registeredListMessage" class="meta" role="status" aria-live="polite"></p>
           <div id="registeredFieldsContainer"></div>
           </div>
         </details>
@@ -4969,9 +4970,10 @@
       if (!file) {
         return;
       }
-      const loaded = applyNmeaText(await file.text(), file.name);
+      const rawText = await file.text();
+      const loaded = applyNmeaText(rawText, file.name);
       if (loaded) {
-        fieldAnnotationController?.handleNmeaUploaded({ points: parsedPoints, fileName: file.name });
+        fieldAnnotationController?.handleNmeaUploaded({ points: parsedPoints, fileName: file.name, rawText });
       }
       fileInput.value = "";
     });

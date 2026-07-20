@@ -24,6 +24,12 @@ export const SCHEMA_VERSION = 3;
 export const DEFAULT_AUTO_CLOSE_THRESHOLD_M = 5;
 export const LOCAL_STORAGE_KEY = "suimonNaviFieldAnnotationsV2";
 
+// Above this size, the original NMEA file text is dropped from the survey
+// session (parsed points/metadata are always kept regardless) to avoid
+// blowing the localStorage quota with a single large log.
+export const MAX_RAW_NMEA_STORAGE_BYTES = 2_000_000;
+export const RAW_NMEA_SIZE_WARNING = "NMEAログが大きいため、元ファイル全文は保存せず、解析済みデータのみ保存しました。";
+
 export const WATER_CONTROL_TYPE_LABELS = {
   gate: "水門",
   inlet: "給水口",
@@ -294,17 +300,49 @@ export function waterControlInternalType(point) {
   return normalizeWaterControlType(point?.type);
 }
 
+/** Number of non-empty lines in a raw NMEA text, counted the same way the file was split for parsing. */
+export function countNmeaLines(text) {
+  if (!text) {
+    return 0;
+  }
+  return text.split(/\r\n|\r|\n/).filter((line) => line.length > 0).length;
+}
+
+/**
+ * Decides whether a raw NMEA text is small enough to persist alongside the
+ * survey session. Always reports the line count (cheap, useful even when
+ * the text itself is dropped); only refuses storage — never parsing or
+ * registration — when the text exceeds maxBytes.
+ */
+export function decideRawNmeaStorage(rawText, maxBytes = MAX_RAW_NMEA_STORAGE_BYTES) {
+  if (!rawText) {
+    return { stored: false, text: null, lineCount: 0, reason: null };
+  }
+  const lineCount = countNmeaLines(rawText);
+  const byteLength = new TextEncoder().encode(rawText).length;
+  if (byteLength > maxBytes) {
+    return { stored: false, text: null, lineCount, reason: "size_limit" };
+  }
+  return { stored: true, text: rawText, lineCount, reason: null };
+}
+
 export function buildSurveySession({
   id, name, fieldId = null, sourceFileName = null, rawPoints = [],
-  measurementType, nowIso = new Date().toISOString()
+  measurementType, rawNmeaText = null, uploadedAt = null, nowIso = new Date().toISOString()
 }) {
+  const rawNmea = decideRawNmeaStorage(rawNmeaText);
   return {
     id: String(id),
     name: String(name || ""),
     fieldId: fieldId || null,
     sourceFileName: sourceFileName || null,
     rawPoints: rawPoints.slice(),
+    rawNmeaText: rawNmea.text,
+    rawNmeaLineCount: rawNmea.lineCount,
+    rawNmeaStored: rawNmea.stored,
+    rawNmeaStorageReason: rawNmea.reason,
     createdAt: nowIso,
+    uploadedAt: uploadedAt || null,
     measurementType: MEASUREMENT_TYPE_LABELS[measurementType] ? measurementType : "field_polygon"
   };
 }

@@ -4,8 +4,10 @@ import {
   CLOSE_WARNING_MESSAGE,
   DEFAULT_AUTO_CLOSE_THRESHOLD_M,
   FEATURE_TYPE_LABELS,
+  MAX_RAW_NMEA_STORAGE_BYTES,
   MEASUREMENT_TYPE_LABELS,
   OBSERVATION_TYPE_LABELS,
+  RAW_NMEA_SIZE_WARNING,
   SCHEMA_VERSION,
   SEVERITY_LABELS,
   UPLOAD_CLOSE_WARNING_MESSAGE,
@@ -16,6 +18,8 @@ import {
   buildMetadata,
   buildSurveySession,
   buildWaterControlPoint,
+  countNmeaLines,
+  decideRawNmeaStorage,
   distanceMeters,
   emptyPersistedStore,
   evaluateClosure,
@@ -206,10 +210,73 @@ test("buildSurveySession preserves raw points and a valid measurementType, defau
   assert.equal(session.measurementType, "boundary_track");
   assert.equal(session.rawPoints.length, 1);
   assert.notEqual(session.rawPoints, points, "rawPoints is copied, not aliased");
+  assert.equal(session.rawNmeaText, null, "no rawNmeaText was ever provided for this session");
+  assert.equal(session.rawNmeaStored, false);
+  assert.equal(session.rawNmeaStorageReason, null, "not a size_limit refusal, simply never provided");
+  assert.equal(session.rawNmeaLineCount, 0);
+  assert.equal(session.uploadedAt, null);
 
   const invalidType = buildSurveySession({ id: "survey-x", name: "x", rawPoints: [], measurementType: "not-real" });
   assert.equal(invalidType.measurementType, "field_polygon", "invalid measurementType falls back, never invented");
   assert.deepEqual(Object.keys(MEASUREMENT_TYPE_LABELS), ["field_polygon", "boundary_track", "water_points"]);
+});
+
+test("decideRawNmeaStorage keeps small NMEA text and drops text over the byte cap, but always reports the line count", () => {
+  const small = "$GNGGA,1\n$GNGGA,2\n$GNGGA,3\n";
+  const smallResult = decideRawNmeaStorage(small, 1000);
+  assert.equal(smallResult.stored, true);
+  assert.equal(smallResult.text, small);
+  assert.equal(smallResult.lineCount, 3);
+  assert.equal(smallResult.reason, null);
+
+  const large = "$GNGGA,1\n".repeat(200);
+  const largeResult = decideRawNmeaStorage(large, 100);
+  assert.equal(largeResult.stored, false);
+  assert.equal(largeResult.text, null, "oversized text is dropped, not truncated silently");
+  assert.equal(largeResult.lineCount, 200, "line count is still reported even when the text itself is dropped");
+  assert.equal(largeResult.reason, "size_limit");
+
+  const missing = decideRawNmeaStorage(null, 1000);
+  assert.equal(missing.stored, false);
+  assert.equal(missing.lineCount, 0);
+  assert.equal(missing.reason, null, "no text at all is not a size_limit refusal");
+
+  assert.equal(MAX_RAW_NMEA_STORAGE_BYTES, 2_000_000);
+  assert.equal(RAW_NMEA_SIZE_WARNING, "NMEAログが大きいため、元ファイル全文は保存せず、解析済みデータのみ保存しました。");
+});
+
+test("countNmeaLines counts non-empty lines across \\n, \\r\\n and \\r line endings", () => {
+  assert.equal(countNmeaLines(""), 0);
+  assert.equal(countNmeaLines(null), 0);
+  assert.equal(countNmeaLines("a\nb\nc"), 3);
+  assert.equal(countNmeaLines("a\r\nb\r\nc\r\n"), 3);
+  assert.equal(countNmeaLines("a\n\nb"), 2, "blank lines are not counted");
+});
+
+test("buildSurveySession stores small rawNmeaText and refuses+warns on oversized text, preserving uploadedAt only when text was given", () => {
+  const smallText = "$GNGGA,120000.00,3439.2880,N,13549.7892,E,1,8,1.1,45.0,M,30.0,M,,*7A\n";
+  const stored = buildSurveySession({
+    id: "survey-small", name: "圃場1 測量", fieldId: "paddy-001", sourceFileName: "walk.txt",
+    rawPoints: [{ lat: 34, lon: 135 }], measurementType: "field_polygon",
+    rawNmeaText: smallText, uploadedAt: "2026-07-20T10:00:00+09:00", nowIso: "2026-07-20T10:00:00+09:00"
+  });
+  assert.equal(stored.rawNmeaText, smallText);
+  assert.equal(stored.rawNmeaStored, true);
+  assert.equal(stored.rawNmeaStorageReason, null);
+  assert.equal(stored.rawNmeaLineCount, 1);
+  assert.equal(stored.uploadedAt, "2026-07-20T10:00:00+09:00");
+
+  const oversizedText = "$GNGGA,test line padding for size*00\n".repeat(60_000); // well over MAX_RAW_NMEA_STORAGE_BYTES
+  const refused = buildSurveySession({
+    id: "survey-large", name: "圃場2 測量", fieldId: "paddy-002", sourceFileName: "big.txt",
+    rawPoints: [], measurementType: "field_polygon",
+    rawNmeaText: oversizedText, uploadedAt: "2026-07-20T10:05:00+09:00"
+  });
+  assert.equal(refused.rawNmeaText, null);
+  assert.equal(refused.rawNmeaStored, false);
+  assert.equal(refused.rawNmeaStorageReason, "size_limit");
+  assert.equal(refused.rawNmeaLineCount, 60_000);
+  assert.equal(refused.uploadedAt, "2026-07-20T10:05:00+09:00", "uploadedAt is preserved even when the text itself is refused");
 });
 
 test("polygonAreaSquareMeters returns a plausible area for a known square and 0 for degenerate input", () => {

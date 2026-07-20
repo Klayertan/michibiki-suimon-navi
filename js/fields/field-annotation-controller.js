@@ -22,6 +22,7 @@ import {
   LOCAL_STORAGE_KEY,
   OBSERVATION_STYLES,
   OBSERVATION_TYPE_LABELS,
+  RAW_NMEA_SIZE_WARNING,
   SCHEMA_VERSION,
   SEVERITY_LABELS,
   SEVERITY_MARKER_RADIUS,
@@ -72,7 +73,7 @@ const ELEMENT_IDS = [
   "fieldRegCloseWarning", "fieldRegCloseWarningText",
   "fieldRegForceCloseButton", "fieldRegSaveAsTrackButton", "fieldRegCancelCloseButton",
   // Registered fields/logs panel.
-  "registeredFieldsContainer",
+  "registeredFieldsContainer", "registeredListMessage",
   // Water-management-point add workflow.
   "wcpTargetFieldSelect", "wcpAddGateButton", "wcpAddInletButton", "wcpAddOutletButton",
   "wcpAddSensorButton", "wcpAddPhotoButton", "wcpPositionCurrentButton", "wcpPositionMapClickButton",
@@ -214,7 +215,7 @@ export class FieldAnnotationController {
       this.fields = parsed.fields;
       this.boundaryTracks = parsed.boundaryTracks;
       this.waterControlPoints = this.rehydrateWaterControlPoints(parsed.waterControlPoints);
-      this.surveySessions = parsed.surveySessions;
+      this.surveySessions = this.rehydrateSurveySessions(parsed.surveySessions);
       this.fieldObservations = this.rehydrateFieldObservations(parsed.fieldObservations);
     } catch {
       // Corrupted localStorage must never crash the app — start empty.
@@ -265,6 +266,26 @@ export class FieldAnnotationController {
     }));
   }
 
+  /**
+   * Re-runs stored/imported survey sessions through the builder so the
+   * MAX_RAW_NMEA_STORAGE_BYTES cap is re-enforced regardless of where the
+   * data came from (an oversized rawNmeaText must never round-trip back
+   * into localStorage just because it was already present in an import).
+   */
+  rehydrateSurveySessions(rawSessions) {
+    return (rawSessions || []).map((session) => buildSurveySession({
+      id: session.id,
+      name: session.name,
+      fieldId: session.fieldId,
+      sourceFileName: session.sourceFileName,
+      rawPoints: session.rawPoints,
+      measurementType: session.measurementType,
+      rawNmeaText: session.rawNmeaText,
+      uploadedAt: session.uploadedAt,
+      nowIso: session.createdAt
+    }));
+  }
+
   persist() {
     if (!this.storage) {
       return;
@@ -289,7 +310,7 @@ export class FieldAnnotationController {
   // -------------------------------------------------------------------------
 
   /** Called by index.html right after a successful NMEA parse. */
-  handleNmeaUploaded({ points, fileName }) {
+  handleNmeaUploaded({ points, fileName, rawText }) {
     if (!this.elements.fieldRegDialog) {
       return;
     }
@@ -307,7 +328,7 @@ export class FieldAnnotationController {
     el.fieldRegDialog.hidden = false;
     el.fieldRegDialog.dataset.fileName = fileName || "";
     el.fieldRegDialog.scrollIntoView({ block: "nearest" });
-    this.pendingUploadRegistration = { rawPoints: validPoints, fileName: fileName || null };
+    this.pendingUploadRegistration = { rawPoints: validPoints, fileName: fileName || null, rawText: rawText || null };
   }
 
   selectedMeasurementType() {
@@ -342,7 +363,7 @@ export class FieldAnnotationController {
     const coordinates = pending.rawPoints.map((point) => [Number(point.lat), Number(point.lon)]);
     const context = {
       name, id, memo, measurementType,
-      rawPoints: pending.rawPoints, coordinates, fileName: pending.fileName,
+      rawPoints: pending.rawPoints, coordinates, fileName: pending.fileName, rawNmeaText: pending.rawText,
       dialog: "upload"
     };
 
@@ -412,11 +433,27 @@ export class FieldAnnotationController {
   // Registration outcomes (shared by upload dialog + manual card + closure resolution)
   // -------------------------------------------------------------------------
 
-  registerFieldPolygon({ name, id, memo, coordinates, rawPoints, fileName, gapM, closedManually }) {
+  /**
+   * Appends the size-limit warning when the session's raw NMEA text was too
+   * large to persist, and mirrors it into the always-visible registered-list
+   * message area — the upload dialog's own message hides with the dialog
+   * right after a successful registration, so that alone isn't enough.
+   */
+  withRawNmeaWarning(message, session) {
+    if (session.rawNmeaStorageReason !== "size_limit") {
+      this.setRegisteredListMessage("");
+      return message;
+    }
+    this.setRegisteredListMessage(RAW_NMEA_SIZE_WARNING);
+    return `${message} ${RAW_NMEA_SIZE_WARNING}`;
+  }
+
+  registerFieldPolygon({ name, id, memo, coordinates, rawPoints, fileName, rawNmeaText, gapM, closedManually }) {
     const sessionId = makeSurveySessionId();
+    const uploadedAt = new Date().toISOString();
     const session = buildSurveySession({
       id: sessionId, name: `${name} 測量`, fieldId: id, sourceFileName: fileName,
-      rawPoints, measurementType: "field_polygon"
+      rawPoints, measurementType: "field_polygon", rawNmeaText, uploadedAt: rawNmeaText ? uploadedAt : null
     });
     const field = buildField({
       id, name, coordinates, memo, gapM, closedManually,
@@ -426,19 +463,21 @@ export class FieldAnnotationController {
     this.surveySessions.push(session);
     this.fields.push(field);
     this.persist();
-    this.setFieldRegMessage(`${field.name}（${field.id}）を圃場ポリゴンとして登録しました。`);
-    this.setFieldCreateMessage(`${field.name}（${field.id}）を圃場ポリゴンとして登録しました。`);
+    const message = this.withRawNmeaWarning(`${field.name}（${field.id}）を圃場ポリゴンとして登録しました。`, session);
+    this.setFieldRegMessage(message);
+    this.setFieldCreateMessage(message);
     this.cancelUploadRegistration();
     this.cancelManualClosure();
     this.selectFeature("field", field);
     this.renderAll();
   }
 
-  registerBoundaryTrack({ name, id, memo, coordinates, rawPoints, fileName, dialog }) {
+  registerBoundaryTrack({ name, id, memo, coordinates, rawPoints, fileName, rawNmeaText, dialog }) {
     const sessionId = makeSurveySessionId();
+    const uploadedAt = new Date().toISOString();
     const session = buildSurveySession({
       id: sessionId, name: `${name} 測量`, fieldId: id, sourceFileName: fileName,
-      rawPoints, measurementType: "boundary_track"
+      rawPoints, measurementType: "boundary_track", rawNmeaText, uploadedAt: rawNmeaText ? uploadedAt : null
     });
     const trackId = nextBoundaryTrackId(id, this.boundaryTracks.filter((track) => track.fieldId === id).length);
     const track = buildBoundaryTrack({
@@ -448,7 +487,7 @@ export class FieldAnnotationController {
     this.surveySessions.push(session);
     this.boundaryTracks.push(track);
     this.persist();
-    const message = `${track.name}（${track.id}）を境界トラックとして登録しました。`;
+    const message = this.withRawNmeaWarning(`${track.name}（${track.id}）を境界トラックとして登録しました。`, session);
     this.setFieldRegMessage(message);
     this.setFieldCreateMessage(message);
     if (dialog === "upload") {
@@ -460,15 +499,17 @@ export class FieldAnnotationController {
     this.renderAll();
   }
 
-  registerWaterPointsSession({ name, id, memo, rawPoints, fileName }) {
+  registerWaterPointsSession({ name, id, memo, rawPoints, fileName, rawNmeaText }) {
     const sessionId = makeSurveySessionId();
+    const uploadedAt = new Date().toISOString();
     const session = buildSurveySession({
       id: sessionId, name: name || `${id} 測量`, fieldId: id, sourceFileName: fileName,
-      rawPoints, measurementType: "water_points"
+      rawPoints, measurementType: "water_points", rawNmeaText, uploadedAt: rawNmeaText ? uploadedAt : null
     });
     this.surveySessions.push(session);
     this.persist();
-    this.setFieldRegMessage(`測量ログを登録しました。「水管理ポイント」から水門・給水口・排水口を追加できます。`);
+    const message = this.withRawNmeaWarning("測量ログを登録しました。「水管理ポイント」から水門・給水口・排水口を追加できます。", session);
+    this.setFieldRegMessage(message);
     this.cancelUploadRegistration();
     this.renderAll();
   }
@@ -876,6 +917,8 @@ export class FieldAnnotationController {
       this.deleteSelectedFeature();
     } else if (action === "export") {
       this.exportScoped(kind, record);
+    } else if (action === "export-nmea") {
+      this.exportRawNmea(record);
     }
   }
 
@@ -901,6 +944,18 @@ export class FieldAnnotationController {
       metadata: { exportedAt: new Date().toISOString(), appName: "スイスイナビ", dataMode: "real_user_data" }
     };
     downloadJson(payload, `${record.name || record.id}-export.json`);
+  }
+
+  linkedSurveySession(record) {
+    return this.surveySessions.find((session) => session.id === record.sourceSessionId) || null;
+  }
+
+  exportRawNmea(record) {
+    const session = this.linkedSurveySession(record);
+    if (!session?.rawNmeaStored || !session.rawNmeaText) {
+      return;
+    }
+    downloadText(session.rawNmeaText, session.sourceFileName || `${record.name || record.id}.nmea.txt`);
   }
 
   // -------------------------------------------------------------------------
@@ -1084,6 +1139,7 @@ export class FieldAnnotationController {
     const card = document.createElement("div");
     card.className = "rec-recovery-card";
 
+    const session = this.linkedSurveySession(record);
     const grid = document.createElement("div");
     grid.className = "paddy-detail-grid";
     appendDetailRow(grid, "圃場名 / ID", `${record.name || "—"} / ${record.id}`);
@@ -1094,16 +1150,22 @@ export class FieldAnnotationController {
     appendDetailRow(grid, "DGPS fix", summary ? String(summary.byFixQuality?.["2"] || 0) : "—");
     appendDetailRow(grid, "GPS単独", summary ? String(summary.byFixQuality?.["1"] || 0) : "—");
     appendDetailRow(grid, "作成日時", formatDateTime(record.properties?.createdAt));
+    appendDetailRow(grid, "元NMEA", rawNmeaStatusLabel(session));
+    appendDetailRow(grid, "行数", session ? String(session.rawNmeaLineCount || 0) : "—");
     card.append(grid);
 
     const actions = document.createElement("div");
     actions.className = "rec-recovery-actions";
-    [
+    const actionDefs = [
       ["view", "表示"],
       ["edit", "編集"],
       ["delete", "削除"],
       ["export", "JSON書き出し"]
-    ].forEach(([action, label]) => {
+    ];
+    if (session?.rawNmeaStored) {
+      actionDefs.push(["export-nmea", "元NMEAを書き出し"]);
+    }
+    actionDefs.forEach(([action, label]) => {
       const button = document.createElement("button");
       button.type = "button";
       button.className = action === "delete" ? "panel-button danger" : "panel-button";
@@ -1246,6 +1308,18 @@ export class FieldAnnotationController {
     }
   }
 
+  /**
+   * Unlike fieldRegMessage (inside the upload dialog, which hides itself
+   * right after a successful registration), this sits next to the always-
+   * visible 登録済み圃場・測量ログ list, so the raw-NMEA size warning is
+   * still visible to the user after the dialog closes.
+   */
+  setRegisteredListMessage(message) {
+    if (this.elements.registeredListMessage) {
+      this.elements.registeredListMessage.textContent = message;
+    }
+  }
+
   setWcpMessage(message) {
     if (this.elements.wcpAddMessage) {
       this.elements.wcpAddMessage.textContent = message;
@@ -1296,7 +1370,7 @@ export class FieldAnnotationController {
     this.fields = normalized.fields;
     this.boundaryTracks = normalized.boundaryTracks;
     this.waterControlPoints = this.rehydrateWaterControlPoints(normalized.waterControlPoints);
-    this.surveySessions = normalized.surveySessions;
+    this.surveySessions = this.rehydrateSurveySessions(normalized.surveySessions);
     this.fieldObservations = this.rehydrateFieldObservations(normalized.fieldObservations);
     this.persist();
     this.clearSelection();
@@ -1326,8 +1400,31 @@ function formatDateTime(iso) {
   return Number.isFinite(ms) ? new Date(ms).toLocaleString("ja-JP") : iso;
 }
 
+/** "—" covers both "no linked survey session" and "session exists but never had raw NMEA text at all" (e.g. manual-panel range selection). */
+function rawNmeaStatusLabel(session) {
+  if (!session) {
+    return "—";
+  }
+  if (session.rawNmeaStored) {
+    return "保存済み";
+  }
+  return session.rawNmeaStorageReason === "size_limit" ? "未保存（サイズ超過）" : "—";
+}
+
 function downloadJson(data, filename) {
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function downloadText(text, filename) {
+  const blob = new Blob([text], { type: "text/plain" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
