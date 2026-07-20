@@ -13,11 +13,16 @@ function datetimeLocal(date) {
 
 async function openAnalysisWorkspace(page) {
   await page.goto("/#analysis");
-  await expect(page.locator("#vegFormCellSelect option").nth(1)).toBeAttached({ timeout: 15_000 });
+  await expect(page.locator("#loadPaddyDemoButton")).toBeAttached({ timeout: 15_000 });
   // Expand the collapsible vegetation cards like a user opening them.
   await page.evaluate(() => {
     document.querySelectorAll("details[data-workspace='analysis']").forEach((card) => { card.open = true; });
   });
+  // Vegetation observations are grid-cell-scoped, so these tests explicitly
+  // opt into the demo field/grid — the app no longer loads it automatically
+  // (real-user-data-first: demo data is opt-in only).
+  await page.locator("#loadPaddyDemoButton").click();
+  await expect(page.locator("#vegFormCellSelect option").nth(1)).toBeAttached({ timeout: 15_000 });
 }
 
 async function pickCell(page, index = 5) {

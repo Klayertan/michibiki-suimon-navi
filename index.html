@@ -1518,6 +1518,154 @@
           <div id="gpsMessage" class="gps-message" role="status" aria-live="polite" hidden></div>
         </section>
 
+        <section id="fieldRegDialog" class="card field-reg-dialog" data-workspace="survey" hidden>
+          <h2>圃場として登録<span class="en">Register field</span></h2>
+          <p class="meta">このNMEAログをどの圃場として登録しますか？</p>
+          <p id="fieldRegSummary" class="meta"></p>
+          <div class="input-row">
+            <label for="fieldRegNameInput">圃場名</label>
+            <input id="fieldRegNameInput" type="text" autocomplete="off">
+          </div>
+          <div class="input-row">
+            <label for="fieldRegIdInput">圃場ID</label>
+            <input id="fieldRegIdInput" type="text" autocomplete="off">
+          </div>
+          <fieldset class="field-reg-type-fieldset">
+            <legend>測量タイプ</legend>
+            <label class="filter"><input id="fieldRegTypePolygon" type="radio" name="fieldRegType" value="field_polygon" checked>圃場ポリゴンとして登録</label>
+            <label class="filter"><input id="fieldRegTypeTrack" type="radio" name="fieldRegType" value="boundary_track">境界トラックとして登録</label>
+            <label class="filter"><input id="fieldRegTypeWater" type="radio" name="fieldRegType" value="water_points">水門・給水口・排水口ポイントとして登録</label>
+          </fieldset>
+          <div class="input-row">
+            <label for="fieldRegMemoInput">メモ</label>
+            <textarea id="fieldRegMemoInput" rows="2"></textarea>
+          </div>
+          <div class="veg-actions">
+            <button id="fieldRegConfirmButton" class="panel-button primary" type="button">登録する</button>
+            <button id="fieldRegCancelButton" class="panel-button" type="button">キャンセル</button>
+          </div>
+          <p id="fieldRegMessage" class="meta" role="status" aria-live="polite"></p>
+          <div id="fieldRegCloseWarning" class="field-close-warning" role="alertdialog" hidden>
+            <p id="fieldRegCloseWarningText"></p>
+            <div class="field-close-warning-actions">
+              <button id="fieldRegForceCloseButton" class="panel-button primary" type="button">ポリゴンとして閉じる</button>
+              <button id="fieldRegSaveAsTrackButton" class="panel-button" type="button">境界トラックとして保存</button>
+              <button id="fieldRegCancelCloseButton" class="panel-button" type="button">キャンセル</button>
+            </div>
+          </div>
+        </section>
+
+        <details class="card paddy-collapsible" data-workspace="survey" open hidden>
+          <summary><span class="details-title">登録済み圃場・測量ログ<span class="en">Registered fields &amp; logs</span></span></summary>
+          <div class="details-content">
+          <div class="metric-grid">
+            <div class="metric"><span>圃場数</span><strong id="fieldAnnotationSummaryFields">0</strong></div>
+            <div class="metric"><span>境界トラック数</span><strong id="fieldAnnotationSummaryTracks">0</strong></div>
+            <div class="metric"><span>水利ポイント数</span><strong id="fieldAnnotationSummaryPoints">0</strong></div>
+            <div class="metric"><span>観察記録数</span><strong id="fieldAnnotationSummaryObservations">0</strong></div>
+          </div>
+          <div id="registeredFieldsContainer"></div>
+          </div>
+        </details>
+
+        <details class="card paddy-collapsible" data-workspace="survey" hidden>
+          <summary><span class="details-title">水管理ポイント<span class="en">Water management points</span></span></summary>
+          <div class="details-content">
+            <div class="input-row">
+              <label for="wcpTargetFieldSelect">対象圃場</label>
+              <select id="wcpTargetFieldSelect"></select>
+            </div>
+            <div class="wcp-type-buttons">
+              <button id="wcpAddGateButton" class="panel-button" type="button" disabled>水門を追加</button>
+              <button id="wcpAddInletButton" class="panel-button" type="button" disabled>給水口を追加</button>
+              <button id="wcpAddOutletButton" class="panel-button" type="button" disabled>排水口を追加</button>
+              <button id="wcpAddSensorButton" class="panel-button" type="button" disabled>水位センサ位置を追加</button>
+              <button id="wcpAddPhotoButton" class="panel-button" type="button" disabled>撮影地点を追加</button>
+            </div>
+            <div class="veg-actions">
+              <button id="wcpPositionCurrentButton" class="panel-button primary" type="button" disabled>現在のQZ1位置に追加</button>
+              <button id="wcpPositionMapClickButton" class="panel-button" type="button" disabled>地図をクリックして追加</button>
+            </div>
+            <p id="wcpAddMessage" class="meta" role="status" aria-live="polite"></p>
+          </div>
+        </details>
+
+        <details class="card paddy-collapsible" data-workspace="survey" hidden>
+          <summary><span class="details-title">現地観察メモ<span class="en">Field observations</span></span></summary>
+          <div class="details-content">
+            <div class="input-row">
+              <label for="obsTargetFieldSelect">対象圃場</label>
+              <select id="obsTargetFieldSelect"></select>
+            </div>
+            <div class="obs-type-buttons">
+              <button id="obsAddWeedButton" class="panel-button" type="button" disabled>雑草を記録</button>
+              <button id="obsAddInsectButton" class="panel-button" type="button" disabled>害虫を記録</button>
+              <button id="obsAddDiseaseButton" class="panel-button" type="button" disabled>病気を記録</button>
+              <button id="obsAddWaterShortageButton" class="panel-button" type="button" disabled>水不足を記録</button>
+              <button id="obsAddExcessWaterButton" class="panel-button" type="button" disabled>水が多すぎるを記録</button>
+              <button id="obsAddLodgingButton" class="panel-button" type="button" disabled>倒伏を記録</button>
+              <button id="obsAddSoilProblemButton" class="panel-button" type="button" disabled>土壌・泥の問題を記録</button>
+              <button id="obsAddGateProblemButton" class="panel-button" type="button" disabled>水門異常を記録</button>
+              <button id="obsAddNoteButton" class="panel-button" type="button" disabled>その他メモを記録</button>
+            </div>
+            <div class="veg-actions">
+              <button id="obsPositionQz1Button" class="panel-button primary" type="button" disabled>現在のQZ1位置を使用</button>
+              <button id="obsPositionGpsButton" class="panel-button" type="button" disabled>スマホGPS位置を使用</button>
+              <button id="obsPositionMapClickButton" class="panel-button" type="button" disabled>地図をクリックして指定</button>
+            </div>
+            <p id="obsAddMessage" class="meta" role="status" aria-live="polite"></p>
+          </div>
+        </details>
+
+        <details class="card paddy-collapsible" data-workspace="survey" open hidden>
+          <summary><span class="details-title">選択した地物<span class="en">Feature editor</span></span></summary>
+          <div class="details-content">
+            <p id="selFeatureEmpty" class="field-annotation-empty">圃場ポリゴン・境界トラック・水利ポイント・観察メモを地図上でクリックすると編集できます。</p>
+            <div id="selFeatureForm" class="field-annotation-form" hidden>
+              <div id="selFeatureTypeRow" class="input-row field-annotation-toggle-row">
+                <label for="selFeatureTypeSelect">種類</label>
+                <select id="selFeatureTypeSelect"></select>
+              </div>
+              <div id="selFeatureObsTypeRow" class="input-row field-annotation-toggle-row" hidden>
+                <label for="selFeatureObsTypeSelect">観察タイプ</label>
+                <select id="selFeatureObsTypeSelect"></select>
+              </div>
+              <div id="selFeatureSeverityRow" class="input-row field-annotation-toggle-row" hidden>
+                <label for="selFeatureSeveritySelect">重要度</label>
+                <select id="selFeatureSeveritySelect"></select>
+              </div>
+              <div class="input-row">
+                <label for="selFeatureNameInput">名前 / タイトル</label>
+                <input id="selFeatureNameInput" type="text" autocomplete="off">
+              </div>
+              <div class="input-row">
+                <label for="selFeatureIdInput">ID</label>
+                <input id="selFeatureIdInput" type="text" autocomplete="off">
+              </div>
+              <div class="input-row">
+                <label for="selFeatureMemoInput">メモ</label>
+                <textarea id="selFeatureMemoInput" rows="2"></textarea>
+              </div>
+              <div class="input-row">
+                <label for="selFeatureRelatedFieldSelect">関連する圃場</label>
+                <select id="selFeatureRelatedFieldSelect"></select>
+              </div>
+              <div class="veg-actions">
+                <button id="selFeatureSaveButton" class="panel-button primary" type="button">保存</button>
+                <button id="selFeatureDeleteButton" class="panel-button danger" type="button">削除</button>
+              </div>
+              <p id="selFeatureMessage" class="meta" role="status" aria-live="polite"></p>
+            </div>
+          </div>
+        </details>
+
+        <details class="card paddy-collapsible" data-workspace="survey" hidden>
+          <summary><span class="details-title">圃場・水利ポイント 凡例<span class="en">Fields &amp; water points legend</span></span></summary>
+          <div class="details-content">
+            <div id="fieldAnnotationLegend" class="paddy-legend"></div>
+          </div>
+        </details>
+
         <section class="card assurance-lead" data-workspace="assurance" hidden>
           <span class="eyebrow">QZ1 Satellite Assurance Map</span>
           <h2>測位を「使える場所」まで判断する</h2>
@@ -2035,10 +2183,10 @@
           </div>
         </details>
 
-        <details class="card paddy-collapsible" data-workspace="analysis" open hidden>
-          <summary><span class="details-title">圃場ポリゴン作成<span class="en">Create field polygon</span></span></summary>
+        <details class="card paddy-collapsible" data-workspace="analysis" hidden>
+          <summary><span class="details-title">圃場ポリゴン作成（詳細設定）<span class="en">Create field polygon — advanced</span></span></summary>
           <div class="details-content">
-            <p class="meta">歩いて記録したQZ1・スマホGPSの点列を、圃場ポリゴンに変換します。始点と終点が近ければ自動で閉じ、離れている場合は確認してから閉じます。</p>
+            <p class="meta">通常はQZ1測量タブでNMEAをアップロードすると自動的に登録を確認されます。この詳細設定は、既に読み込んだ点列から特定の範囲だけを選んで圃場ポリゴンを作りたい場合の高度なツールです。</p>
             <div class="input-row">
               <label for="fieldSourceSelect">使用する点</label>
               <select id="fieldSourceSelect">
@@ -2047,7 +2195,7 @@
               </select>
             </div>
             <label class="filter"><input id="fieldUseAllPointsCheckbox" type="checkbox" checked>全ての点を使う</label>
-            <div id="fieldRangeRow" class="field-annotation-range-row" hidden>
+            <div id="fieldRangeRow" class="field-annotation-toggle-row" hidden>
               <div class="input-row">
                 <label for="fieldStartPointSelect">開始点</label>
                 <select id="fieldStartPointSelect"></select>
@@ -2066,70 +2214,11 @@
             <div id="fieldCloseWarning" class="field-close-warning" role="alertdialog" hidden>
               <p id="fieldCloseWarningText"></p>
               <div class="field-close-warning-actions">
-                <button id="fieldCloseConfirmButton" class="panel-button primary" type="button">はい、閉じる</button>
-                <button id="fieldCloseCancelButton" class="panel-button" type="button">いいえ</button>
+                <button id="fieldCloseForceCloseButton" class="panel-button primary" type="button">ポリゴンとして閉じる</button>
+                <button id="fieldCloseSaveAsTrackButton" class="panel-button" type="button">境界トラックとして保存</button>
+                <button id="fieldCloseCancelButton" class="panel-button" type="button">キャンセル</button>
               </div>
             </div>
-          </div>
-        </details>
-
-        <details class="card paddy-collapsible" data-workspace="analysis" hidden>
-          <summary><span class="details-title">給水・排水・水門ポイント追加<span class="en">Add water control point</span></span></summary>
-          <div class="details-content">
-            <div class="input-row">
-              <label for="wcpAddTypeSelect">追加する種類</label>
-              <select id="wcpAddTypeSelect"></select>
-            </div>
-            <div class="veg-actions">
-              <button id="wcpAddCurrentPositionButton" class="panel-button primary" type="button">現在のQZ1位置に追加</button>
-              <button id="wcpAddMapClickButton" class="panel-button" type="button">地図をクリックして追加</button>
-            </div>
-            <p id="wcpAddMessage" class="meta" role="status" aria-live="polite"></p>
-          </div>
-        </details>
-
-        <details class="card paddy-collapsible" data-workspace="analysis" open hidden>
-          <summary><span class="details-title">選択した地物<span class="en">Feature editor</span></span></summary>
-          <div class="details-content">
-            <p id="selFeatureEmpty" class="field-annotation-empty">圃場ポリゴンまたは水利ポイントを地図上でクリックすると編集できます。</p>
-            <div id="selFeatureForm" class="field-annotation-form" hidden>
-              <div class="input-row">
-                <label for="selFeatureTypeSelect">種類</label>
-                <select id="selFeatureTypeSelect"></select>
-              </div>
-              <div class="input-row">
-                <label for="selFeatureNameInput">名前</label>
-                <input id="selFeatureNameInput" type="text" autocomplete="off">
-              </div>
-              <div class="input-row">
-                <label for="selFeatureIdInput">ID</label>
-                <input id="selFeatureIdInput" type="text" autocomplete="off">
-              </div>
-              <div class="input-row">
-                <label for="selFeatureMemoInput">メモ</label>
-                <textarea id="selFeatureMemoInput" rows="2"></textarea>
-              </div>
-              <div class="input-row">
-                <label for="selFeatureRelatedFieldSelect">関連する圃場</label>
-                <select id="selFeatureRelatedFieldSelect"></select>
-              </div>
-              <div class="veg-actions">
-                <button id="selFeatureSaveButton" class="panel-button primary" type="button">保存</button>
-                <button id="selFeatureDeleteButton" class="panel-button danger" type="button">削除</button>
-              </div>
-              <p id="selFeatureMessage" class="meta" role="status" aria-live="polite"></p>
-            </div>
-          </div>
-        </details>
-
-        <details class="card paddy-collapsible" data-workspace="analysis" hidden>
-          <summary><span class="details-title">圃場・水利ポイント 凡例<span class="en">Fields &amp; water points</span></span></summary>
-          <div class="details-content">
-            <div class="metric-grid">
-              <div class="metric"><span>圃場数</span><strong id="fieldAnnotationSummaryFields">0</strong></div>
-              <div class="metric"><span>水利ポイント数</span><strong id="fieldAnnotationSummaryPoints">0</strong></div>
-            </div>
-            <div id="fieldAnnotationLegend" class="paddy-legend"></div>
           </div>
         </details>
 
@@ -2280,6 +2369,13 @@
       other: "#475569",
       unknown: "#334155"
     };
+
+    // Real-user-data-first: the app must start from an empty state (no demo
+    // field polygon, grid, or paddy-intelligence sample content) unless the
+    // user explicitly loads demo data via a labeled button. This only gates
+    // *automatic* fallbacks — explicit actions (loadPaddyDemoButton, the
+    // "実測QZ1データを表示" bundled-proof button) are unaffected either way.
+    const USE_DEMO_DATA = false;
 
     // Embedded fallbacks mirror data/*.json so the app still works over file://
     // (fetch of local JSON is blocked there). Keep both in sync.
@@ -2512,6 +2608,7 @@
     };
 
     const map = L.map("map", { zoomControl: true }).setView([34.65, 135.83], 14);
+    window.map = map;
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
       maxZoom: 19
@@ -3071,6 +3168,9 @@
       if (surveyedGate) {
         return { lat: surveyedGate.lat, lon: surveyedGate.lon, source: "survey" };
       }
+      if (!USE_DEMO_DATA) {
+        return null;
+      }
 
       const gate = fieldData && fieldData.gate;
       if (gate && Number.isFinite(Number(gate.lat)) && Number.isFinite(Number(gate.lon))) {
@@ -3084,6 +3184,9 @@
       if (surveyedBoundary.length >= 3) {
         return { points: surveyedBoundary.map((point) => [point.lat, point.lon]), source: "survey" };
       }
+      if (!USE_DEMO_DATA) {
+        return null;
+      }
 
       const boundary = Array.isArray(fieldData.boundary) ? fieldData.boundary : [];
       if (boundary.length >= 3) {
@@ -3096,6 +3199,9 @@
     function activeChannel() {
       if (surveyedChannel.length >= 2) {
         return { points: surveyedChannel.map((point) => [point.lat, point.lon]), source: "survey" };
+      }
+      if (!USE_DEMO_DATA) {
+        return null;
       }
 
       const channel = Array.isArray(fieldData.channel) ? fieldData.channel : [];
@@ -3563,10 +3669,13 @@
     }
 
     function updateGatePanel() {
-      fieldNameEl.textContent = String(fieldData.name ?? "—");
+      const boundary = activeBoundary();
+      // Only attach the field's name/area to a boundary that's actually
+      // showing — otherwise this would display the demo field.json name
+      // even when USE_DEMO_DATA is false and no real boundary exists.
+      fieldNameEl.textContent = boundary ? String(fieldData.name ?? "—") : "—";
       fieldAreaEl.textContent = formatFieldArea();
 
-      const boundary = activeBoundary();
       boundarySourceEl.textContent = boundary
         ? (boundary.source === "survey" ? `QZ1測量（圃場の角 ${surveyedBoundary.length}点）` : "初期値（data/field.json・仮）")
         : `未設定（あと${Math.max(0, 3 - surveyedBoundary.length)}点タグ付けが必要）`;
@@ -3737,6 +3846,31 @@
           </div>
         </div>
       `;
+    }
+
+    // One-off smartphone GPS fetch for the 現地観察メモ position picker —
+    // deliberately independent from recordPhoneGpsPoint()/phonePoints below,
+    // which append to the persistent GNSS comparison track instead.
+    function getSmartphoneGeolocation() {
+      return new Promise((resolve, reject) => {
+        if (!globalThis.navigator || !navigator.geolocation) {
+          reject(new Error("geolocation unavailable"));
+          return;
+        }
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            const lat = Number(position.coords.latitude);
+            const lon = Number(position.coords.longitude);
+            if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+              reject(new Error("invalid geolocation result"));
+              return;
+            }
+            resolve({ lat, lon });
+          },
+          (error) => reject(error),
+          { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+        );
+      });
     }
 
     function recordPhoneGpsPoint() {
@@ -4835,7 +4969,10 @@
       if (!file) {
         return;
       }
-      applyNmeaText(await file.text(), file.name);
+      const loaded = applyNmeaText(await file.text(), file.name);
+      if (loaded) {
+        fieldAnnotationController?.handleNmeaUploaded({ points: parsedPoints, fileName: file.name });
+      }
       fileInput.value = "";
     });
 
@@ -4944,6 +5081,7 @@
         map,
         getBoundary: () => activeBoundary()?.points ?? [],
         getGnssPoints: () => parsedPoints,
+        useDemoData: USE_DEMO_DATA,
         onMetricsChange: () => {
           fieldAreaEl.textContent = formatFieldArea();
           vegetationController?.handlePaddyRefresh();
@@ -5024,7 +5162,8 @@
           map,
           getParsedPoints: () => parsedPoints,
           getPhonePoints: () => phonePoints,
-          getSourceLabel: () => activePointSource
+          getSourceLabel: () => activePointSource,
+          getSmartphonePosition: getSmartphoneGeolocation
         });
         fieldAnnotationController.mount();
         paddyIntelligence.getFieldAnnotationExport = () => fieldAnnotationController.getExportData();

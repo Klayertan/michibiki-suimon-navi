@@ -1,205 +1,485 @@
 import { test, expect } from "@playwright/test";
-import { readFile, mkdtemp, writeFile } from "node:fs/promises";
+import { readFile, mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-// A small square walked loop near the demo field. The last point is close
-// to the first (~1m) so the loop should auto-close.
-const TIGHT_LOOP = [
-  { lat: 34.65480, lon: 135.82982, fixQuality: 1, satelliteCount: 8, hdop: 1.1, timestamp: "120000.00" },
-  { lat: 34.65480, lon: 135.83027, fixQuality: 1, satelliteCount: 8, hdop: 1.1, timestamp: "120010.00" },
-  { lat: 34.65444, lon: 135.83027, fixQuality: 1, satelliteCount: 8, hdop: 1.1, timestamp: "120020.00" },
-  { lat: 34.65444, lon: 135.82982, fixQuality: 1, satelliteCount: 8, hdop: 1.1, timestamp: "120030.00" },
-  { lat: 34.654799, lon: 135.829825, fixQuality: 2, satelliteCount: 9, hdop: 0.9, timestamp: "120040.00" }
-];
+// Valid GGA sentences (correct checksums) for a small square walked loop
+// near the demo field. The last point is ~1m from the first, so this
+// should auto-close into a field polygon.
+const TIGHT_LOOP_NMEA = [
+  "$GNGGA,120000.00,3439.2880,N,13549.7892,E,1,8,1.1,45.0,M,30.0,M,,*7A",
+  "$GNGGA,120010.00,3439.2880,N,13549.8162,E,1,8,1.1,45.0,M,30.0,M,,*72",
+  "$GNGGA,120020.00,3439.2664,N,13549.8162,E,1,8,1.1,45.0,M,30.0,M,,*75",
+  "$GNGGA,120030.00,3439.2664,N,13549.7892,E,1,8,1.1,45.0,M,30.0,M,,*7D",
+  "$GNGGA,120040.00,3439.2879,N,13549.7895,E,2,9,0.9,45.0,M,30.0,M,,*74"
+].join("\r\n");
 
-// Same walk, but the last point is left ~50m away from the start.
-const OPEN_LOOP = [
-  { lat: 34.65480, lon: 135.82982, fixQuality: 1, satelliteCount: 8, hdop: 1.1 },
-  { lat: 34.65480, lon: 135.83027, fixQuality: 1, satelliteCount: 8, hdop: 1.1 },
-  { lat: 34.65444, lon: 135.83027, fixQuality: 1, satelliteCount: 8, hdop: 1.1 },
-  { lat: 34.65500, lon: 135.83100, fixQuality: 1, satelliteCount: 8, hdop: 1.1 }
-];
+// Same walk, but stopping ~45m short of the start point — the user's real
+// incomplete L-shaped walking track.
+const OPEN_L_SHAPE_NMEA = [
+  "$GNGGA,193852.00,3439.2880,N,13549.7892,E,1,8,1.1,45.0,M,30.0,M,,*7D",
+  "$GNGGA,193902.00,3439.2880,N,13549.8162,E,1,8,1.1,45.0,M,30.0,M,,*70",
+  "$GNGGA,193912.00,3439.2664,N,13549.8162,E,1,8,1.1,45.0,M,30.0,M,,*75"
+].join("\r\n");
 
-async function openAnalysisWorkspace(page) {
-  // A hash-only URL change on an already-loaded page is a same-document
-  // navigation (no reload), so it never re-runs the app's one-time
-  // switchWorkspace(location.hash) init. Tests that first visit another
-  // workspace (e.g. #survey, to import measurement JSON) must switch tabs
-  // by clicking the actual tab button, not by navigating to a new hash.
+const REAL_DATA_MEMO = "2026/07/19 QZ1徒歩測量。圃場境界の一部を測定。次回、全周測量予定。";
+
+async function openSurveyWorkspace(page) {
+  await page.goto("/#survey");
+  await expect(page.locator("#fieldRegDialog")).toBeAttached({ timeout: 15_000 });
+  await page.evaluate(() => {
+    document.querySelectorAll("details[data-workspace='survey']").forEach((card) => { card.open = true; });
+  });
+}
+
+async function uploadNmea(page, nmeaText, fileName = "walk.txt") {
+  await page.locator("#fileInput").setInputFiles({
+    name: fileName,
+    mimeType: "text/plain",
+    buffer: Buffer.from(nmeaText)
+  });
+}
+
+test("uploading an NMEA file opens the registration dialog with sequential defaults", async ({ page }) => {
+  await openSurveyWorkspace(page);
+  await uploadNmea(page, TIGHT_LOOP_NMEA, "walk-1.txt");
+
+  await expect(page.locator("#fieldRegDialog")).toBeVisible();
+  await expect(page.locator("#fieldRegNameInput")).toHaveValue("圃場1");
+  await expect(page.locator("#fieldRegIdInput")).toHaveValue("paddy-001");
+  await expect(page.locator("#fieldRegSummary")).toContainText("有効な測位点: 5点");
+  await expect(page.locator("#fieldRegTypePolygon")).toBeChecked();
+
+  // Confirming creates a persistent survey session and a field polygon
+  // (closed loop -> auto-close, no warning).
+  await page.locator("#fieldRegConfirmButton").click();
+  await expect(page.locator("#fieldRegCloseWarning")).toBeHidden();
+  await expect(page.locator("#fieldAnnotationSummaryFields")).toHaveText("1");
+  const state = await page.evaluate(() => ({
+    sessionCount: window.fieldAnnotationController.surveySessions.length,
+    fieldCount: window.fieldAnnotationController.fields.length,
+    sessionMeasurementType: window.fieldAnnotationController.surveySessions[0]?.measurementType,
+    fieldSourceSessionId: window.fieldAnnotationController.fields[0]?.sourceSessionId
+  }));
+  expect(state.sessionCount).toBe(1);
+  expect(state.fieldCount).toBe(1);
+  expect(state.sessionMeasurementType).toBe("field_polygon");
+  expect(state.fieldSourceSessionId).toBeTruthy();
+
+  // Uploading a second log offers 圃場2 / paddy-002.
+  await uploadNmea(page, TIGHT_LOOP_NMEA, "walk-2.txt");
+  await expect(page.locator("#fieldRegNameInput")).toHaveValue("圃場2");
+  await expect(page.locator("#fieldRegIdInput")).toHaveValue("paddy-002");
+});
+
+test("an open path shows the exact upload warning; force-close creates a polygon", async ({ page }) => {
+  await openSurveyWorkspace(page);
+  await uploadNmea(page, OPEN_L_SHAPE_NMEA);
+  await page.locator("#fieldRegConfirmButton").click();
+
+  await expect(page.locator("#fieldRegCloseWarning")).toBeVisible();
+  await expect(page.locator("#fieldRegCloseWarningText")).toContainText("始点と終点が離れています。このログを圃場ポリゴンとして閉じますか？");
+  await expect(page.locator("#fieldAnnotationSummaryFields")).toHaveText("0");
+
+  await page.locator("#fieldRegForceCloseButton").click();
+  await expect(page.locator("#fieldAnnotationSummaryFields")).toHaveText("1");
+  await expect(page.locator("#fieldRegDialog")).toBeHidden();
+  const field = await page.evaluate(() => window.fieldAnnotationController.fields[0]);
+  expect(field.properties.closedManually).toBe(true);
+});
+
+test("real incomplete L-shaped data saves as a boundary track without being rejected", async ({ page }) => {
+  await openSurveyWorkspace(page);
+  await uploadNmea(page, OPEN_L_SHAPE_NMEA, "Serial Bluetooth Terminal 20260719-193852.txt");
+  await page.locator("#fieldRegMemoInput").fill(REAL_DATA_MEMO);
+  await page.locator("#fieldRegTypeTrack").check();
+  await page.locator("#fieldRegConfirmButton").click();
+
+  // Choosing 境界トラックとして登録 skips the closure warning entirely — an
+  // unclosed path must never be rejected on this path.
+  await expect(page.locator("#fieldRegCloseWarning")).toBeHidden();
+  await expect(page.locator("#fieldAnnotationSummaryTracks")).toHaveText("1");
+  await expect(page.locator("#fieldAnnotationSummaryFields")).toHaveText("0");
+
+  const track = await page.evaluate(() => window.fieldAnnotationController.boundaryTracks[0]);
+  expect(track.name).toBe("圃場1 下見測定");
+  expect(track.type).toBe("field_boundary_track");
+  expect(track.geometryType).toBe("LineString");
+  expect(track.fieldId).toBe("paddy-001");
+  expect(track.properties.memo).toBe(REAL_DATA_MEMO);
+  expect(track.properties.sourceFileName).toBe("Serial Bluetooth Terminal 20260719-193852.txt");
+});
+
+test("choosing to save as a track from the closure warning works for a polygon-intent upload", async ({ page }) => {
+  await openSurveyWorkspace(page);
+  await uploadNmea(page, OPEN_L_SHAPE_NMEA);
+  await page.locator("#fieldRegConfirmButton").click();
+  await expect(page.locator("#fieldRegCloseWarning")).toBeVisible();
+
+  await page.locator("#fieldRegSaveAsTrackButton").click();
+  await expect(page.locator("#fieldAnnotationSummaryTracks")).toHaveText("1");
+  await expect(page.locator("#fieldAnnotationSummaryFields")).toHaveText("0");
+  await expect(page.locator("#fieldRegDialog")).toBeHidden();
+});
+
+test("cancelling the closure warning discards the whole registration", async ({ page }) => {
+  await openSurveyWorkspace(page);
+  await uploadNmea(page, OPEN_L_SHAPE_NMEA);
+  await page.locator("#fieldRegConfirmButton").click();
+  await page.locator("#fieldRegCancelCloseButton").click();
+
+  await expect(page.locator("#fieldRegCloseWarning")).toBeHidden();
+  await expect(page.locator("#fieldRegDialog")).toBeHidden();
+  const state = await page.evaluate(() => ({
+    fields: window.fieldAnnotationController.fields.length,
+    tracks: window.fieldAnnotationController.boundaryTracks.length,
+    sessions: window.fieldAnnotationController.surveySessions.length
+  }));
+  expect(state).toEqual({ fields: 0, tracks: 0, sessions: 0 });
+});
+
+test("plain キャンセル on the registration dialog creates nothing", async ({ page }) => {
+  await openSurveyWorkspace(page);
+  await uploadNmea(page, TIGHT_LOOP_NMEA);
+  await page.locator("#fieldRegCancelButton").click();
+  await expect(page.locator("#fieldRegDialog")).toBeHidden();
+  await expect(page.locator("#fieldAnnotationSummaryFields")).toHaveText("0");
+});
+
+test("registered fields are visible in QZ1測量, survive a tab switch, and survive a page reload", async ({ page }) => {
+  await openSurveyWorkspace(page);
+  await uploadNmea(page, TIGHT_LOOP_NMEA);
+  await page.locator("#fieldRegConfirmButton").click();
+  await expect(page.locator(".rec-recovery-card")).toHaveCount(1);
+  await expect(page.locator("#registeredFieldsContainer")).toContainText("圃場1 / paddy-001");
+  await expect(page.locator("#registeredFieldsContainer")).toContainText("圃場ポリゴン");
+
+  // Tab switching never unmounts the controller or its map layers.
   await page.getByRole("button", { name: "詳細解析" }).click();
-  await expect(page.locator("#fieldCreateButton")).toBeAttached({ timeout: 15_000 });
+  const stillOnMap = await page.evaluate(() => window.map.hasLayer(window.fieldAnnotationController.layers.fields));
+  expect(stillOnMap).toBe(true);
+  await page.getByRole("button", { name: "QZ1測量" }).click();
+  await expect(page.locator("#registeredFieldsContainer")).toContainText("圃場1 / paddy-001");
+
+  // A full reload must restore state from localStorage.
+  await page.reload();
+  await expect(page.locator("#fieldRegDialog")).toBeAttached({ timeout: 15_000 });
+  await page.evaluate(() => {
+    document.querySelectorAll("details[data-workspace='survey']").forEach((card) => { card.open = true; });
+  });
+  await expect(page.locator("#fieldAnnotationSummaryFields")).toHaveText("1");
+  await expect(page.locator("#registeredFieldsContainer")).toContainText("圃場1 / paddy-001");
+});
+
+test("editing name/ID/memo and deleting a field shows the exact confirmation and cascades", async ({ page }) => {
+  await openSurveyWorkspace(page);
+  await uploadNmea(page, TIGHT_LOOP_NMEA);
+  await page.locator("#fieldRegConfirmButton").click();
+  await expect(page.locator("#selFeatureForm")).toBeVisible();
+
+  await page.locator("#selFeatureNameInput").fill("北田");
+  await page.locator("#selFeatureIdInput").fill("paddy-kita");
+  await page.locator("#selFeatureMemoInput").fill("編集テスト");
+  await page.locator("#selFeatureSaveButton").click();
+  await expect(page.locator("#selFeatureMessage")).toContainText("保存しました");
+  await expect(page.locator("#registeredFieldsContainer")).toContainText("北田 / paddy-kita");
+
+  let confirmMessage = null;
+  page.once("dialog", (dialog) => {
+    confirmMessage = dialog.message();
+    dialog.accept();
+  });
+  await page.locator("#selFeatureDeleteButton").click();
+  expect(confirmMessage).toBe("この圃場と関連する測量ログを削除しますか？");
+  await expect(page.locator("#fieldAnnotationSummaryFields")).toHaveText("0");
+  const sessionsLeft = await page.evaluate(() => window.fieldAnnotationController.surveySessions.length);
+  expect(sessionsLeft).toBe(0);
+});
+
+test("水門・給水口・排水口 can each be added and linked to a specific field", async ({ page }) => {
+  await openSurveyWorkspace(page);
+  await uploadNmea(page, TIGHT_LOOP_NMEA);
+  await page.locator("#fieldRegConfirmButton").click();
+  await expect(page.locator("#fieldAnnotationSummaryFields")).toHaveText("1");
+
+  await page.locator("#wcpTargetFieldSelect").selectOption("paddy-001");
+  await expect(page.locator("#wcpAddGateButton")).toBeEnabled();
+
+  for (const [button, label] of [
+    ["#wcpAddGateButton", "水門"],
+    ["#wcpAddInletButton", "給水口"],
+    ["#wcpAddOutletButton", "排水口"]
+  ]) {
+    await page.locator(button).click();
+    await expect(page.locator("#wcpPositionCurrentButton")).toBeEnabled();
+    await page.locator("#wcpPositionCurrentButton").click();
+    await expect(page.locator("#selFeatureMemoInput")).toBeVisible();
+    const last = await page.evaluate(() => window.fieldAnnotationController.waterControlPoints.at(-1));
+    expect(last.relatedFieldId).toBe("paddy-001");
+    await expect(page.locator("#wcpAddMessage")).toContainText(label);
+  }
+
+  await expect(page.locator("#fieldAnnotationSummaryPoints")).toHaveText("3");
+});
+
+test("map-click placement works for 水位センサ and 撮影地点", async ({ page }) => {
+  await openSurveyWorkspace(page);
+  await uploadNmea(page, TIGHT_LOOP_NMEA);
+  await page.locator("#fieldRegConfirmButton").click();
+  await page.locator("#wcpTargetFieldSelect").selectOption("paddy-001");
+
+  await page.locator("#wcpAddSensorButton").click();
+  await page.locator("#wcpPositionMapClickButton").click();
+  await expect(page.locator("#wcpPositionMapClickButton")).toHaveClass(/active/);
+  await page.locator("#map").click({ position: { x: 300, y: 200 } });
+  await expect(page.locator("#fieldAnnotationSummaryPoints")).toHaveText("1");
+  const sensor = await page.evaluate(() => window.fieldAnnotationController.waterControlPoints[0]);
+  expect(sensor.type).toBe("water_level_sensor");
+
+  await page.locator("#wcpAddPhotoButton").click();
+  await page.locator("#wcpPositionMapClickButton").click();
+  await page.locator("#map").click({ position: { x: 320, y: 220 } });
+  await expect(page.locator("#fieldAnnotationSummaryPoints")).toHaveText("2");
+});
+
+test("water-management buttons stay disabled until a field exists and a target is chosen", async ({ page }) => {
+  await openSurveyWorkspace(page);
+  await expect(page.locator("#wcpAddGateButton")).toBeDisabled();
+
+  await uploadNmea(page, TIGHT_LOOP_NMEA);
+  await page.locator("#fieldRegConfirmButton").click();
+  // A field exists now, but no target field has been chosen yet.
+  await expect(page.locator("#wcpAddGateButton")).toBeDisabled();
+  await page.locator("#wcpTargetFieldSelect").selectOption("paddy-001");
+  await expect(page.locator("#wcpAddGateButton")).toBeEnabled();
+});
+
+test("export JSON includes fields, boundaryTracks, waterControlPoints, surveySessions, measurements and metadata", async ({ page }) => {
+  await openSurveyWorkspace(page);
+  await uploadNmea(page, TIGHT_LOOP_NMEA);
+  await page.locator("#fieldRegConfirmButton").click();
+  await page.locator("#wcpTargetFieldSelect").selectOption("paddy-001");
+  await page.locator("#wcpAddGateButton").click();
+  await page.locator("#wcpPositionCurrentButton").click();
+
+  await page.getByRole("button", { name: "詳細解析" }).click();
   await page.evaluate(() => {
     document.querySelectorAll("details[data-workspace='analysis']").forEach((card) => { card.open = true; });
   });
-}
-
-async function importMeasurementJson(page, records) {
-  await page.goto("/#survey");
-  await page.locator("#importInput").setInputFiles({
-    name: "walk.json",
-    mimeType: "application/json",
-    buffer: Buffer.from(JSON.stringify(records))
-  });
-  await expect(page.locator("#totalPoints")).toHaveText(String(records.length));
-}
-
-test("a tight walked loop auto-closes into a field polygon with default name/id", async ({ page }) => {
-  await importMeasurementJson(page, TIGHT_LOOP);
-  await openAnalysisWorkspace(page);
-
-  await page.locator("#fieldCreateButton").click();
-  await expect(page.locator("#fieldCreateMessage")).toContainText("圃場1");
-  await expect(page.locator("#fieldCloseWarning")).toBeHidden();
-  await expect(page.locator("#fieldAnnotationSummaryFields")).toHaveText("1");
-
-  // Newly created field is auto-selected in the editor.
-  await expect(page.locator("#selFeatureForm")).toBeVisible();
-  await expect(page.locator("#selFeatureNameInput")).toHaveValue("圃場1");
-  await expect(page.locator("#selFeatureIdInput")).toHaveValue("paddy-001");
-  await expect(page.locator("#selFeatureTypeSelect")).toBeDisabled();
-  await expect(page.locator("#selFeatureTypeSelect")).toHaveValue("field");
-  await expect(page.locator("#selFeatureRelatedFieldSelect")).toBeDisabled();
-
-  // The polygon label is on the map.
-  await expect(page.locator(".field-annotation-label").first()).toContainText("圃場1");
-});
-
-test("an open loop shows the exact confirmation message and only closes on explicit confirm", async ({ page }) => {
-  await importMeasurementJson(page, OPEN_LOOP);
-  await openAnalysisWorkspace(page);
-
-  await page.locator("#fieldCreateButton").click();
-  await expect(page.locator("#fieldCloseWarning")).toBeVisible();
-  await expect(page.locator("#fieldCloseWarningText")).toContainText("始点と終点が離れています。圃場ポリゴンを閉じますか？");
-  await expect(page.locator("#fieldAnnotationSummaryFields")).toHaveText("0");
-
-  // Cancel: nothing is created.
-  await page.locator("#fieldCloseCancelButton").click();
-  await expect(page.locator("#fieldCloseWarning")).toBeHidden();
-  await expect(page.locator("#fieldAnnotationSummaryFields")).toHaveText("0");
-
-  // Retry and confirm this time.
-  await page.locator("#fieldCreateButton").click();
-  await page.locator("#fieldCloseConfirmButton").click();
-  await expect(page.locator("#fieldAnnotationSummaryFields")).toHaveText("1");
-  await expect(page.locator("#selFeatureNameInput")).toHaveValue("圃場1");
-});
-
-test("a second field gets sequential defaults, and water control points can be added and linked to a field", async ({ page }) => {
-  await importMeasurementJson(page, TIGHT_LOOP);
-  await openAnalysisWorkspace(page);
-  await page.locator("#fieldCreateButton").click();
-  await expect(page.locator("#fieldAnnotationSummaryFields")).toHaveText("1");
-
-  // Create a second field from the same points to check sequential defaults.
-  await page.locator("#fieldCreateButton").click();
-  await expect(page.locator("#fieldAnnotationSummaryFields")).toHaveText("2");
-  await expect(page.locator("#selFeatureNameInput")).toHaveValue("圃場2");
-  await expect(page.locator("#selFeatureIdInput")).toHaveValue("paddy-002");
-
-  // Add a water control point at the current (latest) QZ1 position.
-  await page.locator("#wcpAddTypeSelect").selectOption("inlet");
-  await page.locator("#wcpAddCurrentPositionButton").click();
-  await expect(page.locator("#fieldAnnotationSummaryPoints")).toHaveText("1");
-  await expect(page.locator("#selFeatureTypeSelect")).toBeEnabled();
-  await expect(page.locator("#selFeatureTypeSelect")).toHaveValue("inlet");
-  await expect(page.locator("#selFeatureRelatedFieldSelect")).toBeEnabled();
-
-  // Link it to 圃場1 and change its type to 排水口, then save.
-  const options = await page.locator("#selFeatureRelatedFieldSelect option").allTextContents();
-  expect(options.some((label) => label.includes("圃場1"))).toBe(true);
-  await page.locator("#selFeatureRelatedFieldSelect").selectOption({ label: options.find((l) => l.includes("圃場1")) });
-  await page.locator("#selFeatureTypeSelect").selectOption("outlet");
-  await page.locator("#selFeatureNameInput").fill("北側排水口");
-  await page.locator("#selFeatureMemoInput").fill("テストメモ");
-  await page.locator("#selFeatureSaveButton").click();
-  await expect(page.locator("#selFeatureMessage")).toContainText("保存しました");
-});
-
-test("saving a duplicate ID is rejected without changing the existing feature", async ({ page }) => {
-  await importMeasurementJson(page, TIGHT_LOOP);
-  await openAnalysisWorkspace(page);
-  await page.locator("#fieldCreateButton").click(); // paddy-001
-  await page.locator("#fieldCreateButton").click(); // paddy-002, currently selected
-
-  await page.locator("#selFeatureIdInput").fill("paddy-001");
-  await page.locator("#selFeatureSaveButton").click();
-  await expect(page.locator("#selFeatureMessage")).toContainText("既に使用されています");
-  // The field list must still show two distinct fields.
-  await expect(page.locator("#fieldAnnotationSummaryFields")).toHaveText("2");
-});
-
-test("clicking on the map places a water control point of the selected type", async ({ page }) => {
-  await importMeasurementJson(page, TIGHT_LOOP);
-  await openAnalysisWorkspace(page);
-
-  await page.locator("#wcpAddTypeSelect").selectOption("gate");
-  await page.locator("#wcpAddMapClickButton").click();
-  await expect(page.locator("#wcpAddMapClickButton")).toHaveClass(/active/);
-  await page.locator("#map").click({ position: { x: 300, y: 200 } });
-  await expect(page.locator("#fieldAnnotationSummaryPoints")).toHaveText("1");
-  await expect(page.locator("#selFeatureTypeSelect")).toHaveValue("gate");
-  await expect(page.locator("#wcpAddMapClickButton")).not.toHaveClass(/active/);
-});
-
-test("deleting a selected water control point removes it after confirmation", async ({ page }) => {
-  await importMeasurementJson(page, TIGHT_LOOP);
-  await openAnalysisWorkspace(page);
-  await page.locator("#wcpAddTypeSelect").selectOption("sensor");
-  await page.locator("#wcpAddCurrentPositionButton").click();
-  await expect(page.locator("#fieldAnnotationSummaryPoints")).toHaveText("1");
-
-  page.once("dialog", (dialog) => dialog.accept());
-  await page.locator("#selFeatureDeleteButton").click();
-  await expect(page.locator("#fieldAnnotationSummaryPoints")).toHaveText("0");
-  await expect(page.locator("#selFeatureForm")).toBeHidden();
-});
-
-test("export includes fields, waterControlPoints, measurements and metadata; older files still load", async ({ page }) => {
-  await importMeasurementJson(page, TIGHT_LOOP);
-  await openAnalysisWorkspace(page);
-  await page.locator("#fieldCreateButton").click();
-  await page.locator("#wcpAddTypeSelect").selectOption("photo");
-  await page.locator("#wcpAddCurrentPositionButton").click();
-
   const downloadPromise = page.waitForEvent("download");
   await page.locator("#exportAnalysisButton").click();
   const download = await downloadPromise;
-  const dir = await mkdtemp(path.join(tmpdir(), "field-annotation-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "field-annotation-v2-"));
   const exportPath = path.join(dir, "export.json");
   await download.saveAs(exportPath);
   const exported = JSON.parse(await readFile(exportPath, "utf8"));
 
   expect(exported.fields).toHaveLength(1);
-  expect(exported.fields[0].name).toBe("圃場1");
   expect(exported.fields[0].id).toBe("paddy-001");
+  expect(exported.fields[0].geometryType).toBe("Polygon");
+  expect(exported.fields[0].properties.sourceFileName).toBe("walk.txt");
+  expect(exported.fields[0].properties.fixQualitySummary.total).toBe(5);
+  expect(Array.isArray(exported.boundaryTracks)).toBe(true);
   expect(exported.waterControlPoints).toHaveLength(1);
-  expect(exported.waterControlPoints[0].type).toBe("photo");
-  expect(exported.measurements).toHaveLength(TIGHT_LOOP.length);
-  // The app's existing JSON-import path labels the source as "測量JSON"
-  // rather than threading through the literal filename — metadata.sourceFileName
-  // just surfaces whatever label the app already tracks (activePointSource).
-  expect(exported.metadata.sourceFileName).toBe("測量JSON");
-  expect(exported.metadata.fixQualitySummary.total).toBe(TIGHT_LOOP.length);
-  expect(exported.metadata.fixQualitySummary.byFixQuality["1"]).toBe(4);
-  expect(exported.metadata.fixQualitySummary.byFixQuality["2"]).toBe(1);
+  expect(exported.waterControlPoints[0].type).toBe("water_gate");
+  expect(exported.waterControlPoints[0].relatedFieldId).toBe("paddy-001");
+  expect(exported.surveySessions).toHaveLength(1);
+  expect(exported.surveySessions[0].rawPoints).toHaveLength(5);
+  expect(exported.metadata.appName).toBe("スイスイナビ");
+  expect(exported.metadata.exportedAt).toBeTruthy();
+});
 
-  // Simulate an older project file with no field-annotation keys at all.
-  const legacy = { ...exported };
-  delete legacy.fields;
-  delete legacy.waterControlPoints;
-  delete legacy.measurements;
-  delete legacy.metadata;
-  const legacyPath = path.join(dir, "legacy.json");
-  await writeFile(legacyPath, JSON.stringify(legacy));
-  await page.locator("#paddyImportInput").setInputFiles(legacyPath);
-  await expect(page.locator("#fieldAnnotationSummaryFields")).toHaveText("0");
-  await expect(page.locator("#fieldAnnotationSummaryPoints")).toHaveText("0");
-  await expect(page.locator("#paddyAreaMetric")).not.toHaveText("—");
+test("saving a duplicate ID in the feature editor is rejected without changing the existing record", async ({ page }) => {
+  await openSurveyWorkspace(page);
+  await uploadNmea(page, TIGHT_LOOP_NMEA, "a.txt");
+  await page.locator("#fieldRegConfirmButton").click();
+  await uploadNmea(page, TIGHT_LOOP_NMEA, "b.txt");
+  await page.locator("#fieldRegConfirmButton").click();
+  await expect(page.locator("#fieldAnnotationSummaryFields")).toHaveText("2");
 
-  // Round trip: re-importing the full export restores both records.
-  await page.locator("#paddyImportInput").setInputFiles(exportPath);
+  // The second field (圃場2/paddy-002) is currently selected.
+  await page.locator("#selFeatureIdInput").fill("paddy-001");
+  await page.locator("#selFeatureSaveButton").click();
+  await expect(page.locator("#selFeatureMessage")).toContainText("既に使用されています");
+  await expect(page.locator("#fieldAnnotationSummaryFields")).toHaveText("2");
+});
+
+test("雑草・害虫・病気・水不足・水が多すぎる observations can each be added and linked to a specific field", async ({ page }) => {
+  await openSurveyWorkspace(page);
+  await uploadNmea(page, TIGHT_LOOP_NMEA);
+  await page.locator("#fieldRegConfirmButton").click();
   await expect(page.locator("#fieldAnnotationSummaryFields")).toHaveText("1");
-  await expect(page.locator("#fieldAnnotationSummaryPoints")).toHaveText("1");
+
+  await page.locator("#obsTargetFieldSelect").selectOption("paddy-001");
+  await expect(page.locator("#obsAddWeedButton")).toBeEnabled();
+
+  for (const [button, type, label] of [
+    ["#obsAddWeedButton", "weed", "雑草"],
+    ["#obsAddInsectButton", "insect", "害虫"],
+    ["#obsAddDiseaseButton", "disease", "病気"],
+    ["#obsAddWaterShortageButton", "water_shortage", "水不足"],
+    ["#obsAddExcessWaterButton", "excess_water", "水が多すぎる"]
+  ]) {
+    await page.locator(button).click();
+    await expect(page.locator("#obsPositionQz1Button")).toBeEnabled();
+    await page.locator("#obsPositionQz1Button").click();
+    await expect(page.locator("#selFeatureMemoInput")).toBeVisible();
+    const last = await page.evaluate(() => window.fieldAnnotationController.fieldObservations.at(-1));
+    expect(last.fieldId).toBe("paddy-001");
+    expect(last.type).toBe(type);
+    expect(last.label).toBe(label);
+    expect(last.properties.severity).toBe("medium");
+    await expect(page.locator("#obsAddMessage")).toContainText(label);
+  }
+
+  await expect(page.locator("#fieldAnnotationSummaryObservations")).toHaveText("5");
+});
+
+test("map-click placement works for an observation, and スマホGPS位置を使用 uses the mocked browser geolocation", async ({ page, context }) => {
+  await openSurveyWorkspace(page);
+  await uploadNmea(page, TIGHT_LOOP_NMEA);
+  await page.locator("#fieldRegConfirmButton").click();
+  await page.locator("#obsTargetFieldSelect").selectOption("paddy-001");
+
+  await page.locator("#obsAddLodgingButton").click();
+  await page.locator("#obsPositionMapClickButton").click();
+  await expect(page.locator("#obsPositionMapClickButton")).toHaveClass(/active/);
+  await page.locator("#map").click({ position: { x: 300, y: 200 } });
+  await expect(page.locator("#fieldAnnotationSummaryObservations")).toHaveText("1");
+  const lodging = await page.evaluate(() => window.fieldAnnotationController.fieldObservations[0]);
+  expect(lodging.type).toBe("lodging");
+
+  await context.grantPermissions(["geolocation"]);
+  await context.setGeolocation({ latitude: 34.6555, longitude: 135.8310 });
+  await page.locator("#obsAddGateProblemButton").click();
+  await page.locator("#obsPositionGpsButton").click();
+  await expect(page.locator("#fieldAnnotationSummaryObservations")).toHaveText("2");
+  const gateProblem = await page.evaluate(() => window.fieldAnnotationController.fieldObservations[1]);
+  expect(gateProblem.type).toBe("gate_problem");
+  expect(gateProblem.properties.sourceType).toBe("phone_gps");
+  expect(gateProblem.coordinates[0]).toBeCloseTo(34.6555, 3);
+  expect(gateProblem.coordinates[1]).toBeCloseTo(135.831, 3);
+});
+
+test("observation buttons stay disabled until a field exists and a target is chosen", async ({ page }) => {
+  await openSurveyWorkspace(page);
+  await expect(page.locator("#obsAddWeedButton")).toBeDisabled();
+
+  await uploadNmea(page, TIGHT_LOOP_NMEA);
+  await page.locator("#fieldRegConfirmButton").click();
+  await expect(page.locator("#obsAddWeedButton")).toBeDisabled();
+  await page.locator("#obsTargetFieldSelect").selectOption("paddy-001");
+  await expect(page.locator("#obsAddWeedButton")).toBeEnabled();
+});
+
+test("editing an observation's title/severity/memo and deleting it shows the exact confirmation", async ({ page }) => {
+  await openSurveyWorkspace(page);
+  await uploadNmea(page, TIGHT_LOOP_NMEA);
+  await page.locator("#fieldRegConfirmButton").click();
+  await page.locator("#obsTargetFieldSelect").selectOption("paddy-001");
+  await page.locator("#obsAddWeedButton").click();
+  await page.locator("#obsPositionQz1Button").click();
+  await expect(page.locator("#selFeatureForm")).toBeVisible();
+  await expect(page.locator("#selFeatureObsTypeRow")).toBeVisible();
+  await expect(page.locator("#selFeatureSeverityRow")).toBeVisible();
+  await expect(page.locator("#selFeatureTypeRow")).toBeHidden();
+
+  await page.locator("#selFeatureNameInput").fill("畦道の雑草");
+  await page.locator("#selFeatureSeveritySelect").selectOption("urgent");
+  await page.locator("#selFeatureMemoInput").fill("畦道側に雑草が多い");
+  await page.locator("#selFeatureSaveButton").click();
+  await expect(page.locator("#selFeatureMessage")).toContainText("保存しました");
+  const saved = await page.evaluate(() => window.fieldAnnotationController.fieldObservations[0]);
+  expect(saved.name).toBe("畦道の雑草");
+  expect(saved.properties.severity).toBe("urgent");
+  expect(saved.properties.memo).toBe("畦道側に雑草が多い");
+
+  let confirmMessage = null;
+  page.once("dialog", (dialog) => {
+    confirmMessage = dialog.message();
+    dialog.accept();
+  });
+  await page.locator("#selFeatureDeleteButton").click();
+  expect(confirmMessage).toBe("畦道の雑草 を削除しますか？");
+  await expect(page.locator("#fieldAnnotationSummaryObservations")).toHaveText("0");
+});
+
+test("observation markers persist after tab switching and after a page reload", async ({ page }) => {
+  await openSurveyWorkspace(page);
+  await uploadNmea(page, TIGHT_LOOP_NMEA);
+  await page.locator("#fieldRegConfirmButton").click();
+  await page.locator("#obsTargetFieldSelect").selectOption("paddy-001");
+  await page.locator("#obsAddDiseaseButton").click();
+  await page.locator("#obsPositionQz1Button").click();
+  await expect(page.locator("#fieldAnnotationSummaryObservations")).toHaveText("1");
+
+  await page.getByRole("button", { name: "詳細解析" }).click();
+  const stillOnMap = await page.evaluate(() => window.map.hasLayer(window.fieldAnnotationController.layers.observations));
+  expect(stillOnMap).toBe(true);
+  await page.getByRole("button", { name: "QZ1測量" }).click();
+  await expect(page.locator("#fieldAnnotationSummaryObservations")).toHaveText("1");
+
+  await page.reload();
+  await expect(page.locator("#fieldRegDialog")).toBeAttached({ timeout: 15_000 });
+  await page.evaluate(() => {
+    document.querySelectorAll("details[data-workspace='survey']").forEach((card) => { card.open = true; });
+  });
+  await expect(page.locator("#fieldAnnotationSummaryObservations")).toHaveText("1");
+  const observation = await page.evaluate(() => window.fieldAnnotationController.fieldObservations[0]);
+  expect(observation.type).toBe("disease");
+});
+
+test("export JSON includes fieldObservations with type/severity/memo/fieldId preserved", async ({ page }) => {
+  await openSurveyWorkspace(page);
+  await uploadNmea(page, TIGHT_LOOP_NMEA);
+  await page.locator("#fieldRegConfirmButton").click();
+  await page.locator("#obsTargetFieldSelect").selectOption("paddy-001");
+  await page.locator("#obsAddWeedButton").click();
+  await page.locator("#obsPositionQz1Button").click();
+  await page.locator("#selFeatureSeveritySelect").selectOption("high");
+  await page.locator("#selFeatureMemoInput").fill("畦道側に雑草が多い");
+  await page.locator("#selFeatureSaveButton").click();
+
+  await page.getByRole("button", { name: "詳細解析" }).click();
+  await page.evaluate(() => {
+    document.querySelectorAll("details[data-workspace='analysis']").forEach((card) => { card.open = true; });
+  });
+  const downloadPromise = page.waitForEvent("download");
+  await page.locator("#exportAnalysisButton").click();
+  const download = await downloadPromise;
+  const dir = await mkdtemp(path.join(tmpdir(), "field-annotation-obs-"));
+  const exportPath = path.join(dir, "export.json");
+  await download.saveAs(exportPath);
+  const exported = JSON.parse(await readFile(exportPath, "utf8"));
+
+  expect(exported.fieldObservations).toHaveLength(1);
+  const obs = exported.fieldObservations[0];
+  expect(obs.fieldId).toBe("paddy-001");
+  expect(obs.type).toBe("weed");
+  expect(obs.label).toBe("雑草");
+  expect(obs.geometryType).toBe("Point");
+  expect(obs.properties.severity).toBe("high");
+  expect(obs.properties.memo).toBe("畦道側に雑草が多い");
+  expect(obs.properties.createdAt).toBeTruthy();
+  expect(exported.metadata.dataMode).toBe("real_user_data");
+});
+
+test("the advanced manual card in 詳細解析 still works and offers the same three-way closure choice", async ({ page }) => {
+  await openSurveyWorkspace(page);
+  await uploadNmea(page, OPEN_L_SHAPE_NMEA);
+  await page.locator("#fieldRegCancelButton").click();
+
+  await page.getByRole("button", { name: "詳細解析" }).click();
+  await page.evaluate(() => {
+    document.querySelectorAll("details[data-workspace='analysis']").forEach((card) => { card.open = true; });
+  });
+  await page.locator("#fieldUseAllPointsCheckbox").check();
+  await page.locator("#fieldCreateButton").click();
+  await expect(page.locator("#fieldCloseWarning")).toBeVisible();
+  await expect(page.locator("#fieldCloseForceCloseButton")).toBeVisible();
+  await expect(page.locator("#fieldCloseSaveAsTrackButton")).toBeVisible();
+  await expect(page.locator("#fieldCloseCancelButton")).toBeVisible();
+
+  await page.locator("#fieldCloseSaveAsTrackButton").click();
+  await expect(page.locator("#fieldAnnotationSummaryTracks")).toHaveText("1");
 });

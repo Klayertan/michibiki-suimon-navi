@@ -1,4 +1,4 @@
-/* Field polygon & water-control-point annotation.
+/* Field polygon / boundary track / water-control-point annotation.
    Legend swatches reuse .paddy-legend / .paddy-legend-item / .paddy-legend-swatch
    from paddy-intelligence.css; colors themselves live only in
    field-annotation-core.js (single style source). */
@@ -13,8 +13,42 @@
   padding: 2px 6px !important;
 }
 
-.field-annotation-label::before {
+.field-annotation-track-label {
+  background: rgba(255, 255, 255, 0.92) !important;
+  border: 1px solid #b45309 !important;
+  border-radius: 5px !important;
+  box-shadow: none !important;
+  color: #b45309;
+  font-weight: 750;
+  padding: 2px 6px !important;
+}
+
+.field-annotation-label::before,
+.field-annotation-track-label::before {
   display: none !important;
+}
+
+/* Upload-triggered registration dialog: styled prominently since it must
+   grab the user's attention immediately after an NMEA upload. */
+.field-reg-dialog {
+  background: #f0fdf4;
+  border: 2px solid #166534;
+}
+
+.field-reg-type-fieldset {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 10px 12px;
+}
+
+.field-reg-type-fieldset legend {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+  padding: 0 4px;
 }
 
 .field-close-warning {
@@ -37,15 +71,43 @@
 .field-close-warning-actions {
   display: grid;
   gap: 8px;
+  grid-template-columns: 1fr 1fr 1fr;
+}
+
+.wcp-type-buttons,
+.obs-type-buttons {
+  display: grid;
+  gap: 8px;
   grid-template-columns: 1fr 1fr;
 }
 
-#wcpAddMapClickButton.active {
+#wcpPositionMapClickButton.active,
+#obsPositionMapClickButton.active {
   background: #1d4ed8;
   color: #fff;
 }
 
-.field-annotation-range-row[hidden] {
+.obs-popup {
+  display: grid;
+  font-size: 0.85rem;
+  gap: 4px;
+  min-width: 200px;
+}
+
+.obs-popup-row strong {
+  color: var(--muted);
+}
+
+.obs-popup-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+/* .input-row sets display:grid unconditionally, which otherwise beats the
+   native [hidden] UA rule on the cascade — any row that gets toggled via
+   .hidden in JS needs this class too. */
+.field-annotation-toggle-row[hidden] {
   display: none;
 }
 
@@ -63,7 +125,9 @@
 }
 
 @media (max-width: 760px) {
-  .field-close-warning-actions {
+  .field-close-warning-actions,
+  .wcp-type-buttons,
+  .obs-type-buttons {
     grid-template-columns: 1fr;
   }
 }

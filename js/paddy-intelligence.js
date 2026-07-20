@@ -194,7 +194,7 @@
   };
 
   class PaddyFieldIntelligence {
-    constructor({ map, getBoundary, getGnssPoints, onMetricsChange }) {
+    constructor({ map, getBoundary, getGnssPoints, onMetricsChange, useDemoData = false }) {
       if (!map || typeof L === "undefined") {
         throw new Error("PaddyFieldIntelligence requires a Leaflet map.");
       }
@@ -202,7 +202,8 @@
       this.getBaseBoundary = getBoundary;
       this.getGnssPoints = getGnssPoints || (() => []);
       this.onMetricsChange = onMetricsChange || (() => {});
-      this.analysis = clone(DEMO_ANALYSIS);
+      this.useDemoData = Boolean(useDemoData);
+      this.analysis = this.useDemoData ? clone(DEMO_ANALYSIS) : emptyAnalysis();
       this.layers = Object.fromEntries(
         ["boundary", "water", "plant", "problem", "irrigation", "obstacle", "drone", "grid", "drawing"].map((key) => [key, L.layerGroup().addTo(map)])
       );
@@ -219,7 +220,17 @@
       this.renderLegend();
       this.updateDrawingUi();
       this.updateSelectionUi();
-      this.loadDemoData({ fit: false });
+      // Real-user-data-first: only auto-populate the demo paddy sample
+      // (water/plant/problem zones, irrigation markers, grid) when the app
+      // is explicitly configured to. Otherwise start from an empty analysis
+      // and just render that empty state — loadPaddyDemoButton remains a
+      // fully-working explicit opt-in regardless of this flag.
+      if (this.useDemoData) {
+        this.loadDemoData({ fit: false });
+      } else {
+        this.setDefaultInputsFromAnalysis();
+        this.refresh();
+      }
     }
 
     collectElements() {
@@ -1442,7 +1453,10 @@
         // annotation controller via an optional hook; older exports simply
         // omit these keys.
         fields: fieldAnnotation.fields || [],
+        boundaryTracks: fieldAnnotation.boundaryTracks || [],
         waterControlPoints: fieldAnnotation.waterControlPoints || [],
+        fieldObservations: fieldAnnotation.fieldObservations || [],
+        surveySessions: fieldAnnotation.surveySessions || [],
         measurements: fieldAnnotation.measurements || [],
         metadata: fieldAnnotation.metadata || {},
         projectMetadata: {
@@ -1564,6 +1578,22 @@
       gridEnabled: false,
       withGridCell: 0,
       message: "QZ1/NMEAまたは測量JSONを読み込むと集計されます。"
+    };
+  }
+
+  /** Same shape as DEMO_ANALYSIS, but with no sample geometry — the
+   * real-user-data-first starting state before any upload/manual load. */
+  function emptyAnalysis() {
+    return {
+      waterDepthCm: 5,
+      gridSizeMeters: 5,
+      fieldBoundary: [],
+      waterPolygons: [],
+      plantPolygons: [],
+      problemZones: [],
+      irrigationMarkers: [],
+      obstacles: [],
+      gridCellData: {}
     };
   }
 
