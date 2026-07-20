@@ -359,6 +359,17 @@
       margin: 0;
     }
 
+    .data-source-warning {
+      margin: 0 0 10px;
+      padding: 8px 10px;
+      border-radius: 8px;
+      background: #fff7ed;
+      border: 1px solid #fb923c;
+      color: #9a3412;
+      font-size: 0.82rem;
+      line-height: 1.5;
+    }
+
     .input-row {
       display: grid;
       gap: 4px;
@@ -1630,7 +1641,6 @@
         </div>
         <div class="header-actions">
           <span id="headerDataStatus" class="data-status"><span aria-hidden="true"></span>実証データ待機中</span>
-          <button id="workspacePrimaryAction" class="action-button" type="button">実測QZ1データを表示</button>
         </div>
       </div>
       <nav class="workspace-nav" aria-label="作業画面">
@@ -1705,6 +1715,7 @@
             <div class="kv"><span>有効測位点</span><strong id="decisionValidPoints">—</strong></div>
             <div class="kv"><span>GPS単独 / DGPS</span><strong id="decisionGpsBreakdown">—</strong></div>
             <p id="decisionWaterPointsNote" class="meta"></p>
+            <button id="decisionAddWaterPointButton" class="panel-button" type="button" hidden>水管理ポイントを追加する</button>
             <p id="decisionObservationsNote" class="meta"></p>
           </div>
         </section>
@@ -1712,6 +1723,7 @@
         <section class="card gate-card" data-workspace="decision">
           <span class="eyebrow">今日の水門判断</span>
           <h2>気象と圃場位置からの推奨</h2>
+          <p id="decisionDataWarning" class="data-source-warning" role="status" aria-live="polite" hidden></p>
           <div id="verdictBadge" class="verdict hold">様子見</div>
           <p id="verdictReason" class="verdict-reason"></p>
           <p class="disclaimer">※ 本アプリは判断支援です。最終判断と水門の操作は必ず人が行ってください。</p>
@@ -1731,8 +1743,8 @@
             <div class="proof-metric"><span>衛星数</span><strong id="proofSatellites">—</strong></div>
             <div class="proof-metric"><span>HDOP</span><strong id="proofHdop">—</strong></div>
           </div>
-          <button id="loadProofButton" class="panel-button primary proof-load" type="button">実測QZ1データを表示</button>
-          <p id="proofMessage" class="meta">奈良高専の寮周辺で取得した実測ログです。圃場測量データではありません。</p>
+          <button id="loadProofButton" class="panel-button primary proof-load" type="button">選択中データの測位点を表示</button>
+          <p id="proofMessage" class="meta">対象圃場を選択すると、その測量データの品質を表示します。</p>
         </section>
 
         <section class="card" data-workspace="decision">
@@ -2745,7 +2757,7 @@
     // field polygon, grid, or paddy-intelligence sample content) unless the
     // user explicitly loads demo data via a labeled button. This only gates
     // *automatic* fallbacks — explicit actions (loadPaddyDemoButton, the
-    // "実測QZ1データを表示" bundled-proof button) are unaffected either way.
+    // "選択中データの測位点を表示" bundled-proof button) are unaffected either way.
     const USE_DEMO_DATA = false;
 
     // Embedded fallbacks mirror data/*.json so the app still works over file://
@@ -3042,6 +3054,8 @@
       waterPointsNote: document.getElementById("decisionWaterPointsNote"),
       observationsNote: document.getElementById("decisionObservationsNote")
     };
+    const decisionAddWaterPointButton = document.getElementById("decisionAddWaterPointButton");
+    const decisionDataWarning = document.getElementById("decisionDataWarning");
     const workspacePrimaryAction = document.getElementById("workspacePrimaryAction");
     const headerDataStatus = document.getElementById("headerDataStatus");
     const loadProofButton = document.getElementById("loadProofButton");
@@ -3538,8 +3552,10 @@
     // -------------------------------------------------------------------------
     const DECISION_SAMPLE_VALUE = "__sample__";
     const DECISION_DEMO_VALUE = "__demo__";
-    const DECISION_NO_WATER_POINTS_MESSAGE = "この圃場には水門・給水口・排水口がまだ登録されていません。";
+    const DECISION_NO_WATER_POINTS_MESSAGE = "この圃場には水門・給水口・排水口がまだ登録されていません。QZ1測量タブで水管理ポイントを追加してください。";
     const DECISION_NO_OBSERVATIONS_MESSAGE = "現地観察メモはまだ登録されていません。";
+    const DECISION_SAMPLE_WARNING = "現在はサンプルデータで判断しています。実際の圃場判断ではありません。";
+    const DECISION_DEMO_WARNING = "現在はデモデータで判断しています。実際の圃場判断ではありません。";
 
     function populateDecisionFieldOptions() {
       if (!decisionFieldSelect) {
@@ -3566,10 +3582,36 @@
     }
 
     async function handleDecisionFieldChange() {
-      if (decisionFieldSelect.value === DECISION_SAMPLE_VALUE && parsedPoints.length === 0) {
-        await loadBundledProof();
+      if (decisionFieldSelect.value === DECISION_SAMPLE_VALUE) {
+        await ensureSchoolSampleLoaded();
       }
       renderDecisionFieldSummary();
+      await renderProofCard();
+    }
+
+    function updateDecisionWaterPointsNote(count) {
+      decisionEls.waterPointsNote.textContent = count === 0
+        ? DECISION_NO_WATER_POINTS_MESSAGE
+        : `水管理ポイント: ${count}件登録済み`;
+      if (decisionAddWaterPointButton) {
+        decisionAddWaterPointButton.hidden = count !== 0;
+      }
+    }
+
+    function updateDecisionDataWarning(kind) {
+      if (!decisionDataWarning) {
+        return;
+      }
+      if (kind === "sample") {
+        decisionDataWarning.textContent = DECISION_SAMPLE_WARNING;
+        decisionDataWarning.hidden = false;
+      } else if (kind === "demo") {
+        decisionDataWarning.textContent = DECISION_DEMO_WARNING;
+        decisionDataWarning.hidden = false;
+      } else {
+        decisionDataWarning.hidden = true;
+        decisionDataWarning.textContent = "";
+      }
     }
 
     function renderDecisionFieldSummary() {
@@ -3580,6 +3622,7 @@
       if (!value) {
         if (decisionFieldEmptyState) decisionFieldEmptyState.hidden = false;
         if (decisionFieldSummary) decisionFieldSummary.hidden = true;
+        updateDecisionDataWarning(null);
         return;
       }
       if (decisionFieldEmptyState) decisionFieldEmptyState.hidden = true;
@@ -3609,26 +3652,28 @@
       decisionEls.gpsBreakdown.textContent = report.surveyLog.found
         ? `${report.surveyLog.gpsOnlyCount}点 / ${report.surveyLog.dgpsCount}点`
         : "—";
-      decisionEls.waterPointsNote.textContent = report.waterControlPoints.length === 0
-        ? DECISION_NO_WATER_POINTS_MESSAGE
-        : `水管理ポイント: ${report.waterControlPoints.length}件登録済み`;
+      updateDecisionWaterPointsNote(report.waterControlPoints.length);
       decisionEls.observationsNote.textContent = report.observations.length === 0
         ? DECISION_NO_OBSERVATIONS_MESSAGE
         : `現地観察メモ: ${report.observations.length}件登録済み`;
+      updateDecisionDataWarning(null);
     }
 
     function renderDecisionSample(profileLabel) {
-      const gpsOnlyCount = parsedPoints.filter((point) => !point.augmented).length;
-      const dgpsCount = parsedPoints.filter((point) => point.augmented).length;
+      const sample = schoolSampleCache?.points || [];
+      const gpsOnlyCount = sample.filter((point) => !point.augmented).length;
+      const dgpsCount = sample.filter((point) => point.augmented).length;
       decisionEls.fieldLabel.textContent = "校内実測サンプル";
       decisionEls.dataKind.textContent = "サンプル";
       decisionEls.profileLabel.textContent = profileLabel;
       decisionEls.reliability.textContent = "—";
-      decisionEls.sourceFile.textContent = parsedPoints.length > 0 ? "校内実測" : "—";
-      decisionEls.validPoints.textContent = parsedPoints.length > 0 ? `${parsedPoints.length}点` : "—";
-      decisionEls.gpsBreakdown.textContent = parsedPoints.length > 0 ? `${gpsOnlyCount}点 / ${dgpsCount}点` : "—";
+      decisionEls.sourceFile.textContent = sample.length > 0 ? "校内実測" : "—";
+      decisionEls.validPoints.textContent = sample.length > 0 ? `${sample.length}点` : "—";
+      decisionEls.gpsBreakdown.textContent = sample.length > 0 ? `${gpsOnlyCount}点 / ${dgpsCount}点` : "—";
+      if (decisionAddWaterPointButton) decisionAddWaterPointButton.hidden = true;
       decisionEls.waterPointsNote.textContent = DECISION_NO_WATER_POINTS_MESSAGE;
       decisionEls.observationsNote.textContent = DECISION_NO_OBSERVATIONS_MESSAGE;
+      updateDecisionDataWarning("sample");
     }
 
     function renderDecisionDemo(profileLabel) {
@@ -3639,8 +3684,10 @@
       decisionEls.sourceFile.textContent = "—";
       decisionEls.validPoints.textContent = "—";
       decisionEls.gpsBreakdown.textContent = "—";
+      if (decisionAddWaterPointButton) decisionAddWaterPointButton.hidden = true;
       decisionEls.waterPointsNote.textContent = DECISION_NO_WATER_POINTS_MESSAGE;
       decisionEls.observationsNote.textContent = DECISION_NO_OBSERVATIONS_MESSAGE;
+      updateDecisionDataWarning("demo");
     }
 
     function updateDecision() {
@@ -4529,6 +4576,7 @@
       if (activeWorkspace === "decision") {
         populateDecisionFieldOptions();
         renderDecisionFieldSummary();
+        renderProofCard();
       }
       // The generic [data-workspace] unhide pass above always reveals
       // fieldRegDialog when entering QZ1測量, regardless of whether an
@@ -4725,43 +4773,176 @@
       summaryEls.ignored.textContent = String(lastIgnoredCount);
       summaryEls.tags.textContent = formatFeatureCounts(countFeatures(parsedPoints));
       summary.hidden = false;
-      updateProofMetrics();
+      updateHeaderDataStatus();
     }
 
-    function updateProofMetrics() {
+    // headerDataStatus (top-right pill) always reflects whatever is currently
+    // rendered on the shared map (parsedPoints/activePointSource) — that's a
+    // map-wide indicator, independent of which dataset 判断デモ has selected.
+    // The QZ1/DGNSS 測位品質 card itself is driven separately by
+    // renderProofCard(), which follows decisionFieldSelect instead — see
+    // below. Do not reintroduce a dependency from the proof card on
+    // parsedPoints/activePointSource; that was the root cause of the proof
+    // card always showing the 校内実測 sample regardless of selection.
+    function updateHeaderDataStatus() {
       if (parsedPoints.length === 0) {
-        proofEls.total.textContent = "—";
-        proofEls.slasRate.textContent = "—";
-        proofEls.satellites.textContent = "—";
-        proofEls.hdop.textContent = "—";
-        proofSourceBadge.textContent = "未読込";
-        proofSourceBadge.classList.remove("loaded");
         headerDataStatus.classList.remove("loaded");
         headerDataStatus.lastChild.textContent = "実証データ待機中";
         return;
       }
+      headerDataStatus.classList.add("loaded");
+      headerDataStatus.lastChild.textContent = `${activePointSource}・${parsedPoints.length}点`;
+    }
 
-      const augmentedPoints = parsedPoints.filter((point) => point.augmented);
-      const qualityPoints = augmentedPoints.length > 0 ? augmentedPoints : parsedPoints;
+    // Pure: derives fix-quality/satellite/HDOP summary stats from any array
+    // of QZ1-parsed points (same shape parseNmea() produces). Shared by the
+    // proof card's three data sources (registered field, 校内実測サンプル,
+    // and — if it ever gains points — デモ) so they can never disagree.
+    function computeQualityStats(points) {
+      if (!points || points.length === 0) {
+        return { total: 0, dgpsRatePct: null, satellitesText: "—", hdopText: "—" };
+      }
+      const augmentedPoints = points.filter((point) => point.augmented);
+      const qualityPoints = augmentedPoints.length > 0 ? augmentedPoints : points;
       const satellites = qualityPoints.map((point) => point.satellites).filter(Number.isFinite);
       const hdops = qualityPoints.map((point) => point.hdop).filter(Number.isFinite);
       const average = (values) => values.reduce((sum, value) => sum + value, 0) / values.length;
       const range = (values, digits = 0) => values.length === 0
         ? "—"
         : `${Math.min(...values).toFixed(digits)}–${Math.max(...values).toFixed(digits)}`;
+      return {
+        total: points.length,
+        dgpsRatePct: Math.round((augmentedPoints.length / points.length) * 100),
+        satellitesText: satellites.length > 0 ? `${range(satellites)}基（平均 ${average(satellites).toFixed(1)}）` : "—",
+        hdopText: hdops.length > 0 ? `${range(hdops, 1)}（平均 ${average(hdops).toFixed(2)}）` : "—"
+      };
+    }
 
-      proofEls.total.textContent = `${parsedPoints.length}点`;
-      proofEls.slasRate.textContent = `${Math.round((augmentedPoints.length / parsedPoints.length) * 100)}%`;
-      proofEls.satellites.textContent = satellites.length > 0
-        ? `${range(satellites)}基（平均 ${average(satellites).toFixed(1)}）`
-        : "—";
-      proofEls.hdop.textContent = hdops.length > 0
-        ? `${range(hdops, 1)}（平均 ${average(hdops).toFixed(2)}）`
-        : "—";
-      proofSourceBadge.textContent = activePointSource;
+    function renderProofStats(stats) {
+      proofEls.total.textContent = stats.total > 0 ? `${stats.total}点` : "—";
+      proofEls.slasRate.textContent = stats.dgpsRatePct === null ? "—" : `${stats.dgpsRatePct}%`;
+      proofEls.satellites.textContent = stats.satellitesText;
+      proofEls.hdop.textContent = stats.hdopText;
+    }
+
+    function clearProofStats() {
+      renderProofStats({ total: 0, dgpsRatePct: null, satellitesText: "—", hdopText: "—" });
+    }
+
+    const PROOF_NO_FIELD_MESSAGE = "対象圃場を選択すると、その測量データの品質を表示します。";
+    const PROOF_NO_SURVEY_LOG_MESSAGE = "この圃場にはQZ1測量ログがありません。";
+    const PROOF_SAMPLE_MESSAGE = "これは校内実測サンプルです。圃場測量データではありません。奈良高専の寮周辺で取得した実測ログです。";
+    const PROOF_DEMO_MESSAGE = "デモデータ: これは仮データです。実際の圃場判断ではありません。";
+
+    // Cached separately from the shared map's `parsedPoints` global — the
+    // proof card must show the same 校内実測サンプル numbers regardless of
+    // whatever the QZ1測量 tab currently has loaded onto the map.
+    let schoolSampleCache = null;
+
+    async function ensureSchoolSampleLoaded() {
+      if (schoolSampleCache) {
+        return schoolSampleCache;
+      }
+      try {
+        const response = await fetch("data/samples/qz1-dorm-walk-20260706.txt", { cache: "no-store" });
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        const parseResult = parseNmea(await response.text());
+        schoolSampleCache = { points: parseResult.points, error: null };
+      } catch (error) {
+        schoolSampleCache = { points: [], error: error.message };
+      }
+      return schoolSampleCache;
+    }
+
+    // The QZ1 / DGNSS 測位品質 card — always follows decisionFieldSelect
+    // (対象圃場 / 使用データ), never the map's own parsedPoints/
+    // activePointSource. 判断プロファイル must never affect this function.
+    async function renderProofCard() {
+      const value = decisionFieldSelect?.value || "";
+
+      if (!value) {
+        proofSourceBadge.textContent = "未読込";
+        proofSourceBadge.classList.remove("loaded");
+        clearProofStats();
+        proofMessage.textContent = PROOF_NO_FIELD_MESSAGE;
+        if (loadProofButton) loadProofButton.disabled = true;
+        return;
+      }
+
+      if (value === DECISION_SAMPLE_VALUE) {
+        proofSourceBadge.textContent = "校内実測サンプル";
+        proofMessage.textContent = "実測ログを読み込んでいます…";
+        if (loadProofButton) loadProofButton.disabled = true;
+        const sample = await ensureSchoolSampleLoaded();
+        if (decisionFieldSelect.value !== DECISION_SAMPLE_VALUE) {
+          return; // selection changed while the sample was loading
+        }
+        if (sample.points.length === 0) {
+          proofSourceBadge.classList.remove("loaded");
+          clearProofStats();
+          proofMessage.textContent = `実測ログを読み込めませんでした（${sample.error}）。`;
+          return;
+        }
+        proofSourceBadge.classList.add("loaded");
+        renderProofStats(computeQualityStats(sample.points));
+        proofMessage.textContent = PROOF_SAMPLE_MESSAGE;
+        if (loadProofButton) loadProofButton.disabled = false;
+        return;
+      }
+
+      if (value === DECISION_DEMO_VALUE) {
+        proofSourceBadge.textContent = "デモデータ";
+        proofSourceBadge.classList.add("loaded");
+        clearProofStats();
+        proofMessage.textContent = PROOF_DEMO_MESSAGE;
+        if (loadProofButton) loadProofButton.disabled = true; // デモ carries no positioning points to show
+        return;
+      }
+
+      const report = fieldReportController?.buildReportFor(value);
+      const rawPoints = report?.surveyLog?.found ? report.surveyLog.rawPoints : [];
+      if (!report || rawPoints.length === 0) {
+        proofSourceBadge.textContent = "実測QZ1ログ";
+        proofSourceBadge.classList.remove("loaded");
+        clearProofStats();
+        proofMessage.textContent = PROOF_NO_SURVEY_LOG_MESSAGE;
+        if (loadProofButton) loadProofButton.disabled = true;
+        return;
+      }
+      proofSourceBadge.textContent = "実測QZ1ログ";
       proofSourceBadge.classList.add("loaded");
-      headerDataStatus.classList.add("loaded");
-      headerDataStatus.lastChild.textContent = `${activePointSource}・${parsedPoints.length}点`;
+      renderProofStats(computeQualityStats(rawPoints));
+      proofMessage.textContent = `対象圃場: ${report.fieldName} / ${report.fieldId} のQZ1測量ログです。`;
+      if (loadProofButton) loadProofButton.disabled = false;
+    }
+
+    // Displays the currently selected 対象圃場/使用データ's own points on the
+    // shared map — separate from renderProofCard(), which shows the metrics
+    // regardless of whether this has been clicked.
+    async function showSelectedDatasetOnMap() {
+      const value = decisionFieldSelect?.value || "";
+      if (value === DECISION_SAMPLE_VALUE) {
+        await loadBundledProof();
+        await renderProofCard();
+        return;
+      }
+      if (value === DECISION_DEMO_VALUE || !value) {
+        return;
+      }
+      const report = fieldReportController?.buildReportFor(value);
+      const rawPoints = report?.surveyLog?.found ? report.surveyLog.rawPoints : [];
+      if (rawPoints.length === 0) {
+        return;
+      }
+      parsedPoints = rawPoints.slice();
+      activePointSource = `${report.fieldName} 実測ログ`;
+      lastSkippedCount = 0;
+      lastIgnoredCount = 0;
+      updateSummary();
+      renderPoints();
+      await renderProofCard();
     }
 
     function applyNmeaText(text, sourceLabel, options = {}) {
@@ -4821,6 +5002,28 @@
       }
     }
 
+    // Mirrors field-annotation-controller.js's scrollWithinPanel(): native
+    // Element.scrollIntoView() also moves documentElement.scrollTop in this
+    // app's fixed-100vh layout, desyncing the page and leaving a blank gap —
+    // .panel must be scrolled directly instead. Duplicated locally since
+    // this inline script and that module don't share scope.
+    function scrollElementWithinPanel(element, { block = "start" } = {}) {
+      if (!element) {
+        return;
+      }
+      const panel = element.closest(".panel");
+      if (!panel) {
+        element.scrollIntoView({ block });
+        return;
+      }
+      const offsetWithinPanel = element.getBoundingClientRect().top - panel.getBoundingClientRect().top;
+      let target = panel.scrollTop + offsetWithinPanel;
+      if (block === "center") {
+        target -= (panel.clientHeight - element.clientHeight) / 2;
+      }
+      panel.scrollTo({ top: Math.max(0, target), behavior: "auto" });
+    }
+
     function switchWorkspace(workspace, { updateHash = true } = {}) {
       if (!["decision", "survey", "assurance", "analysis"].includes(workspace)) {
         workspace = "decision";
@@ -4836,7 +5039,7 @@
         tab.setAttribute("aria-selected", String(selected));
       });
       workspacePrimaryAction.textContent = {
-        decision: "実測QZ1データを表示",
+        decision: "選択中データの測位点を表示",
         survey: "NMEAをアップロード",
         assurance: "測量チェックを実行",
         analysis: "解析デモを読み込む"
@@ -5556,9 +5759,27 @@
     weatherFetchButton.addEventListener("click", fetchLiveWeather);
     Object.values(weatherInputs).forEach((input) => input.addEventListener("input", updateDecision));
     Object.values(thresholdInputs).forEach((input) => input.addEventListener("input", updateDecision));
-    loadProofButton.addEventListener("click", loadBundledProof);
+    loadProofButton.addEventListener("click", showSelectedDatasetOnMap);
     decisionFieldSelect?.addEventListener("change", handleDecisionFieldChange);
     decisionProfileSelect?.addEventListener("change", renderDecisionFieldSummary);
+    decisionAddWaterPointButton?.addEventListener("click", () => {
+      const targetFieldId = decisionFieldSelect?.value;
+      const isRealField = targetFieldId && targetFieldId !== DECISION_SAMPLE_VALUE && targetFieldId !== DECISION_DEMO_VALUE;
+      switchWorkspace("survey");
+      window.setTimeout(() => {
+        const waterPanel = document.getElementById("waterControlPanel");
+        const wcpSelect = document.getElementById("wcpTargetFieldSelect");
+        if (isRealField && wcpSelect && [...wcpSelect.options].some((option) => option.value === targetFieldId)) {
+          wcpSelect.value = targetFieldId;
+          wcpSelect.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+        if (waterPanel) {
+          waterPanel.open = true;
+          scrollElementWithinPanel(waterPanel, { block: "start" });
+        }
+        document.getElementById("wcpAddGateButton")?.focus();
+      }, 100);
+    });
     document.querySelectorAll("[data-workspace-target]").forEach((tab) => {
       tab.addEventListener("click", () => switchWorkspace(tab.dataset.workspaceTarget));
     });
@@ -5568,7 +5789,7 @@
     document.getElementById("resetWeatherButton").addEventListener("click", resetWeatherConditions);
     workspacePrimaryAction.addEventListener("click", () => {
       if (activeWorkspace === "decision") {
-        loadBundledProof();
+        showSelectedDatasetOnMap();
       } else if (activeWorkspace === "survey") {
         fileInput.click();
       } else if (activeWorkspace === "assurance") {
@@ -5631,6 +5852,7 @@
         window.fieldReportController = fieldReportController;
         populateDecisionFieldOptions();
         renderDecisionFieldSummary();
+        renderProofCard();
       } catch (error) {
         console.error("Field report initialization failed", error);
         const warning = document.getElementById("reportMessage");

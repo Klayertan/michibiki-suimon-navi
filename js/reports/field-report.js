@@ -161,7 +161,11 @@ function buildSurveyLog(primarySession) {
     gpsOnlyCount,
     dgpsCount,
     qzssUsedCount,
-    uploadedAt: primarySession.uploadedAt || null
+    uploadedAt: primarySession.uploadedAt || null,
+    // Exposed so consumers (e.g. 判断デモ's QZ1/DGNSS 測位品質 card) can derive
+    // HDOP/satellite-count quality stats and show this field's own points on
+    // the map, without re-deriving them from a separate global point store.
+    rawPoints: points.slice()
   };
 }
 

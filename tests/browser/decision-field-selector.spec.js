@@ -63,7 +63,9 @@ test("selecting 圃場1 updates the decision card with real survey data, and emp
   await expect(page.locator("#decisionValidPoints")).toHaveText("5点");
   await expect(page.locator("#decisionGpsBreakdown")).toHaveText("4点 / 1点");
   await expect(page.locator("#decisionReliability")).not.toHaveText("—");
-  await expect(page.locator("#decisionWaterPointsNote")).toHaveText("この圃場には水門・給水口・排水口がまだ登録されていません。");
+  await expect(page.locator("#decisionWaterPointsNote")).toHaveText(
+    "この圃場には水門・給水口・排水口がまだ登録されていません。QZ1測量タブで水管理ポイントを追加してください。"
+  );
   await expect(page.locator("#decisionObservationsNote")).toHaveText("現地観察メモはまだ登録されていません。");
 });
 
@@ -124,4 +126,114 @@ test("with no registered fields, the built-in sample can still be selected manua
   await expect(page.locator("#decisionFieldEmptyState")).toBeHidden();
   await expect(page.locator("#decisionFieldSummary")).toBeVisible();
   await expect(page.locator("#decisionDataKind")).toHaveText("サンプル");
+});
+
+test("選択している圃場に水管理ポイントが無い場合、追加を促すボタンが表示され、クリックするとQZ1測量の水管理ポイントパネルに移動する", async ({ page }) => {
+  await openSurveyWorkspace(page);
+  await registerField(page);
+  await openDecisionWorkspace(page);
+
+  await expect(page.locator("#decisionWaterPointsNote")).toHaveText(
+    "この圃場には水門・給水口・排水口がまだ登録されていません。QZ1測量タブで水管理ポイントを追加してください。"
+  );
+  const addButton = page.locator("#decisionAddWaterPointButton");
+  await expect(addButton).toBeVisible();
+  await addButton.click();
+
+  await expect(page.getByRole("button", { name: "QZ1測量" })).toHaveClass(/active/);
+  await expect(page.locator("#waterControlPanel")).toBeVisible();
+  await expect(page.locator("#wcpTargetFieldSelect")).toHaveValue("paddy-001");
+});
+
+test("校内実測サンプルを選ぶと判定カードにサンプル警告が表示される", async ({ page }) => {
+  await page.goto("/#decision");
+  await expect(page.locator("#decisionFieldSelect")).toBeAttached({ timeout: 15_000 });
+  await page.locator("#decisionFieldSelect").selectOption("__sample__");
+  await expect(page.locator("#decisionDataWarning")).toBeVisible();
+  await expect(page.locator("#decisionDataWarning")).toHaveText(
+    "現在はサンプルデータで判断しています。実際の圃場判断ではありません。"
+  );
+});
+
+test("デモを選ぶと判定カードにデモ警告が表示される", async ({ page }) => {
+  await page.goto("/#decision");
+  await expect(page.locator("#decisionFieldSelect")).toBeAttached({ timeout: 15_000 });
+  await page.locator("#decisionFieldSelect").selectOption("__demo__");
+  await expect(page.locator("#decisionDataWarning")).toBeVisible();
+  await expect(page.locator("#decisionDataWarning")).toHaveText(
+    "現在はデモデータで判断しています。実際の圃場判断ではありません。"
+  );
+});
+
+test("registered field を選ぶと警告は表示されない", async ({ page }) => {
+  await openSurveyWorkspace(page);
+  await registerField(page);
+  await openDecisionWorkspace(page);
+  await expect(page.locator("#decisionDataWarning")).toBeHidden();
+});
+
+test("QZ1 / DGNSS 測位品質カードは選択した対象圃場/使用データに追従する", async ({ page }) => {
+  await openSurveyWorkspace(page);
+  await registerField(page);
+  await openDecisionWorkspace(page);
+
+  // Real registered field is selected by default — the proof card must show
+  // that field's own survey stats, not the school sample.
+  await expect(page.locator("#proofSourceBadge")).toHaveText("実測QZ1ログ");
+  await expect(page.locator("#proofTotal")).toHaveText("5点");
+  await expect(page.locator("#proofMessage")).toContainText("圃場1 / paddy-001");
+  await expect(page.locator("#proofMessage")).not.toContainText("奈良高専");
+
+  // Switching to the sample shows the school-sample metrics and its warning
+  // — and must not keep showing the field's numbers.
+  await page.locator("#decisionFieldSelect").selectOption("__sample__");
+  await expect(page.locator("#proofSourceBadge")).toHaveText("校内実測サンプル");
+  await expect(page.locator("#proofTotal")).toHaveText("206点");
+  await expect(page.locator("#proofMessage")).toContainText("これは校内実測サンプルです。圃場測量データではありません。");
+
+  // Switching to デモ must not keep showing the school-sample metrics.
+  await page.locator("#decisionFieldSelect").selectOption("__demo__");
+  await expect(page.locator("#proofSourceBadge")).toHaveText("デモデータ");
+  await expect(page.locator("#proofTotal")).toHaveText("—");
+  await expect(page.locator("#proofMessage")).toContainText("これは仮データです。実際の圃場判断ではありません。");
+  await expect(page.locator("#proofMessage")).not.toContainText("206点");
+
+  // Switching back to the registered field must restore its own numbers.
+  await page.locator("#decisionFieldSelect").selectOption("paddy-001");
+  await expect(page.locator("#proofSourceBadge")).toHaveText("実測QZ1ログ");
+  await expect(page.locator("#proofTotal")).toHaveText("5点");
+});
+
+test("判断プロファイルを変更してもQZ1/DGNSS測位品質カードの数値は変わらない", async ({ page }) => {
+  await openSurveyWorkspace(page);
+  await registerField(page);
+  await openDecisionWorkspace(page);
+
+  await expect(page.locator("#proofTotal")).toHaveText("5点");
+  await page.locator("#decisionProfileSelect").selectOption("heavy_rain");
+  await expect(page.locator("#proofTotal")).toHaveText("5点");
+  await expect(page.locator("#proofSourceBadge")).toHaveText("実測QZ1ログ");
+});
+
+test("選択中データの測位点を表示ボタンは、常に校内実測サンプルではなく選択中のデータセットの点を地図に表示する", async ({ page }) => {
+  await openSurveyWorkspace(page);
+  await registerField(page);
+  await openDecisionWorkspace(page);
+
+  // The registered field is selected by default; showing its points must
+  // put exactly its 5 points on the map, not the 206-point school sample.
+  await page.getByRole("button", { name: "選択中データの測位点を表示" }).first().click();
+  await expect(page.locator("#totalPoints")).toHaveText("5");
+
+  // Switching to the sample and showing points must load the 206-point log.
+  await page.locator("#decisionFieldSelect").selectOption("__sample__");
+  await page.getByRole("button", { name: "選択中データの測位点を表示" }).first().click();
+  await expect(page.locator("#totalPoints")).toHaveText("206");
+});
+
+test("デモには測位点が無いため、選択中データの測位点を表示ボタンは無効化される", async ({ page }) => {
+  await page.goto("/#decision");
+  await expect(page.locator("#decisionFieldSelect")).toBeAttached({ timeout: 15_000 });
+  await page.locator("#decisionFieldSelect").selectOption("__demo__");
+  await expect(page.locator("#loadProofButton")).toBeDisabled();
 });
