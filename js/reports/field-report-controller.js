@@ -68,13 +68,23 @@ export class FieldReportController {
     }
   }
 
+  /** Every fieldId currently reportable — registered polygon fields plus boundary-track-only fieldIds. Exposed for other panels (e.g. 判断デモ's field selector) that need the same list without duplicating the resolution logic. */
+  listReportableFields() {
+    return listReportableFields(this.getData());
+  }
+
+  /** Pure: builds a report for fieldId from live data without touching this.currentReport or the DOM — for other panels that just need the numbers (e.g. 判断デモ). */
+  buildReportFor(fieldId) {
+    return buildFieldReport({ fieldId, ...this.getData() });
+  }
+
   generate() {
     const fieldId = this.elements.reportFieldSelect.value;
     if (!fieldId) {
       this.setMessage("対象圃場を選択してください。");
       return;
     }
-    this.currentReport = buildFieldReport({ fieldId, ...this.getData() });
+    this.currentReport = this.buildReportFor(fieldId);
     this.renderPreview(this.currentReport);
     this.setExportButtonsEnabled(true);
     this.setMessage("");

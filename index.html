@@ -1677,6 +1677,38 @@
       </div>
 
       <aside class="panel">
+        <section id="decisionFieldCard" class="card" data-workspace="decision">
+          <span class="eyebrow">対象圃場 / 使用データ</span>
+          <h2>使用する圃場データを選ぶ</h2>
+          <div class="input-row">
+            <label for="decisionFieldSelect">対象圃場</label>
+            <select id="decisionFieldSelect"></select>
+          </div>
+          <div class="input-row">
+            <label for="decisionProfileSelect">判断プロファイル</label>
+            <select id="decisionProfileSelect">
+              <option value="general">一般水田管理</option>
+              <option value="heavy_rain">大雨前</option>
+              <option value="midseason_drainage">中干し期間</option>
+              <option value="water_shortage">水不足注意</option>
+              <option value="pre_harvest">収穫前</option>
+              <option value="experimental">実験モード</option>
+            </select>
+          </div>
+          <p id="decisionFieldEmptyState" class="field-annotation-empty">まだ実測圃場データがありません。QZ1測量でNMEAログをアップロードし、圃場を登録してください。</p>
+          <div id="decisionFieldSummary" class="decision-field-summary" hidden>
+            <div class="kv"><span>対象圃場</span><strong id="decisionFieldLabel">—</strong></div>
+            <div class="kv"><span>データ種別</span><strong id="decisionDataKind">—</strong></div>
+            <div class="kv"><span>判断プロファイル</span><strong id="decisionProfileLabel">—</strong></div>
+            <div class="kv"><span>測量信頼性</span><strong id="decisionReliability">—</strong></div>
+            <div class="kv"><span>元NMEA</span><strong id="decisionSourceFile">—</strong></div>
+            <div class="kv"><span>有効測位点</span><strong id="decisionValidPoints">—</strong></div>
+            <div class="kv"><span>GPS単独 / DGPS</span><strong id="decisionGpsBreakdown">—</strong></div>
+            <p id="decisionWaterPointsNote" class="meta"></p>
+            <p id="decisionObservationsNote" class="meta"></p>
+          </div>
+        </section>
+
         <section class="card gate-card" data-workspace="decision">
           <span class="eyebrow">今日の水門判断</span>
           <h2>気象と圃場位置からの推奨</h2>
@@ -2995,6 +3027,21 @@
     const verdictReason = document.getElementById("verdictReason");
     const mobileVerdictBadge = document.getElementById("mobileVerdictBadge");
     const mobileVerdictReason = document.getElementById("mobileVerdictReason");
+    const decisionFieldSelect = document.getElementById("decisionFieldSelect");
+    const decisionProfileSelect = document.getElementById("decisionProfileSelect");
+    const decisionFieldEmptyState = document.getElementById("decisionFieldEmptyState");
+    const decisionFieldSummary = document.getElementById("decisionFieldSummary");
+    const decisionEls = {
+      fieldLabel: document.getElementById("decisionFieldLabel"),
+      dataKind: document.getElementById("decisionDataKind"),
+      profileLabel: document.getElementById("decisionProfileLabel"),
+      reliability: document.getElementById("decisionReliability"),
+      sourceFile: document.getElementById("decisionSourceFile"),
+      validPoints: document.getElementById("decisionValidPoints"),
+      gpsBreakdown: document.getElementById("decisionGpsBreakdown"),
+      waterPointsNote: document.getElementById("decisionWaterPointsNote"),
+      observationsNote: document.getElementById("decisionObservationsNote")
+    };
     const workspacePrimaryAction = document.getElementById("workspacePrimaryAction");
     const headerDataStatus = document.getElementById("headerDataStatus");
     const loadProofButton = document.getElementById("loadProofButton");
@@ -3479,6 +3526,121 @@
         label: "様子見",
         reason: "しきい値に達した条件はありません。現状を維持します。"
       };
+    }
+
+    // -------------------------------------------------------------------------
+    // 判断デモ: 対象圃場 / 使用データ — connects the decision tab to real
+    // registered QZ1測量 field data (via fieldReportController.buildReportFor,
+    // the same computation 圃場レポート uses) instead of only the bundled
+    // 校内実測 sample. Real registered fields always win the default
+    // selection over the sample/demo options, which stay available but are
+    // never auto-selected.
+    // -------------------------------------------------------------------------
+    const DECISION_SAMPLE_VALUE = "__sample__";
+    const DECISION_DEMO_VALUE = "__demo__";
+    const DECISION_NO_WATER_POINTS_MESSAGE = "この圃場には水門・給水口・排水口がまだ登録されていません。";
+    const DECISION_NO_OBSERVATIONS_MESSAGE = "現地観察メモはまだ登録されていません。";
+
+    function populateDecisionFieldOptions() {
+      if (!decisionFieldSelect) {
+        return;
+      }
+      const previous = decisionFieldSelect.value;
+      const entries = fieldReportController?.listReportableFields() || [];
+      decisionFieldSelect.replaceChildren(new Option("データを選択", ""));
+      entries.forEach((entry) => {
+        decisionFieldSelect.append(new Option(`${entry.fieldName} / ${entry.fieldId}`, entry.fieldId));
+      });
+      decisionFieldSelect.append(new Option("校内実測サンプル", DECISION_SAMPLE_VALUE));
+      decisionFieldSelect.append(new Option("デモ（仮ジオメトリ・参考値）", DECISION_DEMO_VALUE));
+
+      const validValues = new Set(["", DECISION_SAMPLE_VALUE, DECISION_DEMO_VALUE, ...entries.map((entry) => entry.fieldId)]);
+      if (previous && validValues.has(previous)) {
+        decisionFieldSelect.value = previous;
+      } else if (entries.length > 0) {
+        // Real registered field data takes priority over the bundled sample.
+        decisionFieldSelect.value = entries[0].fieldId;
+      } else {
+        decisionFieldSelect.value = "";
+      }
+    }
+
+    async function handleDecisionFieldChange() {
+      if (decisionFieldSelect.value === DECISION_SAMPLE_VALUE && parsedPoints.length === 0) {
+        await loadBundledProof();
+      }
+      renderDecisionFieldSummary();
+    }
+
+    function renderDecisionFieldSummary() {
+      if (!decisionFieldSelect) {
+        return;
+      }
+      const value = decisionFieldSelect.value;
+      if (!value) {
+        if (decisionFieldEmptyState) decisionFieldEmptyState.hidden = false;
+        if (decisionFieldSummary) decisionFieldSummary.hidden = true;
+        return;
+      }
+      if (decisionFieldEmptyState) decisionFieldEmptyState.hidden = true;
+      if (decisionFieldSummary) decisionFieldSummary.hidden = false;
+
+      const profileLabel = decisionProfileSelect?.selectedOptions[0]?.textContent || "";
+      if (value === DECISION_SAMPLE_VALUE) {
+        renderDecisionSample(profileLabel);
+      } else if (value === DECISION_DEMO_VALUE) {
+        renderDecisionDemo(profileLabel);
+      } else {
+        renderDecisionRegisteredField(value, profileLabel);
+      }
+    }
+
+    function renderDecisionRegisteredField(fieldId, profileLabel) {
+      const report = fieldReportController?.buildReportFor(fieldId);
+      if (!report) {
+        return;
+      }
+      decisionEls.fieldLabel.textContent = `${report.fieldName} / ${report.fieldId}`;
+      decisionEls.dataKind.textContent = "実測QZ1ログ";
+      decisionEls.profileLabel.textContent = profileLabel;
+      decisionEls.reliability.textContent = report.reliabilityCheck.label;
+      decisionEls.sourceFile.textContent = report.surveyLog.found ? (report.surveyLog.sourceFileName || "—") : "—";
+      decisionEls.validPoints.textContent = report.surveyLog.found ? `${report.surveyLog.validCount}点` : "—";
+      decisionEls.gpsBreakdown.textContent = report.surveyLog.found
+        ? `${report.surveyLog.gpsOnlyCount}点 / ${report.surveyLog.dgpsCount}点`
+        : "—";
+      decisionEls.waterPointsNote.textContent = report.waterControlPoints.length === 0
+        ? DECISION_NO_WATER_POINTS_MESSAGE
+        : `水管理ポイント: ${report.waterControlPoints.length}件登録済み`;
+      decisionEls.observationsNote.textContent = report.observations.length === 0
+        ? DECISION_NO_OBSERVATIONS_MESSAGE
+        : `現地観察メモ: ${report.observations.length}件登録済み`;
+    }
+
+    function renderDecisionSample(profileLabel) {
+      const gpsOnlyCount = parsedPoints.filter((point) => !point.augmented).length;
+      const dgpsCount = parsedPoints.filter((point) => point.augmented).length;
+      decisionEls.fieldLabel.textContent = "校内実測サンプル";
+      decisionEls.dataKind.textContent = "サンプル";
+      decisionEls.profileLabel.textContent = profileLabel;
+      decisionEls.reliability.textContent = "—";
+      decisionEls.sourceFile.textContent = parsedPoints.length > 0 ? "校内実測" : "—";
+      decisionEls.validPoints.textContent = parsedPoints.length > 0 ? `${parsedPoints.length}点` : "—";
+      decisionEls.gpsBreakdown.textContent = parsedPoints.length > 0 ? `${gpsOnlyCount}点 / ${dgpsCount}点` : "—";
+      decisionEls.waterPointsNote.textContent = DECISION_NO_WATER_POINTS_MESSAGE;
+      decisionEls.observationsNote.textContent = DECISION_NO_OBSERVATIONS_MESSAGE;
+    }
+
+    function renderDecisionDemo(profileLabel) {
+      decisionEls.fieldLabel.textContent = `${DEFAULT_FIELD.name} / ${DEFAULT_FIELD.id}`;
+      decisionEls.dataKind.textContent = "デモ";
+      decisionEls.profileLabel.textContent = profileLabel;
+      decisionEls.reliability.textContent = "—";
+      decisionEls.sourceFile.textContent = "—";
+      decisionEls.validPoints.textContent = "—";
+      decisionEls.gpsBreakdown.textContent = "—";
+      decisionEls.waterPointsNote.textContent = DECISION_NO_WATER_POINTS_MESSAGE;
+      decisionEls.observationsNote.textContent = DECISION_NO_OBSERVATIONS_MESSAGE;
     }
 
     function updateDecision() {
@@ -4363,6 +4525,10 @@
       vegetationController?.setWorkspaceActive(activeWorkspace === "analysis");
       if (activeWorkspace === "analysis") {
         fieldReportController?.refresh();
+      }
+      if (activeWorkspace === "decision") {
+        populateDecisionFieldOptions();
+        renderDecisionFieldSummary();
       }
       // The generic [data-workspace] unhide pass above always reveals
       // fieldRegDialog when entering QZ1測量, regardless of whether an
@@ -5391,6 +5557,8 @@
     Object.values(weatherInputs).forEach((input) => input.addEventListener("input", updateDecision));
     Object.values(thresholdInputs).forEach((input) => input.addEventListener("input", updateDecision));
     loadProofButton.addEventListener("click", loadBundledProof);
+    decisionFieldSelect?.addEventListener("change", handleDecisionFieldChange);
+    decisionProfileSelect?.addEventListener("change", renderDecisionFieldSummary);
     document.querySelectorAll("[data-workspace-target]").forEach((tab) => {
       tab.addEventListener("click", () => switchWorkspace(tab.dataset.workspaceTarget));
     });
@@ -5461,6 +5629,8 @@
         });
         fieldReportController.mount();
         window.fieldReportController = fieldReportController;
+        populateDecisionFieldOptions();
+        renderDecisionFieldSummary();
       } catch (error) {
         console.error("Field report initialization failed", error);
         const warning = document.getElementById("reportMessage");
