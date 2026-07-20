@@ -1360,6 +1360,7 @@
       const problemAreaByCategory = areaByCategory(this.analysis.problemZones, PROBLEM_CATEGORIES);
       const plantAreaByCategory = areaByCategory(this.analysis.plantPolygons, PLANT_CATEGORIES);
       const vegetation = this.getVegetationExport?.() || {};
+      const fieldAnnotation = this.getFieldAnnotationExport?.() || {};
       return {
         schemaVersion: "paddy-intelligence.v1",
         exportedAt: new Date().toISOString(),
@@ -1437,6 +1438,13 @@
         vegetationObservations: vegetation.vegetationObservations || [],
         vegetationSettings: vegetation.vegetationSettings || {},
         vegetationSummary: vegetation.vegetationSummary || {},
+        // Field polygons / water-control points are provided by the field
+        // annotation controller via an optional hook; older exports simply
+        // omit these keys.
+        fields: fieldAnnotation.fields || [],
+        waterControlPoints: fieldAnnotation.waterControlPoints || [],
+        measurements: fieldAnnotation.measurements || [],
+        metadata: fieldAnnotation.metadata || {},
         projectMetadata: {
           projectName: "Suimon Navi Paddy Field Area Intelligence",
           source: "michibiki-suimon-navi browser viewer"
@@ -1520,9 +1528,11 @@
         setInputValue(this.elements.inputs.safetyMargin, settings.safetyMargin_m);
       }
       this.clearSelection();
-      // Older exports have no vegetation keys; the hook receives the raw data
-      // and applies safe defaults, so legacy files still load unchanged.
+      // Older exports have no vegetation/field-annotation keys; each hook
+      // receives the raw data and applies safe defaults, so legacy files
+      // still load unchanged.
       this.onVegetationImport?.(data);
+      this.onFieldAnnotationImport?.(data);
       this.refresh();
       this.fitBoundary();
       this.addWarning("Imported analysis JSON. Review field boundary and grid cell IDs if it came from another field.");
