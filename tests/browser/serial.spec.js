@@ -94,9 +94,10 @@ test("a fake SPP-style serial port streams NMEA through the shared pipeline", as
   await expect(page.locator("#serialMessage")).toContainText("Bluetooth");
   await expect(page.locator("#serialConnectButton")).toHaveText("切断");
 
-  // The shared pipeline turns GGA sentences into map points and raw log lines.
-  await expect(page.locator("#serialPointCount")).not.toHaveText("0", { timeout: 10_000 });
-  await expect(page.locator("#serialLastFix")).toContainText("2");
+  // The shared pipeline turns GGA sentences into map points and raw log
+  // lines; the live fix itself is shown once, in the ライブGNSS section
+  // (recFixQualityLabel etc.), not duplicated in the device/connection area.
+  await expect(page.locator("#recFixQualityLabel")).toHaveText("2", { timeout: 10_000 });
   await expect(page.locator("#serialDownloadButton")).toBeEnabled();
   const lineCount = Number(await page.locator("#serialLineCount").textContent());
   expect(lineCount).toBeGreaterThan(0);

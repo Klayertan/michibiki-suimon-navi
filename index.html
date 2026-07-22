@@ -812,23 +812,13 @@
       white-space: pre;
     }
 
-    .serial-buttons {
-      display: grid;
-      gap: 8px;
-      grid-template-columns: 1fr 1fr;
-    }
-
     .fallback-steps {
       display: grid;
       gap: 6px;
       padding-left: 18px;
     }
 
-    .serial-buttons .panel-button.primary {
-      background: #214e57;
-    }
-
-    .serial-buttons .panel-button.danger {
+    .panel-button.danger {
       background: #b91c1c;
     }
 
@@ -1010,8 +1000,7 @@
     }
 
     .action-button,
-    .panel-button.primary,
-    .serial-buttons .panel-button.primary {
+    .panel-button.primary {
       background: var(--green);
     }
 
@@ -2606,38 +2595,6 @@
           </div>
         </details>
 
-        <details class="card paddy-collapsible" data-workspace="survey" hidden>
-          <summary><span class="details-title">QZ1ライブ記録<span class="en">Web Serial</span></span></summary>
-          <div class="details-content">
-          <div class="kv"><span>状態</span><strong><span id="serialStatus" class="serial-status">未接続</span></strong></div>
-          <div class="kv"><span>受信行数</span><strong id="serialLineCount">0</strong></div>
-          <div class="kv"><span>有効測位点</span><strong id="serialPointCount">0</strong></div>
-          <div class="kv"><span>最新Fix</span><strong id="serialLastFix">—</strong></div>
-          <div class="input-row">
-            <label for="baudSelect">ボーレート（USB接続時のみ有効）</label>
-            <select id="baudSelect" class="baud-select">
-              <option value="4800">4800</option>
-              <option value="9600">9600</option>
-              <option value="38400">38400</option>
-              <option value="115200" selected>115200</option>
-            </select>
-          </div>
-          <div class="serial-buttons">
-            <button id="serialConnectButton" class="panel-button primary" type="button">QZ1に接続</button>
-            <button id="serialDownloadButton" class="panel-button" type="button" disabled>ログを保存 (.nmea)</button>
-          </div>
-          <pre id="serialLog" class="serial-log" hidden></pre>
-          <p id="serialMessage" class="meta"></p>
-          <ol id="serialFallbackSteps" class="meta fallback-steps" hidden>
-            <li>Playストアで「Serial Bluetooth Terminal」（Kai Morich製）をインストール</li>
-            <li>Android設定 → Bluetooth でQZ1をペアリング</li>
-            <li>アプリのメニュー → Devices → <strong>Bluetooth Classic</strong> → QZ1を選んで接続（NMEA文が流れ始めます）</li>
-            <li>メニュー → <strong>Log</strong> で記録開始 → 測量 → 記録停止</li>
-            <li>ログファイルを共有/保存し、このアプリの「NMEAをアップロード」で読み込み（行頭にタイムスタンプが付いていても自動で除去します）</li>
-          </ol>
-          </div>
-        </details>
-
         <details class="card paddy-collapsible" data-workspace="survey" open hidden>
           <summary><span class="details-title">フィールド記録<span class="en">Field recording</span></span></summary>
           <div id="recPanel" class="details-content">
@@ -2650,81 +2607,149 @@
 
           <div id="recRecoveryContainer"></div>
 
-          <div class="rec-state-row">
-            <span>記録状態: <strong id="recRecordingStateLabel" class="rec-state-chip">未記録</strong></span>
-            <span class="rec-secondary">セッションID: <strong id="recSessionIdLabel">—</strong></span>
-            <span>経過時間: <strong id="recElapsedTime">—</strong></span>
-          </div>
-          <p id="recConnectionNote" class="rec-connection-note" hidden></p>
+          <!-- Device: connecting a receiver is step 1 of the workflow, not a
+               separate feature. "ソース" is a placeholder for future
+               transports (Bluetooth QZ1, drone telemetry, NMEA replay) —
+               only QZ1 via Web Serial (USB or Bluetooth SPP virtual port) is
+               wired up today, so the other options stay disabled. -->
+          <section class="rec-section">
+            <h3 class="rec-section-title">デバイス<span class="en">Device</span></h3>
+            <div class="input-row">
+              <label for="deviceSourceSelect">ソース</label>
+              <select id="deviceSourceSelect">
+                <option value="qz1-serial" selected>QZ1（USB / Bluetooth SPP）</option>
+                <option value="qz1-bluetooth" disabled>QZ1（Bluetooth）— 準備中</option>
+                <option value="drone" disabled>ドローン — 準備中</option>
+                <option value="replay" disabled>NMEAファイル再生 — 準備中</option>
+              </select>
+            </div>
+            <div class="input-row rec-secondary">
+              <label for="baudSelect">ボーレート（USB接続時のみ有効）</label>
+              <select id="baudSelect" class="baud-select">
+                <option value="4800">4800</option>
+                <option value="9600">9600</option>
+                <option value="38400">38400</option>
+                <option value="115200" selected>115200</option>
+              </select>
+            </div>
+            <div class="kv"><span>接続状態</span><strong><span id="serialStatus" class="serial-status">未接続</span></strong></div>
+            <button id="serialConnectButton" class="panel-button primary" type="button">QZ1に接続</button>
+            <p id="serialMessage" class="meta"></p>
+            <ol id="serialFallbackSteps" class="meta fallback-steps" hidden>
+              <li>Playストアで「Serial Bluetooth Terminal」（Kai Morich製）をインストール</li>
+              <li>Android設定 → Bluetooth でQZ1をペアリング</li>
+              <li>アプリのメニュー → Devices → <strong>Bluetooth Classic</strong> → QZ1を選んで接続（NMEA文が流れ始めます）</li>
+              <li>メニュー → <strong>Log</strong> で記録開始 → 測量 → 記録停止</li>
+              <li>ログファイルを共有/保存し、このアプリの「NMEAをアップロード」で読み込み（行頭にタイムスタンプが付いていても自動で除去します）</li>
+            </ol>
+          </section>
 
-          <div class="input-row rec-secondary">
-            <label for="recFieldNameInput">圃場名（省略時は選択中の圃場を使用）</label>
-            <input id="recFieldNameInput" type="text" autocomplete="off">
-          </div>
+          <!-- Recording: a session is independent of the connection above —
+               connecting never auto-starts one, and it keeps running (buffered)
+               through a brief disconnect. See recConnectionNote. -->
+          <section class="rec-section">
+            <h3 class="rec-section-title">記録<span class="en">Recording</span></h3>
+            <div class="input-row rec-secondary">
+              <label for="recFieldNameInput">圃場名（省略時は選択中の圃場を使用）</label>
+              <input id="recFieldNameInput" type="text" autocomplete="off">
+            </div>
+            <div class="rec-state-row">
+              <span>記録状態: <strong id="recRecordingStateLabel" class="rec-state-chip">未記録</strong></span>
+              <span class="rec-secondary">セッションID: <strong id="recSessionIdLabel">—</strong></span>
+              <span>経過時間: <strong id="recElapsedTime">—</strong></span>
+            </div>
+            <p id="recConnectionNote" class="rec-connection-note" hidden></p>
+            <div class="rec-buttons">
+              <button id="recStartButton" class="panel-button primary" type="button">記録開始</button>
+              <button id="recPauseButton" class="panel-button" type="button" disabled>一時停止</button>
+              <button id="recResumeButton" class="panel-button" type="button" disabled>記録再開</button>
+              <button id="recStopButton" class="panel-button danger" type="button" disabled>記録終了</button>
+            </div>
+            <p id="recMessage" class="meta" role="status" aria-live="polite"></p>
+            <div id="recDiagnosticBanner" class="rec-diagnostic-banner" role="status" aria-live="polite" hidden></div>
+          </section>
 
-          <div class="rec-buttons">
-            <button id="recStartButton" class="panel-button primary" type="button">記録開始</button>
-            <button id="recPauseButton" class="panel-button" type="button" disabled>一時停止</button>
-            <button id="recResumeButton" class="panel-button" type="button" disabled>記録再開</button>
-            <button id="recStopButton" class="panel-button danger" type="button" disabled>記録終了</button>
-          </div>
-          <p id="recMessage" class="meta" role="status" aria-live="polite"></p>
+          <!-- Live GNSS: updates as soon as fixes arrive over the connection,
+               whether or not a recording session is running — these values
+               matter more than diagnostics, so they stay visible, never
+               tucked behind the collapsible below. -->
+          <section class="rec-section">
+            <h3 class="rec-section-title">ライブGNSS<span class="en">Live GNSS</span></h3>
+            <div class="metric-grid">
+              <div class="metric"><span>緯度</span><strong id="recCurrentLat">—</strong></div>
+              <div class="metric"><span>経度</span><strong id="recCurrentLon">—</strong></div>
+              <div class="metric"><span>Fix quality</span><strong id="recFixQualityLabel">—</strong></div>
+              <div class="metric"><span>衛星数</span><strong id="recSatelliteCountLabel">—</strong></div>
+              <div class="metric"><span>HDOP</span><strong id="recHdopLabel">—</strong></div>
+              <div class="metric"><span>最新Fixの経過</span><strong id="recLastFixAge">—</strong></div>
+            </div>
+          </section>
 
-          <div id="recDiagnosticBanner" class="rec-diagnostic-banner" role="status" aria-live="polite" hidden></div>
-          <div class="metric-grid">
-            <div class="metric"><span>緯度</span><strong id="recCurrentLat">—</strong></div>
-            <div class="metric"><span>経度</span><strong id="recCurrentLon">—</strong></div>
-            <div class="metric"><span>Fix quality</span><strong id="recFixQualityLabel">—</strong></div>
-            <div class="metric"><span>衛星数</span><strong id="recSatelliteCountLabel">—</strong></div>
-            <div class="metric"><span>HDOP</span><strong id="recHdopLabel">—</strong></div>
-            <div class="metric"><span>最新Fixの経過</span><strong id="recLastFixAge">—</strong></div>
-          </div>
-          <div class="rec-detail-list rec-secondary">
-            <div class="kv"><span>受信行数</span><strong id="recReceivedLineCount">0</strong></div>
-            <div class="kv"><span>チェックサム失敗</span><strong id="recChecksumFailureCount">0</strong></div>
-            <div class="kv"><span>不正な文</span><strong id="recMalformedLineCount">0</strong></div>
-            <div class="kv"><span>バイト受信</span><strong id="recByteAge">—</strong></div>
-            <div class="kv"><span>NMEA文受信</span><strong id="recLineAge">—</strong></div>
-            <div class="kv"><span>チェックサム有効</span><strong id="recChecksumAge">—</strong></div>
-            <div class="kv"><span>有効な測位</span><strong id="recFixAgeDetail">—</strong></div>
-          </div>
+          <section class="rec-section">
+            <h3 class="rec-section-title">現地観測を記録<span class="en">Mark observation</span></h3>
+            <div class="input-row">
+              <label for="recObsTypeSelect">観測タイプ</label>
+              <select id="recObsTypeSelect"></select>
+            </div>
+            <div class="input-row">
+              <label for="recObsWaterLevelInput">水位 (cm・任意)</label>
+              <input id="recObsWaterLevelInput" type="number" step="0.1" inputmode="decimal">
+            </div>
+            <div class="input-row">
+              <label for="recObsNoteInput">メモ</label>
+              <textarea id="recObsNoteInput" rows="2"></textarea>
+            </div>
+            <label class="file-button">
+              写真を撮影・添付（任意）
+              <input id="recObsImageInput" type="file" accept="image/*" capture="environment">
+            </label>
+            <button id="recRecordPositionButton" class="rec-record-position" type="button" disabled>現在地を記録</button>
+            <p id="recObsMessage" class="meta" role="status" aria-live="polite"></p>
+            <div id="recObsHistoryContainer" class="rec-obs-history rec-secondary"></div>
+          </section>
 
-          <div class="rec-detail-list rec-secondary">
-            <div class="kv"><span>未保存の書き込み</span><strong id="recPendingCount">0</strong></div>
-            <div class="kv"><span>推定使用容量</span><strong id="recStorageUsage">—</strong></div>
-            <div class="kv"><span>このセッションの画像容量</span><strong id="recImageStorageUsage">—</strong></div>
-            <div class="kv"><span>最終保存</span><strong id="recLastPersisted">—</strong></div>
-            <div class="kv"><span>Wake Lock</span><strong id="recWakeLockStatus">—</strong></div>
-          </div>
-          <p id="recPersistenceError" class="rec-persistence-error" role="alert" hidden></p>
+          <!-- Storage: everything that persists or exports this session's
+               data, including the future per-observation image storage. -->
+          <section class="rec-section">
+            <h3 class="rec-section-title">保存<span class="en">Storage</span></h3>
+            <div class="rec-detail-list rec-secondary">
+              <div class="kv"><span>未保存の書き込み</span><strong id="recPendingCount">0</strong></div>
+              <div class="kv"><span>推定使用容量</span><strong id="recStorageUsage">—</strong></div>
+              <div class="kv"><span>このセッションの画像容量</span><strong id="recImageStorageUsage">—</strong></div>
+              <div class="kv"><span>最終保存</span><strong id="recLastPersisted">—</strong></div>
+            </div>
+            <p id="recPersistenceError" class="rec-persistence-error" role="alert" hidden></p>
+            <div class="rec-exports rec-secondary">
+              <button id="recExportRawButton" class="panel-button export" type="button">生ログ (.nmea)</button>
+              <button id="recExportFixesCsvButton" class="panel-button export" type="button">測位 (.csv)</button>
+              <button id="recExportSessionJsonButton" class="panel-button export" type="button">セッション全体 (.json)</button>
+              <button id="recExportObservationsCsvButton" class="panel-button export" type="button">観測 (.csv)</button>
+              <button id="recExportObservationsJsonButton" class="panel-button export" type="button">観測 (.json)</button>
+            </div>
+            <div class="rec-secondary">
+              <button id="serialDownloadButton" class="panel-button" type="button" disabled>接続ログを保存 (.nmea)</button>
+              <p class="meta">記録セッションを開始していなくても、接続中に受信した生ログをここから保存できます。</p>
+            </div>
+          </section>
 
-          <div class="input-row">
-            <label for="recObsTypeSelect">観測タイプ</label>
-            <select id="recObsTypeSelect"></select>
-          </div>
-          <div class="input-row">
-            <label for="recObsWaterLevelInput">水位 (cm・任意)</label>
-            <input id="recObsWaterLevelInput" type="number" step="0.1" inputmode="decimal">
-          </div>
-          <div class="input-row">
-            <label for="recObsNoteInput">メモ</label>
-            <textarea id="recObsNoteInput" rows="2"></textarea>
-          </div>
-          <label class="file-button">
-            写真を撮影・添付（任意）
-            <input id="recObsImageInput" type="file" accept="image/*" capture="environment">
-          </label>
-          <button id="recRecordPositionButton" class="rec-record-position" type="button" disabled>現在地を記録</button>
-          <p id="recObsMessage" class="meta" role="status" aria-live="polite"></p>
-          <div id="recObsHistoryContainer" class="rec-obs-history rec-secondary"></div>
-
-          <div class="rec-exports rec-secondary">
-            <button id="recExportRawButton" class="panel-button export" type="button">生ログ (.nmea)</button>
-            <button id="recExportFixesCsvButton" class="panel-button export" type="button">測位 (.csv)</button>
-            <button id="recExportSessionJsonButton" class="panel-button export" type="button">セッション全体 (.json)</button>
-            <button id="recExportObservationsCsvButton" class="panel-button export" type="button">観測 (.csv)</button>
-            <button id="recExportObservationsJsonButton" class="panel-button export" type="button">観測 (.json)</button>
-          </div>
+          <!-- Diagnostics: useful for troubleshooting, not part of the normal
+               workflow — closed by default, never in the way. -->
+          <details class="rec-diagnostics-details">
+            <summary>診断<span class="en">Diagnostics</span></summary>
+            <div class="rec-detail-list">
+              <div class="kv"><span>受信行数（記録中）</span><strong id="recReceivedLineCount">0</strong></div>
+              <div class="kv"><span>チェックサム失敗</span><strong id="recChecksumFailureCount">0</strong></div>
+              <div class="kv"><span>不正な文</span><strong id="recMalformedLineCount">0</strong></div>
+              <div class="kv"><span>バイト受信</span><strong id="recByteAge">—</strong></div>
+              <div class="kv"><span>NMEA文受信</span><strong id="recLineAge">—</strong></div>
+              <div class="kv"><span>チェックサム有効</span><strong id="recChecksumAge">—</strong></div>
+              <div class="kv"><span>有効な測位</span><strong id="recFixAgeDetail">—</strong></div>
+              <div class="kv"><span>Wake Lock</span><strong id="recWakeLockStatus">—</strong></div>
+              <div class="kv"><span>受信行数（接続後合計）</span><strong id="serialLineCount">0</strong></div>
+            </div>
+            <p class="meta">直近の受信内容（生ログ）</p>
+            <pre id="serialLog" class="serial-log" hidden></pre>
+          </details>
           </div>
         </details>
       </aside>
@@ -3122,8 +3147,6 @@
     const exportAnalysisButton = document.getElementById("exportAnalysisButton");
     const serialStatusEl = document.getElementById("serialStatus");
     const serialLineCountEl = document.getElementById("serialLineCount");
-    const serialPointCountEl = document.getElementById("serialPointCount");
-    const serialLastFixEl = document.getElementById("serialLastFix");
     const baudSelect = document.getElementById("baudSelect");
     const serialConnectButton = document.getElementById("serialConnectButton");
     const serialDownloadButton = document.getElementById("serialDownloadButton");
@@ -5567,11 +5590,10 @@
           point.id = `live-${serialPointsAdded}`;
           serialPointsAdded += 1;
           parsedPoints.push(point);
-          serialPointCountEl.textContent = String(serialPointsAdded);
-          serialLastFixEl.textContent = `${point.fixQuality}（${point.augmented ? "DGNSS fix・方式未確認" : "単独測位"}）`;
+          // The current fix (quality, satellites, HDOP, age) is shown once,
+          // in the ライブGNSS section, via recordingController.ingestSerialLine
+          // below — not duplicated here.
           scheduleLiveRender();
-        } else if (parsed.noFix > 0) {
-          serialLastFixEl.textContent = "0（測位なし）";
         }
       }
       recordingController?.ingestSerialLine({ rawLine: line, looksLikeGga: isGgaShaped, point, noFix });

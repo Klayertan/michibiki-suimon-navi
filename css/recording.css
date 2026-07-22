@@ -1,6 +1,65 @@
-/* QZ1 field-recording panel.
-   Connection state (serial-status) and recording state are shown as two
-   separate chips on purpose — they are independent state machines. */
+/* Unified field-recording panel: Device (connection) → Recording → Live GNSS
+   → Storage → Diagnostics, in that order, as one workflow instead of two
+   separate cards. Connection state (serial-status) and recording state are
+   still shown as two separate chips on purpose — they are independent state
+   machines (connecting never implicitly starts a recording session) — but
+   now live in the same panel so that relationship reads naturally. */
+
+.rec-section {
+  display: grid;
+  gap: 8px;
+}
+
+.rec-section + .rec-section {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.rec-section-title {
+  align-items: baseline;
+  color: var(--muted);
+  display: flex;
+  font-size: 0.72rem;
+  font-weight: 850;
+  gap: 6px;
+  letter-spacing: 0.09em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.rec-section-title .en {
+  font-size: 0.68rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  opacity: 0.75;
+  text-transform: none;
+}
+
+/* Diagnostics is deliberately a collapsible, closed-by-default <details> —
+   useful for troubleshooting a stalled connection, but secondary to live
+   GNSS values and recording controls, which must stay visible at all times. */
+.rec-diagnostics-details {
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  margin-top: 2px;
+  padding: 4px 10px;
+}
+
+.rec-diagnostics-details summary {
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 700;
+  padding: 7px 0;
+}
+
+.rec-diagnostics-details[open] summary {
+  margin-bottom: 2px;
+}
+
+.rec-diagnostics-details .rec-detail-list {
+  margin-bottom: 8px;
+}
 
 .rec-state-row {
   align-items: center;
