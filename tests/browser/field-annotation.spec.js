@@ -488,6 +488,13 @@ test("map-click placement works for an observation, and スマホGPS位置を使
   await page.locator("#obsPositionMapClickButton").click();
   await expect(page.locator("#obsPositionMapClickButton")).toHaveClass(/active/);
   await page.locator("#map").click({ position: { x: 300, y: 200 } });
+  // That pixel lands outside the tiny registered field's on-screen polygon,
+  // so the outside-field warning fires (see field-observation-placement.spec.js
+  // for dedicated coverage of that warning) — continue anyway, since this
+  // test is only about the map-click-to-observation pipeline itself.
+  if (await page.locator("#obsOutsideFieldWarning").isVisible()) {
+    await page.locator("#obsOutsideFieldContinueButton").click();
+  }
   await expect(page.locator("#fieldAnnotationSummaryObservations")).toHaveText("1");
   const lodging = await page.evaluate(() => window.fieldAnnotationController.fieldObservations[0]);
   expect(lodging.type).toBe("lodging");

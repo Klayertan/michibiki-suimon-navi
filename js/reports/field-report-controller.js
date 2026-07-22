@@ -254,7 +254,7 @@ export class FieldReportController {
       const ul = document.createElement("ul");
       report.observations.forEach((observation) => {
         const li = document.createElement("li");
-        li.textContent = `[${observation.severityLabel}] ${observation.typeLabel} ${observation.name}${observation.memo ? ` — ${observation.memo}` : ""}（${formatDateTime(observation.createdAt)}）`;
+        li.textContent = `[${observation.severityLabel}] ${observation.typeLabel} ${observation.name} / ${observation.sourceLabel}${observation.memo ? ` — ${observation.memo}` : ""}（${formatDateTime(observation.createdAt)}）`;
         ul.append(li);
       });
       wrap.append(ul);

@@ -87,6 +87,19 @@
   color: #fff;
 }
 
+.obs-outside-field-actions {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 1fr 1fr;
+}
+
+/* Any live map-click placement mode (water point or observation) gets a
+   crosshair cursor over the map — a single generic switch driven by
+   FieldAnnotationController.updateMapCursor(), not duplicated per mode. */
+.leaflet-container.map-click-armed {
+  cursor: crosshair !important;
+}
+
 .obs-popup {
   display: grid;
   font-size: 0.85rem;
@@ -215,6 +228,11 @@
 .workflow-step-body > button {
   justify-self: start;
   margin-top: 4px;
+}
+
+.workflow-step-body > button.active {
+  background: #1d4ed8;
+  color: #fff;
 }
 
 @media (max-width: 760px) {

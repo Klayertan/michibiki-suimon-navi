@@ -109,6 +109,21 @@ export const OBSERVATION_TYPE_LABELS = {
 
 export const SEVERITY_LABELS = { low: "低", medium: "中", high: "高", urgent: "緊急" };
 
+// Provenance labels for observations.properties.sourceType — every value
+// here must read unambiguously as farmer-entered data, never as drone/AI/
+// automatic-detection/GNSS-derived, since this app has no such pipeline for
+// field observations. Unknown/future sourceType strings still fall back to
+// a manual-sounding label rather than showing something ambiguous.
+export const OBSERVATION_SOURCE_LABELS = {
+  manual_map_click: "手動配置（地図クリック）",
+  qz1_current_position: "手動配置（QZ1現在地）",
+  phone_gps: "手動配置（スマホGPS）"
+};
+
+export function observationSourceLabel(sourceType) {
+  return OBSERVATION_SOURCE_LABELS[sourceType] || "手動配置";
+}
+
 export const OBSERVATION_STYLES = {
   weed: { fillColor: "#65a30d" },
   insect: { fillColor: "#dc2626" },
@@ -198,6 +213,31 @@ export function makeSurveySessionId(nowMs = Date.now()) {
 
 export const CLOSE_WARNING_MESSAGE = "始点と終点が離れています。圃場ポリゴンを閉じますか？";
 export const UPLOAD_CLOSE_WARNING_MESSAGE = "始点と終点が離れています。このログを圃場ポリゴンとして閉じますか？";
+export const OUTSIDE_FIELD_WARNING_MESSAGE = "選択した地点は圃場の範囲外です。このまま記録しますか？";
+
+/**
+ * Simple ray-casting point-in-polygon test on raw [lat, lon] pairs — good
+ * enough at field scale (tens of meters) without projecting to a local XY
+ * plane. Returns true (i.e. "don't warn") for a degenerate/open boundary
+ * (fewer than 3 points, e.g. a boundary-track-only registration with no
+ * closed polygon) since callers use this as a best-effort "warn if clearly
+ * outside" check, not a hard validation gate — see requirement wording
+ * "Preferably allow observations inside the active registered field."
+ */
+export function isPointInsideBoundary([lat, lon], boundaryCoordinates) {
+  if (!Array.isArray(boundaryCoordinates) || boundaryCoordinates.length < 3) {
+    return true;
+  }
+  let inside = false;
+  for (let i = 0, j = boundaryCoordinates.length - 1; i < boundaryCoordinates.length; j = i, i += 1) {
+    const [yi, xi] = boundaryCoordinates[i];
+    const [yj, xj] = boundaryCoordinates[j];
+    if (((yi > lat) !== (yj > lat)) && lon < (xj - xi) * (lat - yi) / (yj - yi) + xi) {
+      inside = !inside;
+    }
+  }
+  return inside;
+}
 
 /**
  * Evaluates whether an ordered vertex list can auto-close into a field
@@ -481,8 +521,8 @@ export const WORKFLOW_STEPS = [
     description: "水門・給水口・排水口・水位センサ位置を地図上に登録します。"
   },
   {
-    id: 4, title: "雑草・害虫・病気などを記録", actionLabel: "観察メモを追加",
-    description: "雑草・害虫・病気・水不足などの現地観察メモを記録します。"
+    id: 4, title: "雑草・害虫・病気などを記録", actionLabel: "地図上に観察メモを追加",
+    description: "地図をクリックして、雑草・害虫・病気・水不足などの観察位置と内容を手動で登録します。ドローンを使用しないデモにも対応しています。"
   },
   {
     id: 5, title: "JSONを書き出し", actionLabel: "測量JSONを書き出し",

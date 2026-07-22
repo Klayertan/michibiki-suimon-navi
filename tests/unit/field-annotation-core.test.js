@@ -8,7 +8,9 @@ import {
   MEASUREMENT_TYPE_LABELS,
   NEEDS_EXPORT_DATA_MESSAGE,
   NEEDS_FIELD_MESSAGE,
+  OBSERVATION_SOURCE_LABELS,
   OBSERVATION_TYPE_LABELS,
+  OUTSIDE_FIELD_WARNING_MESSAGE,
   RAW_NMEA_SIZE_WARNING,
   SCHEMA_VERSION,
   SEVERITY_LABELS,
@@ -28,6 +30,7 @@ import {
   emptyPersistedStore,
   evaluateClosure,
   isObservationType,
+  isPointInsideBoundary,
   isWaterControlType,
   makeSurveySessionId,
   nextBoundaryTrackId,
@@ -38,6 +41,7 @@ import {
   normalizePersistedStore,
   normalizeSeverity,
   normalizeWaterControlType,
+  observationSourceLabel,
   polygonAreaSquareMeters,
   summarizeFixQuality,
   waterControlInternalType
@@ -402,6 +406,27 @@ test("normalizeObservationType/normalizeSeverity fall back safely instead of inv
   assert.equal(fallback.properties.severity, "medium");
 });
 
+test("observationSourceLabel always reads as manual, never drone/AI/automatic, even for an unknown sourceType", () => {
+  assert.equal(observationSourceLabel("manual_map_click"), "手動配置（地図クリック）");
+  assert.equal(observationSourceLabel("qz1_current_position"), "手動配置（QZ1現在地）");
+  assert.equal(observationSourceLabel("phone_gps"), "手動配置（スマホGPS）");
+  assert.equal(observationSourceLabel("bogus"), "手動配置");
+  assert.equal(observationSourceLabel(undefined), "手動配置");
+  Object.values(OBSERVATION_SOURCE_LABELS).forEach((label) => {
+    assert.match(label, /^手動配置/);
+  });
+});
+
+test("isPointInsideBoundary correctly classifies points inside/outside a closed square, and never blocks an open/degenerate boundary", () => {
+  assert.equal(isPointInsideBoundary([34.65460, 135.83000], SQUARE), true);
+  assert.equal(isPointInsideBoundary([34.70000, 135.90000], SQUARE), false);
+  assert.equal(OUTSIDE_FIELD_WARNING_MESSAGE, "選択した地点は圃場の範囲外です。このまま記録しますか？");
+  // A boundary-track-only registration (no closed polygon) must never block
+  // placement — "preferably" inside the field, not a hard gate.
+  assert.equal(isPointInsideBoundary([0, 0], []), true);
+  assert.equal(isPointInsideBoundary([0, 0], [[34.6548, 135.8298], [34.6544, 135.8303]]), true);
+});
+
 test("nextObservationName sequences per field+type, matching the requested '圃場1 雑草地点1' shape", () => {
   assert.equal(nextObservationName("圃場1", "weed", 0), "圃場1 雑草地点1");
   assert.equal(nextObservationName("圃場1", "weed", 1), "圃場1 雑草地点2");
@@ -477,11 +502,11 @@ test("WORKFLOW_STEPS carries the exact Japanese titles/descriptions/action label
     "QZ1/NMEAログを読み込み、測位点を確認します。",
     "測位点を圃場ポリゴンまたは境界トラックとして登録します。",
     "水門・給水口・排水口・水位センサ位置を地図上に登録します。",
-    "雑草・害虫・病気・水不足などの現地観察メモを記録します。",
+    "地図をクリックして、雑草・害虫・病気・水不足などの観察位置と内容を手動で登録します。ドローンを使用しないデモにも対応しています。",
     "圃場・測量ログ・水管理ポイント・観察メモをJSONとして保存します。"
   ]);
   assert.deepEqual(WORKFLOW_STEPS.map((step) => step.actionLabel), [
-    "NMEAをアップロード", "登録済み圃場を確認", "水管理ポイントを追加", "観察メモを追加", "測量JSONを書き出し"
+    "NMEAをアップロード", "登録済み圃場を確認", "水管理ポイントを追加", "地図上に観察メモを追加", "測量JSONを書き出し"
   ]);
   assert.equal(NEEDS_FIELD_MESSAGE, "先に圃場を登録してください。");
   assert.equal(NEEDS_EXPORT_DATA_MESSAGE, "書き出す圃場データがありません。");

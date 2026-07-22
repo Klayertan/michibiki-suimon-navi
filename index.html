@@ -1940,6 +1940,13 @@
               <button id="obsPositionMapClickButton" class="panel-button" type="button" disabled>地図をクリックして指定</button>
             </div>
             <p id="obsAddMessage" class="meta" role="status" aria-live="polite"></p>
+            <div id="obsOutsideFieldWarning" class="field-close-warning" role="alertdialog" hidden>
+              <p id="obsOutsideFieldWarningText"></p>
+              <div class="obs-outside-field-actions">
+                <button id="obsOutsideFieldContinueButton" class="panel-button primary" type="button">このまま記録する</button>
+                <button id="obsOutsideFieldCancelButton" class="panel-button" type="button">キャンセル</button>
+              </div>
+            </div>
           </div>
         </details>
 
@@ -5855,7 +5862,11 @@
           getParsedPoints: () => parsedPoints,
           getPhonePoints: () => phonePoints,
           getSourceLabel: () => activePointSource,
-          getSmartphonePosition: getSmartphoneGeolocation
+          getSmartphonePosition: getSmartphoneGeolocation,
+          // Observation placement mode must not fight paddy-intelligence.js's
+          // own live map-click drawing (drone-mission zones / annotations)
+          // for the next click — cancel it the moment placement mode starts.
+          onEnterPlacementMode: () => paddyIntelligence?.cancelDrawing({ resetMode: true })
         });
         fieldAnnotationController.mount();
         paddyIntelligence.getFieldAnnotationExport = () => fieldAnnotationController.getExportData();

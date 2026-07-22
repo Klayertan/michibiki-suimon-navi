@@ -10,7 +10,7 @@
 // so the report must never assume a `fields[]` entry exists.
 import {
   MEASUREMENT_TYPE_LABELS, OBSERVATION_TYPE_LABELS, SEVERITY_LABELS, WATER_CONTROL_TYPE_LABELS,
-  normalizeObservationType, normalizeSeverity, waterControlInternalType
+  normalizeObservationType, normalizeSeverity, observationSourceLabel, waterControlInternalType
 } from "../fields/field-annotation-core.js";
 import { calculateQz1OnlyCheck, RESULT_STATUS_LABELS } from "../assurance/assurance-engine.js";
 
@@ -247,6 +247,9 @@ function buildObservationList(fieldId, fieldObservations) {
         typeLabel: OBSERVATION_TYPE_LABELS[type],
         severity,
         severityLabel: SEVERITY_LABELS[severity],
+        // Always a farmer-entered-data label ("手動配置…") — never drone/AI/
+        // automatic-detection, since this app has no such observation source.
+        sourceLabel: observationSourceLabel(observation.properties?.sourceType),
         coordinates: observation.coordinates,
         memo: observation.properties?.memo || "",
         createdAt: observation.properties?.createdAt || null
@@ -379,10 +382,11 @@ export function buildReportHtml(report) {
     ? report.observations.map((observation) => `<tr>
         <td>${escapeHtml(observation.typeLabel)}</td><td>${escapeHtml(observation.name)}</td>
         <td>${escapeHtml(observation.severityLabel)}</td>
+        <td>${escapeHtml(observation.sourceLabel)}</td>
         <td>${observation.coordinates.map((value) => value.toFixed(6)).join(", ")}</td>
         <td>${escapeHtml(observation.memo)}</td><td>${escapeHtml(formatDateTime(observation.createdAt))}</td>
       </tr>`).join("")
-    : `<tr><td colspan="6">${NO_OBSERVATIONS_MESSAGE}</td></tr>`;
+    : `<tr><td colspan="7">${NO_OBSERVATIONS_MESSAGE}</td></tr>`;
 
   return `<!doctype html>
 <html lang="ja">
@@ -452,7 +456,7 @@ export function buildReportHtml(report) {
 
   <h2>現地観察メモ</h2>
   <p>観察メモ合計: ${report.observationSummary.total}件</p>
-  <table><thead><tr><th>種類</th><th>タイトル</th><th>重要度</th><th>座標</th><th>メモ</th><th>作成日時</th></tr></thead><tbody>${observationRows}</tbody></table>
+  <table><thead><tr><th>種類</th><th>タイトル</th><th>重要度</th><th>登録方法</th><th>座標</th><th>メモ</th><th>作成日時</th></tr></thead><tbody>${observationRows}</tbody></table>
 
   <h2>次にやること</h2>
   ${htmlList(report.recommendations)}
@@ -509,7 +513,7 @@ export function buildReportMarkdown(report) {
     "## 現地観察メモ",
     `観察メモ合計: ${report.observationSummary.total}件`,
     ...(report.observations.length
-      ? report.observations.map((observation) => `- [${observation.severityLabel}] ${observation.typeLabel} ${observation.name}${observation.memo ? `: ${observation.memo}` : ""}`)
+      ? report.observations.map((observation) => `- [${observation.severityLabel}] ${observation.typeLabel} ${observation.name}（${observation.sourceLabel}）${observation.memo ? `: ${observation.memo}` : ""}`)
       : [NO_OBSERVATIONS_MESSAGE]),
     "",
     "## 次にやること",

@@ -24,6 +24,7 @@ import {
   NEEDS_FIELD_MESSAGE,
   OBSERVATION_STYLES,
   OBSERVATION_TYPE_LABELS,
+  OUTSIDE_FIELD_WARNING_MESSAGE,
   RAW_NMEA_SIZE_WARNING,
   SCHEMA_VERSION,
   SEVERITY_LABELS,
@@ -40,6 +41,7 @@ import {
   computeWorkflowStatus,
   evaluateClosure,
   isObservationType,
+  isPointInsideBoundary,
   isWaterControlType,
   makeSurveySessionId,
   nextBoundaryTrackId,
@@ -50,6 +52,7 @@ import {
   normalizePersistedStore,
   normalizeSeverity,
   normalizeWaterControlType,
+  observationSourceLabel,
   summarizeFixQuality,
   waterControlInternalType,
   WATER_CONTROL_EXPORT_TYPES
@@ -91,6 +94,7 @@ const ELEMENT_IDS = [
   // Field-observation (現地観察メモ) add workflow.
   "obsTargetFieldSelect", ...Object.keys(OBSERVATION_TYPE_BUTTON_IDS),
   "obsPositionQz1Button", "obsPositionGpsButton", "obsPositionMapClickButton", "obsAddMessage",
+  "obsOutsideFieldWarning", "obsOutsideFieldWarningText", "obsOutsideFieldContinueButton", "obsOutsideFieldCancelButton",
   // Manual/advanced field-polygon creation (詳細解析 — kept for power users).
   "fieldSourceSelect", "fieldUseAllPointsCheckbox", "fieldRangeRow", "fieldStartPointSelect", "fieldEndPointSelect",
   "fieldAutoCloseThresholdInput", "fieldCreateButton", "fieldCreateMessage",
@@ -112,6 +116,11 @@ export class FieldAnnotationController {
     this.getSourceLabel = options.getSourceLabel || (() => null);
     this.getSmartphonePosition = options.getSmartphonePosition || (() => Promise.reject(new Error("smartphone geolocation not available")));
     this.storage = options.storage || (typeof localStorage !== "undefined" ? localStorage : null);
+    // Lets index.html cancel other modules' own live map-click modes (e.g.
+    // paddy-intelligence.js's drone-mission/annotation drawing) whenever
+    // observation placement mode starts — see requirement that observation
+    // placement must not conflict with unrelated map-click modes elsewhere.
+    this.onEnterPlacementMode = options.onEnterPlacementMode || (() => {});
 
     this.fields = [];
     this.boundaryTracks = [];
@@ -126,6 +135,10 @@ export class FieldAnnotationController {
     this.pendingWaterPointType = null; // internal type key awaiting a position
     this.pendingObservationType = null; // internal observation type key awaiting a position
     this.mapClickAddActiveObservation = false;
+    // { lat, lon } captured by a map click outside the target field's
+    // boundary, awaiting the user's continue/cancel decision — see
+    // confirmOutsideFieldObservation()/cancelOutsideFieldObservation().
+    this.pendingOutsideFieldObservation = null;
 
     this.layers = { fields: L.layerGroup(), tracks: L.layerGroup(), waterPoints: L.layerGroup(), observations: L.layerGroup() };
     this.elements = {};
@@ -144,6 +157,9 @@ export class FieldAnnotationController {
     this.layers.waterPoints.addTo(this.map);
     this.layers.observations.addTo(this.map);
     this.map.on("click", (event) => this.handleMapClick(event));
+    // Bound once here, alongside the single map click listener above — never
+    // re-registered per placement-mode toggle, so it can't accumulate either.
+    document.addEventListener("keydown", (event) => this.handleGlobalKeydown(event));
     this.renderAll();
     this.syncDialogVisibility();
   }
@@ -228,6 +244,8 @@ export class FieldAnnotationController {
     el.obsPositionQz1Button?.addEventListener("click", () => this.addObservationAtCurrentQz1Position());
     el.obsPositionGpsButton?.addEventListener("click", () => this.addObservationAtSmartphonePosition());
     el.obsPositionMapClickButton?.addEventListener("click", () => this.toggleMapClickAddObservationMode());
+    el.obsOutsideFieldContinueButton?.addEventListener("click", () => this.confirmOutsideFieldObservation());
+    el.obsOutsideFieldCancelButton?.addEventListener("click", () => this.cancelOutsideFieldObservation());
 
     // Manual/advanced field-polygon creation (詳細解析).
     el.fieldSourceSelect?.addEventListener("change", () => this.renderRangeOptions());
@@ -785,9 +803,31 @@ export class FieldAnnotationController {
       return;
     }
     if (this.mapClickAddActiveObservation && this.pendingObservationType) {
-      this.createFieldObservation(event.latlng.lat, event.latlng.lng, "manual_map_click");
-      this.mapClickAddActiveObservation = false;
+      this.handleObservationMapClick(event.latlng.lat, event.latlng.lng);
     }
+  }
+
+  /** Escape cancels whichever map-click placement mode is currently active — never touches unrelated app state when nothing is armed. */
+  handleGlobalKeydown(event) {
+    if (event.key !== "Escape") {
+      return;
+    }
+    if (this.pendingOutsideFieldObservation) {
+      this.cancelOutsideFieldObservation();
+      return;
+    }
+    if (this.mapClickAddActive) {
+      this.cancelQuickAddWaterPoint();
+    }
+    if (this.mapClickAddActiveObservation) {
+      this.cancelQuickAddObservation();
+    }
+  }
+
+  /** Crosshair cursor whenever any map-click placement mode is armed — a single generic switch driven by state, not duplicated per mode. */
+  updateMapCursor() {
+    const active = Boolean(this.mapClickAddActive || this.mapClickAddActiveObservation);
+    this.map.getContainer().classList.toggle("map-click-armed", active);
   }
 
   createWaterControlPoint(lat, lon, sourceType) {
@@ -858,14 +898,108 @@ export class FieldAnnotationController {
       return;
     }
     if (this.mapClickAddActiveObservation) {
-      this.mapClickAddActiveObservation = false;
-      this.setObsMessage("");
-      this.render();
+      this.deactivateObservationPlacementMode("");
       return;
     }
+    this.activateObservationPlacementMode(`地図をクリックして${OBSERVATION_TYPE_LABELS[this.pendingObservationType]}の位置を指定してください。`);
+  }
+
+  /**
+   * Common entry point for any way of arming observation map-click
+   * placement (the type-first 現地観察メモ panel flow above, and the
+   * click-first Step 4 quick-start below): cancels this controller's own
+   * conflicting water-point placement mode, and — via the injected
+   * onEnterPlacementMode hook — lets index.html cancel unrelated live
+   * map-click modes owned by other modules (e.g. paddy-intelligence.js's
+   * drone-mission/annotation drawing), so a single map click can never be
+   * claimed by two different features at once.
+   */
+  activateObservationPlacementMode(instructionMessage) {
+    this.cancelQuickAddWaterPoint();
+    this.onEnterPlacementMode();
     this.mapClickAddActiveObservation = true;
-    this.setObsMessage(`地図をクリックして${OBSERVATION_TYPE_LABELS[this.pendingObservationType]}の位置を指定してください。`);
+    this.setObsMessage(instructionMessage);
     this.render();
+  }
+
+  deactivateObservationPlacementMode(message) {
+    this.mapClickAddActiveObservation = false;
+    this.setObsMessage(message);
+    this.render();
+  }
+
+  /**
+   * Step 4 (現地調査ワークフロー) quick-start: unlike beginAddObservation()
+   * above, the user hasn't picked a type yet — that happens afterward, in
+   * the shared feature editor createFieldObservation() opens. Reuses the
+   * exact same pendingObservationType/mapClickAddActiveObservation state
+   * machine handleMapClick() already watches, so this is a second on-ramp
+   * into the same flow, not a second implementation of it.
+   */
+  beginQuickAddObservation() {
+    if (this.mapClickAddActiveObservation) {
+      this.cancelQuickAddObservation();
+      return;
+    }
+    if (this.fields.length === 0) {
+      return;
+    }
+    const fieldSelect = this.elements.obsTargetFieldSelect;
+    if (fieldSelect && !fieldSelect.value) {
+      // renderFieldTargetOptions() already auto-selects a lone field; with
+      // several fields and no prior choice, default to the first rather
+      // than silently doing nothing when the workflow button is clicked.
+      fieldSelect.value = this.fields[0].id;
+    }
+    this.pendingObservationType = "note";
+    this.activateObservationPlacementMode("地図上の観察位置をクリックしてください");
+  }
+
+  cancelQuickAddObservation() {
+    this.pendingObservationType = null;
+    this.deactivateObservationPlacementMode("");
+  }
+
+  /** Routes a click made while observation placement is armed through the outside-boundary check before creating anything. */
+  handleObservationMapClick(lat, lon) {
+    const fieldId = this.elements.obsTargetFieldSelect.value || null;
+    const field = this.fields.find((candidate) => candidate.id === fieldId);
+    if (field && !isPointInsideBoundary([lat, lon], field.coordinates)) {
+      this.pendingOutsideFieldObservation = { lat, lon };
+      this.deactivateObservationPlacementMode(OUTSIDE_FIELD_WARNING_MESSAGE);
+      this.showOutsideFieldWarning(true);
+      return;
+    }
+    this.createFieldObservation(lat, lon, "manual_map_click");
+    this.mapClickAddActiveObservation = false;
+  }
+
+  confirmOutsideFieldObservation() {
+    const pending = this.pendingOutsideFieldObservation;
+    if (!pending) {
+      return;
+    }
+    this.pendingOutsideFieldObservation = null;
+    this.showOutsideFieldWarning(false);
+    this.createFieldObservation(pending.lat, pending.lon, "manual_map_click");
+  }
+
+  cancelOutsideFieldObservation() {
+    this.pendingOutsideFieldObservation = null;
+    this.showOutsideFieldWarning(false);
+    this.pendingObservationType = null;
+    this.setObsMessage("");
+    this.render();
+  }
+
+  showOutsideFieldWarning(visible) {
+    const el = this.elements;
+    if (el.obsOutsideFieldWarning) {
+      el.obsOutsideFieldWarning.hidden = !visible;
+    }
+    if (visible && el.obsOutsideFieldWarningText) {
+      el.obsOutsideFieldWarningText.textContent = OUTSIDE_FIELD_WARNING_MESSAGE;
+    }
   }
 
   createFieldObservation(lat, lon, sourceType) {
@@ -1146,7 +1280,13 @@ export class FieldAnnotationController {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "panel-button";
-    button.textContent = step.actionLabel;
+    // Step 4's button doubles as the observation-placement-mode toggle: once
+    // armed (from this button or the 現地観察メモ panel below), clicking it
+    // again is how the user cancels — matching the "click again to exit
+    // cleanly" requirement without a separate Cancel control.
+    const isObservationPlacementActive = step.id === 4 && this.mapClickAddActiveObservation;
+    button.textContent = isObservationPlacementActive ? "地図クリックをキャンセル" : step.actionLabel;
+    button.classList.toggle("active", isObservationPlacementActive);
     button.dataset.workflowStep = String(step.id);
     button.disabled = Boolean(disabledMessage);
     body.append(button);
@@ -1180,6 +1320,7 @@ export class FieldAnnotationController {
           el.fieldObservationsPanel.open = true;
           scrollWithinPanel(el.fieldObservationsPanel, { block: "start" });
         }
+        this.beginQuickAddObservation();
         break;
       case "5":
         el.exportAnalysisButton?.click();
@@ -1208,6 +1349,7 @@ export class FieldAnnotationController {
     this.updateObservationButtonStates();
     this.renderSelectedFeature();
     this.renderWorkflowPanel();
+    this.updateMapCursor();
   }
 
   renderMapLayers() {
@@ -1321,6 +1463,7 @@ export class FieldAnnotationController {
       ["タイプ", OBSERVATION_TYPE_LABELS[normalizeObservationType(obs.type)]],
       ["圃場", field ? field.name : (obs.fieldId || "—")],
       ["重要度", SEVERITY_LABELS[normalizeSeverity(obs.properties?.severity)]],
+      ["登録方法", observationSourceLabel(obs.properties?.sourceType)],
       ["メモ", obs.properties?.memo || "—"],
       ["作成日時", formatDateTime(obs.properties?.createdAt)]
     ];
@@ -1629,6 +1772,8 @@ export class FieldAnnotationController {
     this.updateWaterPointButtonStates();
     this.updateObservationButtonStates();
     this.renderQuickToolbar();
+    this.renderWorkflowPanel();
+    this.updateMapCursor();
   }
 
   // -------------------------------------------------------------------------
