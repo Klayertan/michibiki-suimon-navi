@@ -185,8 +185,15 @@ def test_snapshot_returns_an_independent_copy(state: TelemetryState) -> None:
 
 
 def test_position_availability_is_derived_not_assumed(state: TelemetryState) -> None:
+    """A fused position is not, on its own, evidence of a usable fix -- see
+    test_gps_availability.py for the full defect coverage. GPS fix quality
+    (from GPS_RAW_INT) gates availability; GLOBAL_POSITION_INT lat/lon alone
+    does not."""
     assert state.snapshot()["position"]["available"] is False
     state.apply_message(
         MockMessage("GLOBAL_POSITION_INT", lat=345400000, lon=1357350000, alt=62000, relative_alt=0)
     )
+    assert state.snapshot()["position"]["available"] is False, "no GPS_RAW_INT fix type has been received yet"
+
+    state.apply_message(MockMessage("GPS_RAW_INT", fix_type=3, satellites_visible=11, lat=345400000, lon=1357350000))
     assert state.snapshot()["position"]["available"] is True

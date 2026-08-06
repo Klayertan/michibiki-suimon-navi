@@ -274,6 +274,49 @@ class TelemetryState:
         with self._lock:
             return self._observed_component if self._observed_component is not None else fallback
 
+    #: GPS_RAW_INT.fix_type below this is NO_GPS (0) or NO_FIX (1) -- neither
+    #: tells you where the vehicle is. 2 is 2D_FIX, the minimum fix quality
+    #: that yields a usable horizontal position.
+    _MIN_USABLE_FIX_TYPE = 2
+
+    def _is_position_available(self) -> bool:
+        """Whether the position the panel would display is trustworthy.
+
+        Gated on GPS fix quality, not on the coordinate values: ArduPilot
+        reports ``GLOBAL_POSITION_INT`` (and often ``GPS_RAW_INT``) lat/lon as
+        literal ``0`` -- a real, non-sentinel integer -- while it has no fix
+        at all, so "the field is not null" is not evidence of a usable
+        position. Below ``_MIN_USABLE_FIX_TYPE``, or when no fix type has
+        been received yet, the position is reported unavailable regardless of
+        what the coordinate fields contain.
+
+        Deliberately does **not** special-case ``(0, 0)`` once the fix is
+        good enough: with a genuine 2D/3D fix, a vehicle that reports exactly
+        zero for one or both coordinates is reporting a real place (0,0 lies
+        in the Gulf of Guinea) and that is not this backend's call to
+        second-guess -- rejecting it would be inventing a rule the MAVLink
+        message itself does not support, the mirror image of the bug this
+        method exists to fix. See
+        ``test_position_available_at_true_zero_zero_with_a_valid_fix``.
+
+        Checks the fused ``GLOBAL_POSITION_INT`` coordinate first, falling
+        back to the raw ``GPS_RAW_INT`` one only when the fused message has
+        not arrived yet -- the same preference the frontend applies when
+        choosing which value to display -- so "available" always describes
+        whichever value would actually be shown.
+        """
+        fix_type = self._gps.get("fixType")
+        if fix_type is None or fix_type < self._MIN_USABLE_FIX_TYPE:
+            return False
+
+        lat = self._position.get("lat")
+        if lat is None:
+            lat = self._gps.get("lat")
+        lon = self._position.get("lon")
+        if lon is None:
+            lon = self._gps.get("lon")
+        return lat is not None and lon is not None
+
     # ------------------------------------------------------------------
     # Snapshot
     # ------------------------------------------------------------------
@@ -290,6 +333,7 @@ class TelemetryState:
             message_age = self._age(self._last_message_mono, now_mono)
             heartbeat_age = self._age(self._last_heartbeat_mono, now_mono)
             stale = message_age is None or message_age > self._stale_timeout
+            position_available = self._is_position_available()
 
             return {
                 "connectionState": state.value,
@@ -360,6 +404,11 @@ class TelemetryState:
                     "climbRate": self._hud.get("climbRate"),
                 },
                 "position": {
+                    # Raw GLOBAL_POSITION_INT passthrough -- never backfilled
+                    # from GPS_RAW_INT here, and never nulled out to "hide" a
+                    # bad fix. `available` below is the single place fix
+                    # quality is judged; these fields stay exactly what the
+                    # vehicle reported.
                     "lat": self._position.get("lat"),
                     "lon": self._position.get("lon"),
                     "altAmsl": self._position.get("altAmsl"),
@@ -367,7 +416,7 @@ class TelemetryState:
                     "vx": self._position.get("vx"),
                     "vy": self._position.get("vy"),
                     "vz": self._position.get("vz"),
-                    "available": self._position.get("lat") is not None and self._position.get("lon") is not None,
+                    "available": position_available,
                 },
                 "version": dict(self._version) if self._version else None,
                 "statusTexts": [dict(entry) for entry in self._statustexts],

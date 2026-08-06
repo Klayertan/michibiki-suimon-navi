@@ -67,7 +67,7 @@ function status({ mode = "mock", allowSafeCommands = true, armed = false, connec
       componentId: 1
     },
     battery: { voltage: 16.21, current: 1.42, remaining: 96, sensorsOk: true },
-    // No fix: exercises the long "利用不可（屋内では測位できません）" badge.
+    // No fix: exercises the "利用不可（GPS Fixなし）" badge.
     gps: { fixType: 1, fixTypeName: "NO_FIX", satellites: 4, lat: null, lon: null, altMsl: null },
     attitude: { roll: 1.2, pitch: -0.8, yaw: 137.0, yawNormalized: 137.0 },
     motion: { heading: 137, groundSpeed: 0.05, airSpeed: 0.0, altitude: 62.0, climbRate: -0.01 },

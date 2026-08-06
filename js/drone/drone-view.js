@@ -193,10 +193,15 @@ export class DroneView {
     this.setText("droneLat", formatCoordinate(position.lat ?? gps.lat));
     this.setText("droneLon", formatCoordinate(position.lon ?? gps.lon));
 
-    const available = position.available || (gps.lat !== null && gps.lat !== undefined);
+    // Trust the backend's `available` alone -- it is the one place fix
+    // quality (GPS_RAW_INT.fixType >= 2D_FIX) is judged. Re-deriving it here
+    // from a raw coordinate being non-null was the bug: ArduPilot reports
+    // lat/lon as a real 0 while it has no fix at all, so "not null" is not
+    // "usable". Do not add a fallback like `|| gps.lat != null` back here.
+    const available = position.available === true;
     this.setText(
       "dronePositionAvailable",
-      available ? "利用可能" : "利用不可（屋内では測位できません）",
+      available ? "利用可能" : "利用不可（GPS Fixなし）",
       available ? "ok" : "warn"
     );
   }
