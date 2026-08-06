@@ -136,6 +136,12 @@ class MockMavlinkLink(MavlinkLink):
         self._armed = self._scenario.armed
         self._gcs_heartbeats = 0
         self._announced_boot = False
+        #: Every send_command_long() call, in order, regardless of outcome --
+        #: lets tests assert exactly what was requested (message ids, rates,
+        #: targets) without needing real hardware. Never cleared automatically,
+        #: including across a disconnect/reconnect of the same instance, so a
+        #: test can inspect the full history of a multi-session run.
+        self.command_long_log: list[dict[str, Any]] = []
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -372,6 +378,15 @@ class MockMavlinkLink(MavlinkLink):
     ) -> None:
         if not self._open:
             raise LinkError("mock link is not open")
+
+        self.command_long_log.append(
+            {
+                "target_system": target_system,
+                "target_component": target_component,
+                "command": command,
+                "params": tuple(params),
+            }
+        )
 
         if self._scenario.reject_commands > 0:
             self._scenario.reject_commands -= 1

@@ -2,6 +2,14 @@
 
 Date: 2026-08-04 · Repository: `michibiki-suimon-navi` @ `main` (`58a9c3d`) · Working tree: **uncommitted**
 
+> **Update, 2026-08-06:** on real hardware, battery/GPS/attitude/VFR_HUD stayed
+> null while flight mode and armed state worked correctly — see "Essential
+> telemetry stream bootstrap" under **MAVLink Implementation** for the root
+> cause and fix, "### 11." under **Tests Executed**, and the dated update at
+> the end of **Git Status**. The integration itself is now on branch
+> `feature/mavlink-integration`, committed as `f61edb3`; this fix is
+> uncommitted working-tree changes on top of that commit.
+
 ---
 
 ## Executive Summary
@@ -213,6 +221,11 @@ validation → `CommandService` gates → transmit job queued → worker thread
 | `package.json` | Added `backend`, `backend:mock`, `backend:real`, `backend:setup`, `dev`, `test:backend`, `test:all`. Existing `serve`, `test`, `test:browser` unchanged. No new npm dependencies |
 | `.gitignore` | Added a Python block: `.venv/`, `venv/`, `__pycache__/`, `*.py[cod]`, `*.egg-info/`, `.pytest_cache/`, `.mypy_cache/`, `.ruff_cache/` |
 | `docs/DRONE_LINK_PLAN.md` | Added a 7-line note at the top. The existing plan rejected MAVLink *as a way to relay QZ1 NMEA*; that verdict stands. The note clarifies that this integration has a different purpose (vehicle telemetry display) and links to the new docs, so the two documents do not appear to contradict each other |
+| `backend/app/mavlink/constants.py` (2026-08-06) | +31 lines. Added `ESSENTIAL_TELEMETRY_STREAMS`, the 6-entry `(name, message_id, interval_us)` table backing the automatic stream-request fix. No existing constant changed |
+| `backend/app/mavlink/link_manager.py` (2026-08-06) | +256/-7 lines. Added `StreamRequestTracker`; wired `_request_essential_streams()` into `_session()` right after the first-heartbeat `CONNECTED` transition; extended `_dispatch_ack()` to special-case command 511 without disturbing its existing handling of any other command; added `_log_essential_stream_result`, `_maybe_finalize_essential_streams`, `_finalize_essential_stream_results`. No existing method's signature or external behaviour changed |
+| `backend/app/mavlink/mock_connection.py` (2026-08-06) | +15 lines. Added `command_long_log` (every `send_command_long()` call, in order) purely for test visibility. No simulated telemetry or ack behaviour changed |
+| `backend/tests/test_essential_streams.py` (2026-08-06, new) | 487 lines, 30 tests, covering all 8 proof points requested for this fix (see "Tests Executed" below) |
+| `docs/MAVLINK_OPERATOR_GUIDE.md` (2026-08-06) | Added §5.1 explaining the automatic stream request and why a fresh ArduPilot boot emits only HEARTBEAT/TIMESYNC; one troubleshooting row; one safety-restriction bullet |
 
 ---
 
@@ -246,6 +259,81 @@ the worker thread every `heartbeat_interval` (default 1.0 s). The receive budget
 is clamped so a heartbeat is never late: `min(0.2s, time_until_next_heartbeat)`.
 Receiving continues throughout. On disconnect the loop exits and the transport
 closes, stopping the heartbeat cleanly.
+
+### Essential telemetry stream bootstrap (added 2026-08-06)
+
+**Root cause of "battery/GPS/attitude/VFR_HUD stay null on real hardware":**
+ArduPilot (like most autopilots) only ever sends `HEARTBEAT` -- and, from
+ArduPilot specifically, `TIMESYNC` for clock sync -- to a newly connected
+ground-station link. It does **not** proactively stream anything else until
+that GCS explicitly asks, via `MAV_CMD_SET_MESSAGE_INTERVAL` (or the legacy
+`REQUEST_DATA_STREAM`). QGroundControl and Mission Planner send that request
+automatically on connect, which is why this gap is invisible with those
+tools. This backend never sent it. A 15-second raw pymavlink capture against
+a freshly booted Pixhawk confirmed the mechanism exactly:
+`Counter({'HEARTBEAT': 15, 'TIMESYNC': 2})` and nothing else -- the radio and
+serial link were never the problem.
+
+**Fix:** `LinkManager._request_essential_streams()` fires a fire-and-forget
+burst of six `MAV_CMD_SET_MESSAGE_INTERVAL` (command 511) requests the
+instant the first vehicle `HEARTBEAT` of *every* session is seen (initial
+connect and every reconnect alike), in `_session()`'s existing receive loop:
+
+| Message | ID | Rate | Interval (µs) |
+|---|---|---|---|
+| `SYS_STATUS` | 1 | 1 Hz | 1,000,000 |
+| `GPS_RAW_INT` | 24 | 2 Hz | 500,000 |
+| `ATTITUDE` | 30 | 10 Hz | 100,000 |
+| `GLOBAL_POSITION_INT` | 33 | 5 Hz | 200,000 |
+| `VFR_HUD` | 74 | 2 Hz | 500,000 |
+| `BATTERY_STATUS` | 147 | 1 Hz | 1,000,000 |
+
+Table lives in `constants.ESSENTIAL_TELEMETRY_STREAMS`, deliberately separate
+from the pre-existing, browser-facing `REQUESTABLE_STREAMS` (different rates,
+no `BATTERY_STATUS`, gated behind `SUISUI_MAVLINK_ALLOW_SAFE_COMMANDS`, and
+only sent when the operator clicks a button). The new bootstrap is:
+
+* **Never gated** by `SUISUI_MAVLINK_ALLOW_SAFE_COMMANDS` -- a read-only
+  backend still requests telemetry, because without it there is nothing to
+  read.
+* **Non-blocking.** All six `send_command_long()` calls run back to back with
+  no wait on any ack; the whole burst is a handful of synchronous serial
+  writes, bounded in the test suite to complete well within one heartbeat
+  interval. The GCS heartbeat and the receive loop are unaffected.
+* **Idempotent per session.** It fires exactly once per `_session()` call,
+  guarded by the same `saw_vehicle_heartbeat` flag that already gates the
+  `CONNECTED` transition -- a vehicle that keeps sending `HEARTBEAT` every
+  second does not cause it to resend.
+* **Fault-tolerant.** A `send_command_long()` failure for one stream is
+  logged and does not abort the remaining five, and does not tear down the
+  session (a genuinely dead serial port will fail the very next
+  `link.receive()` call instead, through the existing reconnect path).
+* **Uses the existing component-0 handling.** Target component comes from
+  `TelemetryState.target_component(fallback)` -- the same call
+  `CommandService` already uses -- which prefers whatever the vehicle's own
+  `HEARTBEAT` reports (even `0`, a valid value) and only falls back to
+  `SUISUI_MAVLINK_TARGET_COMPONENT` when nothing has been observed yet.
+
+**Ack correlation and error surfacing (`StreamRequestTracker`):**
+`COMMAND_ACK` does not echo the `COMMAND_LONG` params it acknowledges, so a
+batch of six same-command (511) requests can only be matched to their acks by
+send order -- a reasonable but not guaranteed assumption on a single serial
+link, hence "best effort". `_dispatch_ack()` now special-cases command 511:
+an ack claimed by an explicit `AckWaiter` (i.e. a browser-triggered
+`/api/drone/request-streams` call) is left entirely alone; otherwise it is
+popped off the tracker's FIFO queue and logged. Any request still unanswered
+after `command_timeout` is marked `NO_ACK` by a deadline check in the main
+loop, so a firmware that silently ignores the command cannot hang the
+tracker forever. A single rejected/unsupported/timed-out stream is logged as
+a warning only -- expected on some firmware (e.g. not every ArduPilot build
+implements `BATTERY_STATUS`) and never escalated. Only when **all six**
+resolve to a non-`ACCEPTED` result does `_finalize_essential_stream_results()`
+call `TelemetryState.set_error(..., kind="stream_request")`, surfacing one
+clear, actionable error instead of six confusing ones or silence.
+
+`REQUEST_DATA_STREAM` (the legacy stream-request mechanism) was deliberately
+**not** implemented: ArduCopter 4.5.7 fully supports
+`MAV_CMD_SET_MESSAGE_INTERVAL`, so no fallback is genuinely needed yet.
 
 ### Telemetry messages handled
 
@@ -766,6 +854,47 @@ Every backend module imports cleanly (pytest collects all 154 tests, which
 requires importing the whole package). Every frontend module parses and executes
 as an ES module under both `node --test` and Chromium.
 
+### 11. Essential telemetry stream request fix (2026-08-06)
+
+```
+npm.cmd test
+```
+**127/127 pass** (unchanged from baseline — this is a backend-only change).
+
+```
+npm.cmd run test:backend
+```
+**184/184 pass** (154 pre-existing + 30 new in `tests/test_essential_streams.py`).
+No pre-existing test needed modification; `_dispatch_ack`'s new command-511
+special case does not alter the behaviour any existing test observed.
+
+```
+npx playwright test tests/browser/drone-panel.spec.js tests/browser/drone-panel-responsive.spec.js
+```
+**33/33 pass** — confirms the frontend contract is unaffected (this fix is
+entirely inside the backend's link-manager layer; no API response shape, no
+WebSocket payload field, and no frontend file changed).
+
+```
+git diff --check
+```
+Exit code 0, no output — no whitespace errors in any changed line.
+
+The 30 new tests specifically prove, one test (or small group) per point:
+
+| Required proof | Test(s) |
+|---|---|
+| Expected message IDs and intervals requested | `test_the_constant_table_matches_the_required_rates_exactly`, `test_a_real_connection_requests_exactly_the_required_message_ids_and_intervals`, `test_stream_requests_carry_zero_in_every_unused_param` |
+| Requests happen after heartbeat | `test_no_stream_requests_exist_before_a_connection_is_ever_started`, `test_stream_requests_are_sent_only_once_the_link_is_connected` |
+| Requests happen again after reconnect | `test_streams_are_requested_again_after_a_manual_disconnect_and_reconnect`, `test_streams_are_requested_again_after_the_manager_auto_reconnects` (forces the internal auto-retry loop, not just the public API) |
+| Mock mode does not require real MAVLink commands | `test_mock_telemetry_flows_from_its_own_schedule_even_if_every_stream_request_is_denied` |
+| Read-only mode still requests telemetry | `test_read_only_backend_still_sends_the_essential_stream_requests` |
+| No arm/takeoff/throttle/RC-override/movement commands introduced | `test_no_dangerous_command_names_appear_in_the_link_manager_source`, `test_the_transport_still_only_exposes_a_heartbeat_and_command_long_sender`, `test_essential_streams_are_all_known_read_only_telemetry_message_types`, `test_essential_stream_bootstrap_is_not_gated_by_the_allow_safe_commands_flag` |
+| Duplicate heartbeats do not resend | `test_duplicate_heartbeats_do_not_resend_stream_requests` |
+| Request sequence does not stop GCS heartbeat | `test_gcs_heartbeat_keeps_incrementing_while_and_after_streams_are_requested`, `test_essential_stream_request_burst_completes_well_within_one_heartbeat_interval` |
+| COMMAND_ACK handled safely (bonus coverage) | `test_accepted_stream_requests_never_set_a_backend_error`, `test_a_single_rejected_optional_stream_does_not_set_a_backend_error`, `test_every_essential_stream_rejected_sets_one_clear_backend_error`, `test_a_rejected_stream_does_not_abort_the_session_or_stop_the_heartbeat`, `test_a_stream_ack_that_never_arrives_still_resolves_via_the_deadline`, plus 5 `StreamRequestTracker` unit tests |
+| Component-0 handling preserved (bonus coverage) | `test_stream_requests_fall_back_to_the_configured_component_when_the_vehicle_reports_zero` |
+
 ---
 
 ## Tests Not Executed
@@ -805,11 +934,22 @@ Being specific rather than reassuring:
 6. **`target_component` heuristic.** You reported the autopilot component as 0;
    ArduPilot normally answers on 1. The backend prefers the component seen in
    the vehicle's own heartbeat and falls back to the configured value. This is
-   untested against your actual aircraft.
-7. **Stream requests use `SET_MESSAGE_INTERVAL`**, which ArduCopter 4.5 supports.
-   If your build responds better to the legacy `REQUEST_DATA_STREAM`, the
-   request will return `rejected_by_vehicle` rather than silently failing — but
-   the fallback is not implemented.
+   untested against your actual aircraft. (As of 2026-08-06 this same fallback
+   is also used by the automatic essential-stream request, not just by manual
+   commands — still untested against real hardware.)
+7. **[Resolved 2026-08-06]** ~~Stream requests use `SET_MESSAGE_INTERVAL`...~~
+   The real gap this limitation described — telemetry streams were only ever
+   requested via a browser click, gated behind
+   `SUISUI_MAVLINK_ALLOW_SAFE_COMMANDS`, and never automatically — is now
+   fixed; see "Essential telemetry stream bootstrap" above. This was diagnosed
+   from a real 15-second capture showing only `HEARTBEAT`/`TIMESYNC`, exactly
+   as this limitation predicted would happen if nothing ever asked. The
+   `SET_MESSAGE_INTERVAL`-only choice (no `REQUEST_DATA_STREAM` fallback)
+   stands: ArduCopter 4.5.7 fully supports it. **Still untested against real
+   hardware** — the fix has only been exercised against `MockMavlinkLink`,
+   per the "Do not open COM10" constraint on this change; see the real-hardware
+   validation steps in the operator guide §3 for the read-only check that will
+   confirm it.
 8. **Telemetry is displayed, not recorded.** Nothing is written to the existing
    IndexedDB recording store, and drone position is not plotted on the Leaflet
    map. Those are deliberate non-goals for this phase.
@@ -818,6 +958,20 @@ Being specific rather than reassuring:
    all here.
 10. **The `.venv` contains 25 packages** including transitive dependencies
     (lxml, fastcrc via pymavlink). It is gitignored, but it is ~60 MB on disk.
+11. **[Observed 2026-08-06, not fixed — out of scope for this change.]**
+    `LinkManager._session()`'s "no heartbeat within `connect_timeout`" guard
+    (`if not saw_vehicle_heartbeat and time.monotonic() - now > connect_timeout`)
+    compares against `now`, a variable reassigned to the *current* time at the
+    top of **every** loop iteration — not the time the session started. Each
+    iteration is bounded to roughly `_RECEIVE_SLICE` (0.2 s), so in practice
+    this check can never accumulate enough elapsed time to fire: a vehicle
+    that never sends any `HEARTBEAT` at all would appear to hang in
+    `connecting` indefinitely rather than surface the "No MAVLink heartbeat
+    received..." error after `connect_timeout` seconds as documented. This
+    predates the stream-request fix, is unrelated to it, and was left alone to
+    keep this change scoped — flagged here so it is not lost. A fix would
+    capture the session start time once, outside the loop, and compare against
+    that instead of `now`.
 
 ---
 
@@ -869,12 +1023,22 @@ physically verified.**
 - [ ] Tick the propellers-removed checkbox in the panel, press 接続.
 - [ ] Link state reaches 接続済み and telemetry freshness shows 正常.
 - [ ] Armed state shows **DISARMED**.
-- [ ] Battery voltage, GPS fix, satellites, attitude and heading all update.
+- [ ] **Battery voltage, GPS fix, satellites, attitude and heading all
+      update within a few seconds of 接続済み** — this is the specific
+      behaviour the 2026-08-06 stream-request fix validates. Previously only
+      flight mode and armed state populated (from HEARTBEAT alone); if any of
+      these five still stay `—`/null, check the backend log for
+      `requested telemetry stream ...` lines (confirms the requests were
+      sent) and `telemetry stream ... not accepted` (confirms whether the
+      vehicle rejected one) — see operator guide §5.1/§6.
 - [ ] Confirm the mode controls are **disabled** and the read-only note is shown.
+- [ ] Press 切断, then 接続 again; confirm battery/GPS/attitude/heading
+      repopulate the **second** time too (proves the request re-fires on
+      reconnect, not only on the very first connection of the process).
 - [ ] Press 切断; confirm telemetry clears and the port is released.
 
 **Stop here unless you specifically need a mode change.** The read-only pass
-proves the whole telemetry path.
+proves the whole telemetry path, including this fix.
 
 ### Command pass (optional, only after the read-only pass succeeded)
 
@@ -1007,7 +1171,43 @@ The revert list must include `README.md`:
 git checkout -- index.html package.json .gitignore README.md docs/DRONE_LINK_PLAN.md
 ```
 
----
+### Update (2026-08-06): current state, after the essential-stream-request fix
+
+The sections above describe an earlier, uncommitted state. Since then the
+integration was committed to its own branch. **This fix session added nothing
+new to that history — it only added working-tree changes on top:**
+
+```
+On branch feature/mavlink-integration
+Your branch is up to date with 'origin/feature/mavlink-integration'.
+
+Changes not staged for commit:
+	modified:   backend/app/mavlink/constants.py
+	modified:   backend/app/mavlink/link_manager.py
+	modified:   backend/app/mavlink/mock_connection.py
+
+Untracked files:
+	backend/tests/test_essential_streams.py
+
+no changes added to commit (use "git add" and/or "git commit -a")
+```
+
+```
+$ git diff --stat
+ backend/app/mavlink/constants.py       |  31 ++++
+ backend/app/mavlink/link_manager.py    | 256 ++++++++++++++++++++++++++++++++-
+ backend/app/mavlink/mock_connection.py |  15 ++
+ 3 files changed, 295 insertions(+), 7 deletions(-)
+```
+
+Plus `backend/tests/test_essential_streams.py` (487 lines, new, untracked) and
+this doc plus `docs/MAVLINK_OPERATOR_GUIDE.md` (both modified, untracked at
+the time of the original report, still untracked now).
+
+The 7 deletions in `link_manager.py` are the original `_dispatch_ack` body
+being restructured to special-case command 511 (see the diff itself for the
+exact before/after); no existing method's signature changed and no existing
+test needed modification. **Nothing was committed or pushed in this session.**
 
 ## Recommended Next Phase
 
