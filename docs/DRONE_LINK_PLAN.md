@@ -1,5 +1,13 @@
 # ドローン⇄PC/スマホ データ伝送計画 (Drone data link plan)
 
+> **2026-08 追記:** 下表の「案C. MAVLink経由」は *QZ1のNMEAを中継する手段として* 不採用のままです。
+> 一方で、**機体テレメトリ（姿勢・バッテリー・GPS・フライトモード）の表示**を目的とした
+> MAVLink連携は別途実装しました。QZ1のNMEA中継とは目的が異なり、両立します。
+> 実装内容・安全制限・運用手順は
+> [`MAVLINK_INTEGRATION_REPORT.md`](./MAVLINK_INTEGRATION_REPORT.md) と
+> [`MAVLINK_OPERATOR_GUIDE.md`](./MAVLINK_OPERATOR_GUIDE.md) を参照してください。
+> なお、この連携にアーム・離陸・飛行制御は含まれません（読み取り中心）。
+
 機体: Holybro X500 V2 ／ ペイロード: 青いQZ1（Bluetooth SPP・内蔵バッテリー）
 目的: 飛行中のQZ1測位データをPC/スマホへ届ける、または着陸後に確実に回収する。
 

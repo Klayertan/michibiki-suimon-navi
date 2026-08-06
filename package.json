@@ -5,8 +5,15 @@
   "type": "module",
   "scripts": {
     "serve": "node scripts/dev-server.mjs",
+    "backend": "node scripts/run-backend.mjs",
+    "backend:mock": "node scripts/run-backend.mjs --mode mock --allow-safe-commands",
+    "backend:real": "node scripts/run-backend.mjs --mode real",
+    "backend:setup": "node scripts/setup-backend.mjs",
+    "dev": "node scripts/dev-all.mjs",
     "test": "node --test tests/unit/*.test.js",
-    "test:browser": "playwright test"
+    "test:backend": "node scripts/run-pytest.mjs",
+    "test:browser": "playwright test",
+    "test:all": "npm run test && npm run test:backend && npm run test:browser"
   },
   "devDependencies": {
     "@playwright/test": "^1.55.0"
