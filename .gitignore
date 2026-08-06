@@ -152,3 +152,15 @@ vite.config.ts.timestamp-*
 data/*.nmea
 !data/samples/
 !data/samples/*.nmea
+
+# Python — MAVLink backend
+# The virtual environment is repository-local by design (the backend must not
+# depend on globally installed packages) but is never committed.
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/

@@ -1,0 +1,362 @@
+/* Drone / MAVLink panel.
+   Reuses the existing card, metric-grid, kv and panel-button primitives so the
+   panel reads as part of the app rather than a bolted-on tool. Only the
+   drone-specific pieces live here: the tone chips, the armed banner, and the
+   STATUSTEXT list.
+
+   Tone is applied via [data-tone] on top of text that already states the
+   condition in words — colour is never the only signal.
+
+   Responsiveness
+   --------------
+   This panel lives in the right sidebar, which `main` sizes independently of
+   the window. A 1714px-wide window and a 1366px-wide window give it exactly the
+   same panel: 391px of .details-content, i.e. a 363px content box once its
+   14px side padding is removed. Viewport media queries therefore cannot
+   describe this panel — they fire on the window and miss the sidebar entirely.
+   Everything below sizes intrinsically (auto-fit / wrap) or uses a @container
+   query against the panel's own inline size, which resolves against that
+   363px content box.
+
+   Base rules are the narrow-safe ones and @container only ever *widens* the
+   layout, so a browser without container-query support degrades to the stacked
+   layout rather than to a broken one. */
+
+/* The query container. Named so a future nested container cannot capture these
+   rules by accident. */
+#dronePanel .details-content {
+  container: drone-panel / inline-size;
+  min-width: 0;
+}
+
+.drone-section {
+  display: grid;
+  gap: 8px;
+  /* Grid items default to min-width:auto, which refuses to shrink below their
+     content and is what pushes a long badge out of the panel. */
+  min-width: 0;
+}
+
+.drone-section > * {
+  min-width: 0;
+}
+
+.drone-section + .drone-section {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.drone-section-title {
+  align-items: baseline;
+  color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.72rem;
+  font-weight: 850;
+  gap: 0 6px;
+  letter-spacing: 0.09em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.drone-section-title .en {
+  font-size: 0.68rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  opacity: 0.75;
+  text-transform: none;
+}
+
+/* Label / value rows ----------------------------------------------------- */
+
+/* The shared `.kv` primitive is `display:flex; justify-content:space-between`
+   with a nowrap label and no shrink allowance. That is right for a short value
+   like "16.21 V" and wrong for a badge reading
+   "モック（模擬）モード — 実機に接続していません".
+
+   Scoped to #dronePanel so the dozens of other .kv rows in the app are
+   untouched. */
+#dronePanel .kv {
+  align-items: baseline;
+  /* When label + value cannot share a line the value drops to its own line and
+     takes the full row width, instead of overrunning the next grid column. */
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+/* Direct child = the label. It inherits `white-space: nowrap` from the shared
+   `.kv span` rule, which is right here — these are short, known strings and
+   breaking them mid-word reads badly in Japanese. `flex: 0 0 auto` stops the
+   box shrinking under a nowrap string (which would clip it rather than wrap
+   it); the value wraps to its own line instead. The grid track minimum below
+   guarantees room for the longest label (コンポーネントID, ~115px). */
+#dronePanel .kv > span {
+  flex: 0 0 auto;
+}
+
+/* `0 1 auto`, deliberately not `1 1 auto`: the value box hugs its content, so
+   `justify-content: space-between` right-aligns it when it shares the label's
+   line, and it falls to the start of its own line when it wraps — reading as a
+   stacked label/value pair instead of a value stranded on the far right.
+
+   `text-align: left` overrides the shared `.kv strong { text-align: right }`
+   (index.html), which otherwise inherits into a wrapped badge's text and pins
+   every line to the box's right edge — a short second line then reads as a
+   ragged orphan floating in empty space instead of the natural left-aligned
+   paragraph a wrapped sentence should be. A short, single-line value is
+   unaffected: its box is already content-sized, so `text-align` has nothing
+   to do. */
+#dronePanel .kv > strong {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+
+/* Tone chips ------------------------------------------------------------- */
+
+.drone-chip {
+  background: #eef2f7;
+  border: 1px solid var(--line);
+  /* 16px is >= half the height of a single-line chip, so CSS clamps it and the
+     pill looks exactly as it always has. A wrapped, two-line chip then reads as
+     a rounded card rather than a stadium-shaped blob. */
+  border-radius: 16px;
+  display: inline-block;
+  font-weight: 750;
+  max-width: 100%;
+  /* Last-resort break for unbroken Latin runs (env var names, URLs). */
+  overflow-wrap: anywhere;
+  padding: 4px 11px;
+}
+
+/* `.kv span` is a *descendant* selector, so it also matches the chip nested
+   inside <strong> — handing every badge `white-space: nowrap` and out-specifying
+   `.drone-chip` (0,1,0) vs (0,1,1). That is the direct cause of the badges
+   overflowing their column and overlapping their neighbours. */
+#dronePanel .kv .drone-chip {
+  white-space: normal;
+}
+
+/* Armed banner ----------------------------------------------------------- */
+
+/* Deliberately loud. If this is visible the operator must stop and look. */
+.drone-armed-warning {
+  background: #fef2f2;
+  border: 2px solid #dc2626;
+  border-radius: 8px;
+  color: #7f1d1d;
+  font-size: 0.9rem;
+  font-weight: 700;
+  line-height: 1.5;
+  padding: 10px 12px;
+}
+
+.drone-armed-warning[hidden] {
+  display: none;
+}
+
+.drone-note {
+  background: #f8fafc;
+  border: 1px solid var(--line);
+  border-left: 3px solid #94a3b8;
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.45;
+  padding: 7px 9px;
+}
+
+.drone-note[hidden] {
+  display: none;
+}
+
+/* SUISUI_MAVLINK_ALLOW_SAFE_COMMANDS is a 34-character unbreakable run and on
+   its own forces the whole panel to scroll sideways without this. */
+.drone-note code {
+  overflow-wrap: anywhere;
+}
+
+.drone-safety-note {
+  border-left-color: #b45309;
+  color: #9a3412;
+}
+
+/* Controls --------------------------------------------------------------- */
+
+.drone-buttons {
+  display: grid;
+  gap: 8px;
+  /* Stacked by default; widened to two columns by the @container rule below. */
+  grid-template-columns: 1fr;
+}
+
+.drone-buttons .panel-button {
+  min-height: 44px;
+  min-width: 0;
+}
+
+.drone-mode-row {
+  display: grid;
+  gap: 8px;
+  /* Select and Apply stack full-width until the panel is wide enough to put
+     them side by side. */
+  grid-template-columns: 1fr;
+}
+
+.drone-mode-row .input-row,
+.drone-mode-row .panel-button {
+  min-width: 0;
+}
+
+.drone-props-confirm {
+  /* flex-start, not center: once the label wraps to two lines a centred
+     checkbox floats away from the first line it belongs to. */
+  align-items: flex-start;
+  color: var(--muted);
+  display: flex;
+  font-size: 0.85rem;
+  gap: 7px;
+  line-height: 1.4;
+}
+
+/* Without this the checkbox is a shrinkable flex item and squashes to a sliver
+   next to a long label. */
+.drone-props-confirm input {
+  flex: none;
+  margin-top: 2px;
+}
+
+.drone-props-confirm[hidden] {
+  display: none;
+}
+
+/* Message log ------------------------------------------------------------ */
+
+.drone-message-list {
+  display: grid;
+  gap: 3px;
+  list-style: none;
+  margin: 0;
+  max-height: 190px;
+  /* Vertical only: the rows wrap, so a horizontal scrollbar here would mean a
+     sizing bug rather than legitimately wide content. */
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 0;
+}
+
+.drone-message {
+  align-items: baseline;
+  border-bottom: 1px solid var(--line);
+  display: grid;
+  font-size: 0.82rem;
+  gap: 4px 8px;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  padding: 5px 2px;
+}
+
+.drone-message-time {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.drone-message-severity {
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 800;
+  padding: 1px 6px;
+  white-space: nowrap;
+}
+
+[data-tone="danger"] > .drone-message-severity {
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+[data-tone="warn"] > .drone-message-severity {
+  background: #fff7ed;
+  color: #9a3412;
+}
+
+[data-tone="info"] > .drone-message-severity,
+[data-tone="muted"] > .drone-message-severity {
+  background: #f1f5f9;
+  color: var(--muted);
+}
+
+.drone-message-text {
+  word-break: break-word;
+}
+
+.drone-message-empty {
+  color: var(--muted);
+  grid-template-columns: 1fr;
+}
+
+/* Status lines ----------------------------------------------------------- */
+
+.drone-status-line {
+  font-size: 0.85rem;
+  margin: 0;
+  /* Error text can carry a backend URL, which is otherwise unbreakable. */
+  overflow-wrap: anywhere;
+}
+
+.drone-status-line[data-tone="ok"] {
+  color: #065f46;
+}
+
+.drone-status-line[data-tone="danger"] {
+  color: #b91c1c;
+}
+
+.drone-detail-list {
+  display: grid;
+  gap: 6px 12px;
+  /* Intrinsically responsive: as many columns as fit, never fewer than one,
+     never wider than the container. The `min()` guard keeps the track from
+     exceeding the container at absurdly narrow widths. No query is involved, so
+     this behaves correctly with or without container-query support.
+
+     185px is the width at which the widest label/value pair in this panel
+     (フライトモード + STABILIZE, ~183px) still shares one line. Below that a row
+     wraps, which is legible but zigzags a two-column grid, so the sidebar's
+     ~363px simply resolves to a single clean column. */
+  grid-template-columns: repeat(auto-fit, minmax(min(185px, 100%), 1fr));
+}
+
+/* The connection section's values are long-form badges, not short readings, so
+   it stays one fact per row at every width and each badge gets the panel's full
+   content width before it has to wrap. */
+.drone-detail-list-stacked {
+  grid-template-columns: 1fr;
+}
+
+/* Container-query widening -----------------------------------------------
+   Base layouts above are the narrow-safe ones; these only widen. */
+
+@container drone-panel (min-width: 300px) {
+  .drone-buttons {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@container drone-panel (min-width: 380px) {
+  .drone-mode-row {
+    align-items: end;
+    grid-template-columns: 1fr auto;
+  }
+}
+
+/* Below this the time/severity/text columns of a message leave too little room
+   for the text, so the text moves to its own line under its metadata. */
+@container drone-panel (max-width: 300px) {
+  .drone-message {
+    grid-template-columns: auto 1fr;
+  }
+
+  .drone-message-text {
+    grid-column: 1 / -1;
+  }
+}

@@ -13,6 +13,7 @@
   <link rel="stylesheet" href="css/recording.css">
   <link rel="stylesheet" href="css/field-annotation.css">
   <link rel="stylesheet" href="css/field-report.css">
+  <link rel="stylesheet" href="css/drone.css">
   <style>
     :root {
       color-scheme: light;
@@ -2759,6 +2760,118 @@
           </details>
           </div>
         </details>
+
+        <!-- Drone / MAVLink telemetry. The browser never opens COM10: this
+             panel talks to the local Python backend (127.0.0.1:8787), which is
+             the only process that owns the serial link. Read-mostly by design —
+             there is no arm, takeoff, throttle or manual-control affordance
+             anywhere in this panel, and none exists in the backend either. -->
+        <details id="dronePanel" class="card paddy-collapsible" data-workspace="survey" hidden>
+          <summary><span class="details-title">ドローン / MAVLink<span class="en">Drone / MAVLink</span></span></summary>
+          <div class="details-content">
+            <p class="meta">
+              Holybro X500 V2（Pixhawk 6C / ArduCopter 4.5.7）のテレメトリを、ローカルのPythonバックエンド経由で表示します。
+              ブラウザはシリアルポートに直接アクセスしません。アーム・離陸・スロットル操作はこの統合には実装されていません。
+            </p>
+
+            <div id="droneArmedWarning" class="drone-armed-warning" role="alert" hidden></div>
+
+            <section class="drone-section">
+              <h3 class="drone-section-title">接続<span class="en">Connection</span></h3>
+              <!-- Stacked: these values are long-form badges ("モック（模擬）モード
+                   — 実機に接続していません"), not short readings, so each gets the
+                   panel's full width before it needs to wrap. -->
+              <div class="drone-detail-list drone-detail-list-stacked">
+                <div class="kv"><span>バックエンド</span><strong><span id="droneBackendStatus" class="drone-chip">確認中</span></strong></div>
+                <div class="kv"><span>リンク状態</span><strong><span id="droneConnectionState" class="drone-chip">未接続</span></strong></div>
+                <div class="kv"><span>動作モード</span><strong><span id="droneModeBadge" class="drone-chip">—</span></strong></div>
+                <div class="kv"><span>テレメトリ鮮度</span><strong><span id="droneFreshness" class="drone-chip">—</span></strong></div>
+                <div class="kv"><span>シリアルポート</span><strong id="dronePort">—</strong></div>
+                <div class="kv"><span>ボーレート</span><strong id="droneBaud">—</strong></div>
+                <div class="kv"><span>最終ハートビート</span><strong id="droneLastHeartbeat">—</strong></div>
+              </div>
+            </section>
+
+            <section class="drone-section">
+              <h3 class="drone-section-title">機体<span class="en">Vehicle</span></h3>
+              <div class="drone-detail-list">
+                <div class="kv"><span>フライトモード</span><strong id="droneFlightMode">—</strong></div>
+                <div class="kv"><span>アーム状態</span><strong><span id="droneArmedState" class="drone-chip">不明</span></strong></div>
+                <div class="kv"><span>ファームウェア</span><strong id="droneFirmware">—</strong></div>
+                <div class="kv"><span>システムID</span><strong id="droneSystemId">—</strong></div>
+                <div class="kv"><span>コンポーネントID</span><strong id="droneComponentId">—</strong></div>
+              </div>
+            </section>
+
+            <section class="drone-section">
+              <h3 class="drone-section-title">バッテリー<span class="en">Battery</span></h3>
+              <div class="drone-detail-list">
+                <div class="kv"><span>電圧</span><strong id="droneVoltage">—</strong></div>
+                <div class="kv"><span>電流</span><strong id="droneCurrent">—</strong></div>
+                <div class="kv"><span>残量</span><strong id="droneBatteryPercent">—</strong></div>
+                <div class="kv"><span>警告状態</span><strong><span id="droneBatteryWarning" class="drone-chip">—</span></strong></div>
+              </div>
+            </section>
+
+            <section class="drone-section">
+              <h3 class="drone-section-title">GNSS<span class="en">GPS</span></h3>
+              <div class="drone-detail-list">
+                <div class="kv"><span>Fix種別</span><strong id="droneFixType">—</strong></div>
+                <div class="kv"><span>衛星数</span><strong id="droneSatellites">—</strong></div>
+                <div class="kv"><span>緯度</span><strong id="droneLat">—</strong></div>
+                <div class="kv"><span>経度</span><strong id="droneLon">—</strong></div>
+                <div class="kv"><span>測位可否</span><strong><span id="dronePositionAvailable" class="drone-chip">—</span></strong></div>
+              </div>
+            </section>
+
+            <section class="drone-section">
+              <h3 class="drone-section-title">姿勢・運動<span class="en">Motion</span></h3>
+              <div class="metric-grid">
+                <div class="metric"><span>ロール</span><strong id="droneRoll">—</strong></div>
+                <div class="metric"><span>ピッチ</span><strong id="dronePitch">—</strong></div>
+                <div class="metric"><span>ヨー</span><strong id="droneYaw">—</strong></div>
+                <div class="metric"><span>方位</span><strong id="droneHeading">—</strong></div>
+                <div class="metric"><span>対地速度</span><strong id="droneGroundSpeed">—</strong></div>
+                <div class="metric"><span>高度</span><strong id="droneAltitude">—</strong></div>
+              </div>
+            </section>
+
+            <section class="drone-section">
+              <h3 class="drone-section-title">操作<span class="en">Controls</span></h3>
+              <p id="droneControlsNote" class="drone-note"></p>
+              <p id="droneReadOnlyNote" class="drone-note drone-safety-note" hidden>
+                バックエンドは読み取り専用モードで動作しています。コマンドを有効にするには
+                <code>SUISUI_MAVLINK_ALLOW_SAFE_COMMANDS=1</code> を設定して再起動してください。
+              </p>
+              <label id="dronePropsConfirmRow" class="drone-props-confirm" hidden>
+                <input id="dronePropsConfirm" type="checkbox">
+                プロペラを取り外したことを確認しました（実機モードの接続に必須）
+              </label>
+              <div class="drone-buttons">
+                <button id="droneConnectButton" class="panel-button primary" type="button">接続</button>
+                <button id="droneDisconnectButton" class="panel-button" type="button" disabled>切断</button>
+              </div>
+              <button id="droneRequestVersionButton" class="panel-button" type="button" disabled>ファームウェア版数を取得</button>
+              <div class="drone-mode-row">
+                <div class="input-row">
+                  <label for="droneModeSelect">フライトモード（解除中のみ）</label>
+                  <select id="droneModeSelect" disabled>
+                    <option value="STABILIZE">STABILIZE</option>
+                    <option value="ALT_HOLD">ALT_HOLD</option>
+                  </select>
+                </div>
+                <button id="droneApplyModeButton" class="panel-button primary" type="button" disabled>モードを適用</button>
+              </div>
+              <p id="droneStatusMessage" class="drone-status-line meta" role="status" aria-live="polite"></p>
+              <p id="droneCommandMessage" class="drone-status-line meta" role="status" aria-live="polite"></p>
+            </section>
+
+            <section class="drone-section">
+              <h3 class="drone-section-title">メッセージ<span class="en">Status text</span></h3>
+              <ul id="droneMessageList" class="drone-message-list" aria-label="機体からのメッセージ"></ul>
+            </section>
+          </div>
+        </details>
       </aside>
     </main>
   </div>
@@ -3200,7 +3313,12 @@
     let recordingController = null;
     let fieldAnnotationController = null;
     let fieldReportController = null;
+    let droneController = null;
     let serialConnectionState = "disconnected";
+
+    // Local MAVLink backend. Override before load (e.g. from the console or a
+    // future settings panel) if the backend runs on a different port.
+    const DRONE_BACKEND_URL = window.SUISUI_DRONE_BACKEND_URL || "http://127.0.0.1:8787";
 
     function currentActiveField() {
       const assuranceField = assuranceController?.fields?.getActive?.();
@@ -5964,6 +6082,19 @@
         console.error("Field recording initialization failed", error);
         const warning = document.getElementById("recMessage");
         if (warning) warning.textContent = `フィールド記録を初期化できませんでした: ${error.message}`;
+      }
+      try {
+        // The drone panel is optional: it needs the local MAVLink backend
+        // running. If the backend is down the controller still mounts and
+        // reports "バックエンド応答なし" rather than breaking the page.
+        const { DroneController } = await import("./js/drone/drone-controller.js");
+        droneController = new DroneController({ baseUrl: DRONE_BACKEND_URL });
+        await droneController.mount();
+        window.droneController = droneController;
+      } catch (error) {
+        console.error("Drone / MAVLink initialization failed", error);
+        const warning = document.getElementById("droneStatusMessage");
+        if (warning) warning.textContent = `ドローン連携を初期化できませんでした: ${error.message}`;
       }
       syncLayerVisibility();
       updateGatePanel();

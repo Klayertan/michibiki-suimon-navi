@@ -1,0 +1,17 @@
+# SuisuiNavi MAVLink backend — runtime dependencies.
+# Install into the repository-local virtual environment, never globally:
+#   py -3 -m venv .venv
+#   .venv\Scripts\python.exe -m pip install -r backend/requirements.txt
+#
+# Versions are pinned with a compatible-release bound so a routine reinstall
+# picks up patch fixes but cannot pull in a breaking major release on the day
+# of a field test.
+
+fastapi~=0.115.0
+uvicorn~=0.32.0
+pydantic~=2.9.0
+
+# Serial MAVLink. Only imported when SUISUI_MAVLINK_MODE=real; mock mode and
+# the entire test suite run without touching either of these.
+pymavlink~=2.4.49
+pyserial~=3.5
