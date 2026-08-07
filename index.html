@@ -14,6 +14,7 @@
   <link rel="stylesheet" href="css/field-annotation.css">
   <link rel="stylesheet" href="css/field-report.css">
   <link rel="stylesheet" href="css/drone.css">
+  <link rel="stylesheet" href="css/gamepad.css">
   <style>
     :root {
       color-scheme: light;
@@ -2871,6 +2872,10 @@
               <ul id="droneMessageList" class="drone-message-list" aria-label="機体からのメッセージ"></ul>
             </section>
           </div>
+        </details>
+        <details id="gamepadPanel" class="card paddy-collapsible gamepad-panel" data-workspace="survey" hidden>
+          <summary><span class="details-title">PS5コントローラー <span class="en">Gamepad</span></span></summary>
+          <div id="gamepadRoot" class="details-content"></div>
         </details>
       </aside>
     </main>
@@ -6095,6 +6100,14 @@
         console.error("Drone / MAVLink initialization failed", error);
         const warning = document.getElementById("droneStatusMessage");
         if (warning) warning.textContent = `ドローン連携を初期化できませんでした: ${error.message}`;
+      }
+      try {
+        const { GamepadController } = await import("./js/gamepad/gamepad-controller.js");
+        const gamepadController = new GamepadController();
+        await gamepadController.mount();
+        window.gamepadController = gamepadController;
+      } catch (error) {
+        console.error("Gamepad initialization failed", error);
       }
       syncLayerVisibility();
       updateGatePanel();
