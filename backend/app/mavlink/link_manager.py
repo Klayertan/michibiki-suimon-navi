@@ -24,6 +24,18 @@ Three independent mechanisms keep a second owner off the port:
 3. The OS grants a COM port to one process; a second opener gets "access is
    denied", which is reported as
    :class:`~app.mavlink.interface.PortBusyError` with a QGroundControl hint.
+
+Telemetry bootstrap
+--------------------
+A newly connected MAVLink link -- real or simulated GCS software alike --
+only ever gets HEARTBEAT (and, from ArduPilot, TIMESYNC) until something asks
+for anything else. Right after the first vehicle HEARTBEAT of every session
+(initial connect *and* every reconnect), the worker fires a fire-and-forget
+burst of ``MAV_CMD_SET_MESSAGE_INTERVAL`` requests for
+:data:`~app.mavlink.constants.ESSENTIAL_TELEMETRY_STREAMS` -- see
+:meth:`LinkManager._request_essential_streams`. This is read-only telemetry
+configuration, not a flight command: it cannot arm, change mode, or move the
+aircraft, and it is never gated behind ``SUISUI_MAVLINK_ALLOW_SAFE_COMMANDS``.
 """
 
 from __future__ import annotations
@@ -31,12 +43,14 @@ from __future__ import annotations
 import logging
 import threading
 import time
+from collections import deque
 from concurrent.futures import Future
 from dataclasses import dataclass
 from queue import Empty, SimpleQueue
 from typing import Any, Callable
 
 from ..config import Settings
+from . import constants
 from .interface import LinkError, MavlinkLink, ReceivedMessage
 from .telemetry_state import ConnectionState, TelemetryState
 
@@ -101,6 +115,62 @@ class ModeWaiter:
         return self._observed if self._event.wait(timeout) else None
 
 
+class StreamRequestTracker:
+    """Best-effort FIFO correlation for ``MAV_CMD_SET_MESSAGE_INTERVAL`` acks.
+
+    ``COMMAND_ACK`` does not echo back the ``COMMAND_LONG`` params it is
+    acknowledging -- only the command id (511, the same for all six essential
+    requests) and the result. A batch of same-command requests can therefore
+    only be matched to their acknowledgements by *send order*, which is a
+    reasonable assumption on a single serial link with a single sender, but
+    not a guarantee -- hence "best effort", not exact correlation.
+
+    Instance state is touched exclusively from the link worker thread (via
+    :meth:`LinkManager._request_essential_streams` and
+    :meth:`LinkManager._dispatch_ack`), so this class needs no locking.
+    """
+
+    def __init__(self) -> None:
+        self._pending: deque[str] = deque()
+        self.results: dict[str, str] = {}
+
+    def reset(self) -> None:
+        """Start a new correlation batch, discarding any previous results."""
+        self._pending.clear()
+        self.results = {}
+
+    def record_sent(self, name: str) -> None:
+        """Note that ``name`` was transmitted and now awaits an ack."""
+        self._pending.append(name)
+
+    def record_transmit_failed(self, name: str) -> None:
+        """Note that ``name`` could not be sent at all -- no ack will arrive."""
+        self.results[name] = "TRANSMIT_FAILED"
+
+    def offer(self, ack: dict[str, Any]) -> str | None:
+        """Correlate one command-511 ack against the oldest pending request.
+
+        Returns the matched stream name, or ``None`` if nothing was pending
+        (an unsolicited or already-resolved ack).
+        """
+        if not self._pending:
+            return None
+        name = self._pending.popleft()
+        self.results[name] = str(ack.get("resultName", "UNKNOWN"))
+        return name
+
+    def expire_pending(self) -> None:
+        """Give up on every request still awaiting an ack."""
+        while self._pending:
+            name = self._pending.popleft()
+            self.results[name] = "NO_ACK"
+
+    @property
+    def all_resolved(self) -> bool:
+        """True once every sent-or-failed request has a recorded result."""
+        return not self._pending
+
+
 LinkFactory = Callable[[], MavlinkLink]
 
 
@@ -124,6 +194,12 @@ class LinkManager:
         self._waiter_lock = threading.Lock()
         self._link: MavlinkLink | None = None
         self._settled = threading.Event()
+
+        # Essential-telemetry-stream bootstrap. Worker-thread-only state (see
+        # the class docstring on StreamRequestTracker) -- no lock needed.
+        self._essential_stream_tracker = StreamRequestTracker()
+        self._essential_stream_deadline: float | None = None
+        self._essential_stream_finalized = False
 
     # ------------------------------------------------------------------
     # Public state
@@ -303,6 +379,11 @@ class LinkManager:
             self._link = link
         link.open()
         self._state.clear_error()
+        # Fresh per session (initial connect *and* every reconnect), so a
+        # result recorded before a drop can never leak into the next attempt.
+        self._essential_stream_tracker.reset()
+        self._essential_stream_deadline = None
+        self._essential_stream_finalized = False
 
         next_heartbeat = time.monotonic()
         saw_vehicle_heartbeat = False
@@ -324,7 +405,15 @@ class LinkManager:
                     self._state.set_connection_state(ConnectionState.CONNECTED)
                     self._settled.set()
                     logger.info("vehicle heartbeat received; link is live")
+                    # Ask for telemetry now: a real ArduPilot (and most other
+                    # autopilots) sends nothing beyond HEARTBEAT/TIMESYNC to a
+                    # link that has not requested anything else. This must not
+                    # block: it queues a handful of non-blocking serial writes
+                    # and returns, so the heartbeat cadence and the receive
+                    # loop below are unaffected.
+                    self._request_essential_streams(link)
 
+            self._maybe_finalize_essential_streams()
             self._state.evaluate_freshness()
             if not saw_vehicle_heartbeat and time.monotonic() - now > self._settings.connect_timeout:
                 # Port opened but nothing is talking: wrong baud, radio off,
@@ -351,20 +440,47 @@ class LinkManager:
         from .normalizers import normalize_command_ack  # local import keeps the hot path flat
 
         payload = normalize_command_ack(message)
+        command = payload.get("command")
+
         with self._waiter_lock:
-            waiters = [w for w in self._ack_waiters if w.command == payload.get("command")]
+            waiters = [w for w in self._ack_waiters if w.command == command]
         for waiter in waiters:
             waiter.deliver(payload)
-        if not waiters and payload.get("accepted") is False:
-            # An unsolicited rejection still deserves to be visible; never
-            # silently discard a negative acknowledgement.
+        if waiters:
+            # An explicit, CommandService-driven request (mode change, version
+            # request, or a browser-triggered /api/drone/request-streams call)
+            # owns this ack -- including one for command 511, which takes
+            # priority over the essential-stream tracker below so the two
+            # mechanisms cannot steal each other's acknowledgements.
+            return
+
+        if command == constants.MAV_CMD_SET_MESSAGE_INTERVAL:
+            # Our own automatic essential-stream requests correlate here,
+            # best-effort, by send order -- see StreamRequestTracker. A single
+            # unsupported *optional* stream is expected on some firmware and
+            # must never be treated as a connection-level error; only "every
+            # essential stream request failed" is, via
+            # _finalize_essential_stream_results.
+            matched = self._essential_stream_tracker.offer(payload)
+            if matched is not None:
+                self._log_essential_stream_result(matched, payload)
+            else:
+                logger.debug(
+                    "unmatched SET_MESSAGE_INTERVAL ack (result=%s); nothing was pending",
+                    payload.get("resultName"),
+                )
+            return
+
+        if payload.get("accepted") is False:
+            # An unsolicited rejection of anything else still deserves to be
+            # visible; never silently discard a negative acknowledgement.
             logger.warning(
                 "unmatched COMMAND_ACK: command=%s result=%s",
-                payload.get("command"),
+                command,
                 payload.get("resultName"),
             )
             self._state.set_error(
-                f"Vehicle rejected command {payload.get('command')}: {payload.get('resultName')}",
+                f"Vehicle rejected command {command}: {payload.get('resultName')}",
                 kind="command_ack",
             )
 
@@ -376,6 +492,132 @@ class LinkManager:
             waiters = list(self._mode_waiters)
         for waiter in waiters:
             waiter.offer(mode)
+
+    # ------------------------------------------------------------------
+    # Essential telemetry stream bootstrap
+    # ------------------------------------------------------------------
+
+    def _request_essential_streams(self, link: MavlinkLink) -> None:
+        """Ask the vehicle to start streaming the telemetry the UI needs.
+
+        Read-only telemetry configuration, not a flight command: every entry
+        in :data:`~app.mavlink.constants.ESSENTIAL_TELEMETRY_STREAMS` only
+        asks the autopilot to *send* a message type at a given rate. It
+        cannot arm, change mode, or move the aircraft, and unlike the safe
+        commands in :mod:`app.mavlink.command_service`, it is sent
+        unconditionally -- never gated by
+        ``SUISUI_MAVLINK_ALLOW_SAFE_COMMANDS`` -- because without it a
+        freshly booted (or freshly connected-to) vehicle never sends battery,
+        GPS, attitude, or VFR_HUD data at all.
+
+        Fire-and-forget: this sends a handful of ``COMMAND_LONG`` frames back
+        to back without waiting for any of their acks, so it cannot stall the
+        GCS heartbeat or the receive loop even if the vehicle is slow, or
+        never responds, to one of them. Acknowledgements are correlated
+        best-effort as they arrive later, in :meth:`_dispatch_ack`.
+        """
+        self._essential_stream_tracker.reset()
+        self._essential_stream_deadline = time.monotonic() + self._settings.command_timeout
+        self._essential_stream_finalized = False
+
+        target_system = self._settings.target_system
+        # Preserves the existing component-0 handling: prefers whatever
+        # component the vehicle's own HEARTBEAT reported, falling back to the
+        # configured value only if no heartbeat has supplied one yet.
+        target_component = self._state.target_component(self._settings.target_component)
+
+        for name, message_id, interval_us in constants.ESSENTIAL_TELEMETRY_STREAMS:
+            try:
+                link.send_command_long(
+                    target_system=target_system,
+                    target_component=target_component,
+                    command=constants.MAV_CMD_SET_MESSAGE_INTERVAL,
+                    params=(float(message_id), float(interval_us), 0.0, 0.0, 0.0, 0.0, 0.0),
+                )
+            except LinkError as error:
+                # One bad write must not abort the rest of the batch, and must
+                # not tear down an otherwise-live session -- if the serial
+                # port is genuinely dead, the very next link.receive() call in
+                # the main loop will raise the same error and drive the
+                # existing reconnect path; duplicating that here would only
+                # risk masking it.
+                logger.warning("could not request %s telemetry stream: %s", name, error)
+                self._essential_stream_tracker.record_transmit_failed(name)
+            else:
+                self._essential_stream_tracker.record_sent(name)
+                logger.info(
+                    "requested telemetry stream %s (msg id %d, %.0f us, target %d/%d)",
+                    name,
+                    message_id,
+                    interval_us,
+                    target_system,
+                    target_component,
+                )
+
+    def _log_essential_stream_result(self, name: str, ack: dict[str, Any]) -> None:
+        if ack.get("accepted"):
+            logger.info("telemetry stream %s accepted by the vehicle", name)
+        else:
+            logger.warning(
+                "telemetry stream %s not accepted by the vehicle: %s",
+                name,
+                ack.get("resultName"),
+            )
+        if self._essential_stream_tracker.all_resolved:
+            self._finalize_essential_stream_results()
+
+    def _maybe_finalize_essential_streams(self) -> None:
+        """Give up waiting on any essential-stream ack that never arrives.
+
+        Some ArduPilot builds do not acknowledge ``SET_MESSAGE_INTERVAL`` at
+        all; without this, a request that is silently ignored would leave its
+        tracker entry pending forever and the "did every essential stream
+        fail" check in :meth:`_finalize_essential_stream_results` would never
+        run.
+        """
+        deadline = self._essential_stream_deadline
+        if deadline is None or self._essential_stream_finalized:
+            return
+        if time.monotonic() < deadline:
+            return
+        self._essential_stream_tracker.expire_pending()
+        self._finalize_essential_stream_results()
+
+    def _finalize_essential_stream_results(self) -> None:
+        """Surface a backend error only if every essential stream failed.
+
+        Idempotent and safe to call from both the ack-driven path (as soon as
+        the last outstanding ack arrives) and the deadline-driven path (once
+        :attr:`_essential_stream_deadline` passes) -- whichever happens
+        first wins, and the other becomes a no-op.
+        """
+        if self._essential_stream_finalized:
+            return
+        self._essential_stream_finalized = True
+        self._essential_stream_deadline = None
+
+        results = self._essential_stream_tracker.results
+        if not results:
+            return
+        failed = {name: result for name, result in results.items() if result != "ACCEPTED"}
+        if not failed:
+            return
+        if len(failed) == len(results):
+            # Every single essential stream was rejected, unsupported, or
+            # never acknowledged: the operator needs to know telemetry will
+            # not arrive, since nothing else will tell them why the UI stays
+            # empty. One or a few failures among the six is not escalated --
+            # that is normal (e.g. BATTERY_STATUS is not implemented on every
+            # ArduPilot build) and is fully covered by the warning log above.
+            logger.error("all essential telemetry stream requests failed: %s", results)
+            self._state.set_error(
+                "The vehicle did not accept any telemetry stream request "
+                f"({', '.join(sorted(results))}). Battery, GPS, attitude and VFR_HUD "
+                "readings may stay unavailable until the link is reconnected.",
+                kind="stream_request",
+            )
+        else:
+            logger.warning("some optional telemetry streams were not accepted: %s", failed)
 
     def _drain_transmit_queue(self, link: MavlinkLink) -> None:
         while True:

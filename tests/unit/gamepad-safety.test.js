@@ -1,0 +1,3 @@
+import test from "node:test";import assert from "node:assert/strict";import fs from "node:fs";import path from "node:path";
+const root=path.resolve("js/gamepad");const source=fs.readdirSync(root).filter(x=>x.endsWith(".js")).map(x=>fs.readFileSync(path.join(root,x),"utf8")).join("\n");
+test("gamepad modules contain no aircraft or command transport",()=>{for(const token of ["manual_control_send","RC_CHANNELS_OVERRIDE","SET_ATTITUDE_TARGET","SET_POSITION_TARGET_LOCAL_NED","SET_POSITION_TARGET_GLOBAL_INT","MAV_CMD_COMPONENT_ARM_DISARM","MAV_CMD_NAV_TAKEOFF","MAV_CMD_NAV_LAND","MAV_CMD_DO_MOTOR_TEST","fetch(","XMLHttpRequest","WebSocket("])assert.equal(source.includes(token),false,`forbidden token: ${token}`)});

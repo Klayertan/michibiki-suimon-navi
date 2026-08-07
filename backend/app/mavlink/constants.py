@@ -219,3 +219,34 @@ REQUESTABLE_STREAMS: Final[dict[str, tuple[int, float]]] = {
 
 #: MAVLINK_MSG_ID_AUTOPILOT_VERSION.
 MSG_ID_AUTOPILOT_VERSION: Final = 148
+
+
+# --------------------------------------------------------------------------
+# Automatic telemetry bootstrap (sent once per connection, unconditionally)
+# --------------------------------------------------------------------------
+
+#: The telemetry this backend needs to function at all, requested
+#: automatically by :class:`app.mavlink.link_manager.LinkManager` right after
+#: the first vehicle HEARTBEAT of every connection and every reconnect --
+#: never gated by ``SUISUI_MAVLINK_ALLOW_SAFE_COMMANDS``, because without it
+#: battery, GPS, attitude and VFR_HUD stay null forever on real hardware. See
+#: the "Why a fresh ArduPilot boot ..." note in docs/MAVLINK_OPERATOR_GUIDE.md.
+#:
+#: Deliberately a separate table from :data:`REQUESTABLE_STREAMS`: that one is
+#: the browser-facing, user-triggered allowlist (different rates, no
+#: BATTERY_STATUS, gated behind the safe-commands flag); this one is the
+#: backend-internal bootstrap that must work read-only and unattended.
+#:
+#: Each entry is ``(message_name, mavlink_message_id, interval_microseconds)``
+#: -- the exact ``param1``/``param2`` pair for
+#: ``MAV_CMD_SET_MESSAGE_INTERVAL``. Order is send order, used for best-effort
+#: FIFO correlation of the COMMAND_ACKs that come back (see
+#: ``LinkManager.StreamRequestTracker``).
+ESSENTIAL_TELEMETRY_STREAMS: Final[tuple[tuple[str, int, int], ...]] = (
+    ("SYS_STATUS", 1, 1_000_000),  # 1 Hz
+    ("GPS_RAW_INT", 24, 500_000),  # 2 Hz
+    ("ATTITUDE", 30, 100_000),  # 10 Hz
+    ("GLOBAL_POSITION_INT", 33, 200_000),  # 5 Hz
+    ("VFR_HUD", 74, 500_000),  # 2 Hz
+    ("BATTERY_STATUS", 147, 1_000_000),  # 1 Hz
+)

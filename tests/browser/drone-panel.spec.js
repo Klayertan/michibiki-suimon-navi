@@ -150,6 +150,83 @@ test("a connected disarmed vehicle renders its telemetry and enables mode contro
   await expect(page.locator("#droneConnectButton")).toBeDisabled();
 });
 
+// GNSS position availability -- regression coverage for a defect where the
+// panel showed 測位可否: 利用可能 on real hardware reporting no GPS fix at
+// all (fix type NO_FIX, 0 satellites, lat/lon 0.0000000). Two independent
+// bugs stacked: the backend computed `position.available` from
+// GLOBAL_POSITION_INT lat/lon alone (ArduPilot reports those as a literal 0,
+// not null, while it has no fix), and the frontend *separately* re-derived
+// availability as `position.available || (gps.lat !== null ...)`, which
+// would still show 利用可能 even once the backend was fixed. These tests
+// stub exactly the corrected backend payload for the bad-fix case (as
+// TelemetryState now computes it) and prove the frontend no longer
+// second-guesses that with its own OR against the raw GPS fields.
+
+test("a vehicle with no GPS fix shows 利用不可（GPS Fixなし）even though the raw coordinate is a non-null zero", async ({ page }) => {
+  const noFix = status();
+  // The exact real-hardware shape: fix type NO_FIX, 0 satellites, lat/lon
+  // reported as literal 0 (not null) by both GPS_RAW_INT and the fused
+  // GLOBAL_POSITION_INT -- and the backend now correctly says unavailable.
+  noFix.gps = { fixType: 1, fixTypeName: "NO_FIX", satellites: 0, lat: 0, lon: 0, altMsl: 0 };
+  noFix.position = { lat: 0, lon: 0, altAmsl: 0, altRelative: 0, available: false };
+
+  await stubBackend(page, noFix);
+  await openDronePanel(page);
+
+  await expect(page.locator("#droneFixType")).toHaveText("測位なし");
+  await expect(page.locator("#droneSatellites")).toHaveText("0");
+  await expect(page.locator("#dronePositionAvailable")).toHaveText("利用不可（GPS Fixなし）");
+  await expect(page.locator("#dronePositionAvailable")).toHaveAttribute("data-tone", "warn");
+  // The label must not mention "indoors" -- that fact is not actually known.
+  await expect(page.locator("#dronePositionAvailable")).not.toContainText("屋内");
+});
+
+test("a null GPS fix type shows unavailable, not available", async ({ page }) => {
+  const noFixType = status();
+  noFixType.gps = { fixType: null, fixTypeName: null, satellites: null, lat: null, lon: null, altMsl: null };
+  noFixType.position = { lat: null, lon: null, altAmsl: null, altRelative: null, available: false };
+
+  await stubBackend(page, noFixType);
+  await openDronePanel(page);
+
+  await expect(page.locator("#dronePositionAvailable")).toHaveText("利用不可（GPS Fixなし）");
+});
+
+test("a valid 3D fix continues to show 利用可能, including in mock mode", async ({ page }) => {
+  await stubBackend(page, status()); // default fixture: fixType 3, mock mode
+  await openDronePanel(page);
+
+  await expect(page.locator("#dronePositionAvailable")).toHaveText("利用可能");
+  await expect(page.locator("#dronePositionAvailable")).toHaveAttribute("data-tone", "ok");
+});
+
+test("a real, valid (0, 0) coordinate with a good fix is shown as available, not rejected for being zero", async ({ page }) => {
+  const nullIsland = status();
+  nullIsland.gps = { fixType: 3, fixTypeName: "3D_FIX", satellites: 12, lat: 0, lon: 0, altMsl: 0 };
+  nullIsland.position = { lat: 0, lon: 0, altAmsl: 0, altRelative: 0, available: true };
+
+  await stubBackend(page, nullIsland);
+  await openDronePanel(page);
+
+  await expect(page.locator("#dronePositionAvailable")).toHaveText("利用可能");
+  await expect(page.locator("#droneLat")).toHaveText("0.0000000");
+  await expect(page.locator("#droneLon")).toHaveText("0.0000000");
+});
+
+test("the frontend trusts the backend's availability verdict and does not re-derive it from a raw GPS coordinate", async ({ page }) => {
+  // Directly targets the removed `position.available || gps.lat !== null`
+  // bug: the backend says unavailable, but gps.lat is a non-null (nonzero,
+  // even) value. Pre-fix, the OR would have shown 利用可能 anyway.
+  const inconsistent = status();
+  inconsistent.gps = { fixType: 1, fixTypeName: "NO_FIX", satellites: 3, lat: 12.3456789, lon: 98.7654321, altMsl: 10 };
+  inconsistent.position = { lat: null, lon: null, altAmsl: null, altRelative: null, available: false };
+
+  await stubBackend(page, inconsistent);
+  await openDronePanel(page);
+
+  await expect(page.locator("#dronePositionAvailable")).toHaveText("利用不可（GPS Fixなし）");
+});
+
 test("an armed vehicle shows a strong warning and disables every mode control", async ({ page }) => {
   await stubBackend(page, status({ armed: true }));
   await openDronePanel(page);

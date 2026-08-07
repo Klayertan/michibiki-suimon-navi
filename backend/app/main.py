@@ -335,32 +335,98 @@ def create_app(settings: Settings | None = None, link_factory: LinkFactory | Non
         """
         await websocket.accept()
         logger.info("telemetry websocket client connected")
-        reader: asyncio.Task[Any] | None = None
+        # Read concurrently purely to notice a client going away promptly;
+        # inbound messages carry no commands and are ignored. `_drain_client`
+        # catches its own WebSocketDisconnect, and `_consume_reader` below
+        # always retrieves this task's result/exception exactly once -- an
+        # asyncio Task whose exception is never fetched (e.g. via `.result()`
+        # or awaiting it) gets logged by the event loop as "Task exception was
+        # never retrieved" once garbage collected, which is what a plain
+        # client disconnect used to produce here.
+        reader: asyncio.Task[None] = asyncio.create_task(_drain_client(websocket))
+        close_reason = "client"
         try:
-            # Read concurrently purely to notice a client going away promptly;
-            # inbound messages carry no commands and are ignored.
-            reader = asyncio.create_task(_drain_client(websocket))
             while True:
                 await websocket.send_json({"type": "telemetry", "payload": manager.snapshot()})
-                done, _ = await asyncio.wait({reader}, timeout=resolved.ws_interval)
+                done, _pending = await asyncio.wait({reader}, timeout=resolved.ws_interval)
                 if done:
+                    # The reader finished: the client disconnected (any close
+                    # code -- 1000 normal, 1001 navigation/tab close, 1006
+                    # abnormal) while we were between sends.
                     break
-        except WebSocketDisconnect:
-            pass
+        except WebSocketDisconnect as disconnect:
+            # The send (or the internal receive Starlette does to detect a
+            # close) hit the disconnect directly, rather than the reader task
+            # noticing it first. Same expected path, different order.
+            close_reason = f"client, code={disconnect.code}"
+        except (RuntimeError, ConnectionResetError) as error:
+            # RuntimeError: Starlette raises this when send() is attempted
+            # after the socket already closed -- a race between our send loop
+            # and the client (or server shutdown) closing the connection.
+            # ConnectionResetError: an abrupt, lower-level connection drop.
+            # Both are ordinary disconnect paths here, not programming bugs.
+            close_reason = f"{type(error).__name__}"
         except Exception:  # noqa: BLE001 - a broken socket must not kill the server
-            logger.warning("telemetry websocket ended with an error", exc_info=True)
+            logger.warning("telemetry websocket send loop ended with an unexpected error", exc_info=True)
+            close_reason = "error"
         finally:
-            if reader is not None and not reader.done():
+            if not reader.done():
+                # The send loop exited some other way (an exception, or the
+                # process shutting down) while the client was still connected
+                # from the reader's point of view -- stop it explicitly.
                 reader.cancel()
-            logger.info("telemetry websocket client disconnected")
+            await _consume_reader(reader)
+            logger.info("telemetry websocket client disconnected (%s)", close_reason)
 
     return app
 
 
 async def _drain_client(websocket: WebSocket) -> None:
-    """Consume and discard inbound frames until the client disconnects."""
-    while True:
-        await websocket.receive_text()
+    """Consume and discard inbound frames until the client disconnects.
+
+    Runs in its own task so the server notices the client going away promptly
+    even while the main loop is asleep between telemetry frames; inbound
+    frames carry no commands and are ignored.
+
+    ``WebSocketDisconnect`` is how *every* ordinary disconnect surfaces here
+    -- a clean browser close (code 1000), a tab/navigation close (1001), or an
+    abrupt network drop the client reports as 1006 all raise it the same way,
+    with only ``.code`` differing. Catching it here means this task always
+    finishes normally on a client disconnect, so there is never an exception
+    left for anything to retrieve.
+    """
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        pass
+
+
+async def _consume_reader(reader: "asyncio.Task[None]") -> None:
+    """Await a finished (or just-cancelled) drain task exactly once.
+
+    This is the other half of the fix: even with ``_drain_client`` catching
+    its own disconnect, a task's result (or exception) must actually be
+    retrieved -- by awaiting it, or calling ``.result()``/``.exception()`` --
+    or asyncio logs "Task exception was never retrieved" when the Task object
+    is garbage collected. ``asyncio.wait()`` in the caller does not do this
+    for us; it only reports which tasks finished.
+
+    A cancellation we ourselves triggered (server shutdown, or the send loop
+    ending first) is expected and silent. Anything else genuinely unexpected
+    is logged, never silently discarded -- a real programming error in this
+    task must stay visible.
+    """
+    try:
+        await reader
+    except asyncio.CancelledError:
+        pass
+    except WebSocketDisconnect:
+        # Defensive: _drain_client already catches this itself, but a future
+        # edit to it must not silently reintroduce the original defect.
+        pass
+    except Exception:  # noqa: BLE001 - never let the drain task hide a bug
+        logger.warning("telemetry websocket reader task ended with an unexpected error", exc_info=True)
 
 
 #: HTTP status for each rejection reason. Kept as a table so a new reason

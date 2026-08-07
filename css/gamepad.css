@@ -1,0 +1,27 @@
+.gamepad-panel{min-width:0}.gamepad-safety,.gp-warning{padding:12px;border:2px solid #b45309;border-radius:10px;background:#fff7ed;margin-bottom:12px}.gp-status{display:flex;flex-wrap:wrap;gap:8px;align-items:center;overflow-wrap:anywhere}.gp-badge,.gp-sim{display:inline-block;padding:4px 8px;border-radius:6px;background:#334155;color:#fff;font-weight:700}.gp-sim{background:#7c2d12;letter-spacing:.08em}.gp-meta{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}.gp-meta div{min-width:0;padding:7px;background:#f1f5f9}.gp-meta dt{font-size:.75rem;color:#475569}.gp-meta dd{margin:2px 0;overflow-wrap:anywhere}.gp-preview{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.gp-preview div{display:grid;gap:4px}.gp-preview meter{width:100%}.gp-gate{padding:8px;border-radius:8px;background:#fee2e2}.gp-gate.active{background:#dcfce7}.gp-table-wrap{max-width:100%;overflow-x:auto}.gp-table-wrap table{width:100%;min-width:430px;border-collapse:collapse;font-variant-numeric:tabular-nums}.gp-table-wrap th,.gp-table-wrap td{padding:5px;border-bottom:1px solid #ddd;text-align:right}.gp-buttons,.gp-actions{display:flex;flex-wrap:wrap;gap:7px;margin:8px 0}.gp-buttons span,.gp-buttons button{padding:6px;border:1px solid #cbd5e1;border-radius:6px}.gamepad-panel button,.gamepad-panel input,.gamepad-panel select{min-height:40px}.gamepad-panel label{display:grid;gap:3px;margin:8px 0}.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}@media(max-width:480px){.gp-meta,.gp-preview{grid-template-columns:1fr}.gamepad-panel{max-width:100%;overflow:hidden}.gp-actions button{flex:1 1 130px}}
+
+/* Desktop shell additions ------------------------------------------------ */
+
+/* Shown only when running inside SuisuiNavi.exe (window.SUISUI_DESKTOP set),
+   so the operator can always tell the desktop build from a browser tab. */
+.gp-desktop-badge {
+  background: #eef2ff;
+  border: 1px solid #c7d2fe;
+  border-left: 3px solid #4f46e5;
+  border-radius: 6px;
+  color: #3730a3;
+  font-size: 0.8rem;
+  font-weight: 700;
+  margin: 0 0 8px;
+  padding: 6px 9px;
+}
+
+.gp-keyboard {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.gp-keyboard .panel-button {
+  min-height: 40px;
+}
