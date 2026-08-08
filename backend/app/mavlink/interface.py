@@ -54,16 +54,30 @@ class MavlinkLink(abc.ABC):
     """A bidirectional MAVLink transport restricted to safe operations.
 
     There is intentionally no ``send_raw`` / ``send_packet`` method. This
-    interface can produce exactly two kinds of outbound frame: a GCS heartbeat,
-    and a ``COMMAND_LONG`` carrying a command id that
-    :mod:`app.mavlink.command_service` has already validated against its
-    allowlist. A caller cannot use this interface to transmit an arbitrary
-    MAVLink message even if it wanted to.
+    interface can produce exactly three kinds of outbound frame:
+
+    1. a GCS heartbeat;
+    2. a ``COMMAND_LONG`` carrying a command id that
+       :mod:`app.mavlink.command_service` has already validated against its
+       allowlist;
+    3. a ``SET_POSITION_TARGET_LOCAL_NED`` velocity setpoint produced solely by
+       :mod:`app.mavlink.pilot_service`, whose limits live in
+       :mod:`app.mavlink.pilot_limits`.
+
+    A caller cannot use this interface to transmit an arbitrary MAVLink
+    message even if it wanted to.
 
     (A ``SET_MODE`` sender is deliberately absent. Mode changes go through
     ``COMMAND_LONG``/``MAV_CMD_DO_SET_MODE`` instead, because that path returns
     a ``COMMAND_ACK`` the command service can check — bare ``SET_MODE`` is
     unacknowledged, so a failure would be invisible.)
+
+    Still deliberately absent, and not to be added without a separate reviewed
+    change: ``MANUAL_CONTROL``, ``RC_CHANNELS_OVERRIDE``,
+    ``SET_ATTITUDE_TARGET``, ``MAV_CMD_DO_SET_SERVO`` and anything that
+    commands motors directly. Velocity setpoints are used precisely *because*
+    they go through ArduPilot's stabilisation and position controller rather
+    than around them.
     """
 
     @property
@@ -107,6 +121,33 @@ class MavlinkLink(abc.ABC):
         params: tuple[float, float, float, float, float, float, float],
     ) -> None:
         """Transmit COMMAND_LONG for an allowlisted command id."""
+
+    @abc.abstractmethod
+    def send_velocity_setpoint(
+        self,
+        *,
+        target_system: int,
+        target_component: int,
+        vx: float,
+        vy: float,
+        vz: float,
+        yaw_rate: float,
+    ) -> None:
+        """Transmit one ``SET_POSITION_TARGET_LOCAL_NED`` velocity setpoint.
+
+        Body frame (``MAV_FRAME_BODY_NED``), velocity + yaw-rate only. Units
+        and signs are MAVLink's, already converted and clamped by
+        :func:`app.mavlink.pilot_limits.normalized_to_velocity`:
+
+        * ``vx`` m/s, positive forward
+        * ``vy`` m/s, positive right
+        * ``vz`` m/s, positive **down** (so a climb is negative)
+        * ``yaw_rate`` rad/s, positive nose-right
+
+        Implementations must not re-scale or re-interpret these values; the
+        limit boundary is :mod:`app.mavlink.pilot_limits`, and duplicating it
+        here would create a second place for the aircraft's top speed to live.
+        """
 
     @abc.abstractmethod
     def describe(self) -> dict[str, Any]:

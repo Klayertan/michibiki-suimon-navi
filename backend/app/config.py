@@ -115,6 +115,12 @@ class Settings:
     #: Parsed for reporting only. Takeoff is not implemented.
     allow_takeoff: bool = False
     require_props_removed_ack: bool = True
+    #: Permits the pilot velocity-setpoint channel (keyboard / gamepad ->
+    #: SET_POSITION_TARGET_LOCAL_NED). Off by default: a default install can
+    #: never command movement. Even when on, the aircraft only moves if the
+    #: operator has separately armed it and put it in GUIDED -- this flag
+    #: does not arm, take off, or change mode.
+    allow_pilot_control: bool = False
 
     # -- HTTP -------------------------------------------------------------
     host: str = "127.0.0.1"
@@ -159,6 +165,7 @@ class Settings:
             "modeVerifyTimeout": self.mode_verify_timeout,
             "wsInterval": self.ws_interval,
             "allowSafeCommands": self.allow_safe_commands,
+            "allowPilotControl": self.allow_pilot_control,
             "armSupported": False,
             "takeoffSupported": False,
             "allowedModes": list(ALLOWED_DISARMED_MODES),
@@ -203,6 +210,7 @@ def load_settings() -> Settings:
         allow_arm=_env_bool("ALLOW_ARM", False),
         allow_takeoff=_env_bool("ALLOW_TAKEOFF", False),
         require_props_removed_ack=_env_bool("REQUIRE_PROPS_REMOVED_ACK", True),
+        allow_pilot_control=_env_bool("ALLOW_PILOT_CONTROL", False),
         host=_env_str("HOST", "127.0.0.1"),
         http_port=_env_int("HTTP_PORT", 8787, minimum=1, maximum=65535),
         allowed_origins=_env_csv("ALLOWED_ORIGINS", "http://localhost:4173,http://127.0.0.1:4173"),

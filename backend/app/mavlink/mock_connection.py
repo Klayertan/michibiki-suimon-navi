@@ -142,6 +142,11 @@ class MockMavlinkLink(MavlinkLink):
         #: including across a disconnect/reconnect of the same instance, so a
         #: test can inspect the full history of a multi-session run.
         self.command_long_log: list[dict[str, Any]] = []
+        #: Every velocity setpoint transmitted, in order, with a monotonic
+        #: timestamp. Lets tests assert the exact vx/vy/vz/yaw_rate the pilot
+        #: service produced -- and the cadence it produced them at -- without
+        #: any hardware.
+        self.velocity_setpoint_log: list[dict[str, Any]] = []
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -411,6 +416,30 @@ class MockMavlinkLink(MavlinkLink):
 
         if not drop:
             self._queue_ack(command, result=constants.MAV_RESULT_ACCEPTED)
+
+    def send_velocity_setpoint(
+        self,
+        *,
+        target_system: int,
+        target_component: int,
+        vx: float,
+        vy: float,
+        vz: float,
+        yaw_rate: float,
+    ) -> None:
+        if not self._open:
+            raise LinkError("mock link is not open")
+        self.velocity_setpoint_log.append(
+            {
+                "target_system": target_system,
+                "target_component": target_component,
+                "vx": float(vx),
+                "vy": float(vy),
+                "vz": float(vz),
+                "yaw_rate": float(yaw_rate),
+                "at": time.monotonic(),
+            }
+        )
 
     def _apply_mode(self, custom_mode: int) -> None:
         name = constants.mode_name(custom_mode)

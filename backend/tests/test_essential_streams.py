@@ -286,13 +286,19 @@ def test_no_dangerous_command_names_appear_in_the_link_manager_source() -> None:
         assert token not in source, f"{token} must not appear in link_manager.py"
 
 
-def test_the_transport_still_only_exposes_a_heartbeat_and_command_long_sender() -> None:
+def test_the_transport_exposes_only_the_three_reviewed_senders() -> None:
     """Guards against a new send_* method being added to smuggle in a second,
-    less-restricted transmit path alongside this fix."""
+    less-restricted transmit path.
+
+    ``send_velocity_setpoint`` was added deliberately for pilot control (see
+    ``app.mavlink.pilot_service``); it emits SET_POSITION_TARGET_LOCAL_NED,
+    which ArduPilot's own controllers execute. Anything beyond these three
+    needs its own review.
+    """
     from app.mavlink.interface import MavlinkLink
 
     senders = {name for name in dir(MavlinkLink) if name.startswith("send")}
-    assert senders == {"send_gcs_heartbeat", "send_command_long"}
+    assert senders == {"send_gcs_heartbeat", "send_command_long", "send_velocity_setpoint"}
 
 
 def test_essential_streams_are_all_known_read_only_telemetry_message_types() -> None:

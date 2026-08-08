@@ -22,6 +22,13 @@
   read-only. Arming and takeoff are not implemented and this switch cannot
   enable them.
 
+.PARAMETER AllowPilotControl
+  Enable low-speed keyboard/gamepad velocity control. Off by default. Even when
+  on, the aircraft only moves if YOU have armed it and put it in GUIDED: this
+  switch cannot arm, take off, land, or change flight mode, and the speeds are
+  capped in backend/app/mavlink/pilot_limits.py. Read
+  docs/PILOT_CONTROL_GUIDE.md before using it.
+
 .EXAMPLE
   .\scripts\dev.ps1
   Frontend plus the simulated aircraft.
@@ -29,13 +36,19 @@
 .EXAMPLE
   .\scripts\dev.ps1 -Real -AllowSafeCommands
   Frontend plus the real COM10 link with mode changes enabled.
+
+.EXAMPLE
+  .\scripts\dev.ps1 -AllowPilotControl
+  Simulated aircraft with the pilot panel available, for practising the
+  key mapping with no hardware attached.
 #>
 [CmdletBinding()]
 param(
     [switch]$Real,
     [string]$Port = "COM10",
     [int]$Baud = 57600,
-    [switch]$AllowSafeCommands
+    [switch]$AllowSafeCommands,
+    [switch]$AllowPilotControl
 )
 
 $ErrorActionPreference = "Stop"
@@ -67,11 +80,32 @@ if ($Real) {
     }
 }
 
+if ($Real -and $AllowPilotControl) {
+    # Two separate confirmations on purpose. The first is about opening a
+    # serial port; this one is about an aircraft that may move.
+    Write-Host ""
+    Write-Host "  PILOT CONTROL — the backend will accept velocity commands." -ForegroundColor Red
+    Write-Host ""
+    Write-Host "  It will only move the aircraft if YOU arm it and select GUIDED."
+    Write-Host "  It never arms, takes off, lands, or changes mode by itself."
+    Write-Host "  Limits: 0.30 m/s horizontal, 0.30 up, 0.20 down, 12 deg/s yaw."
+    Write-Host ""
+    Write-Host "  Do the bench test with PROPELLERS REMOVED first." -ForegroundColor Red
+    Write-Host "  See docs/PILOT_CONTROL_GUIDE.md." -ForegroundColor Red
+    Write-Host ""
+    $pilotAnswer = Read-Host "  Type PILOT to enable velocity control"
+    if ($pilotAnswer -ne "PILOT") {
+        Write-Host "  Pilot control stays off. Starting read-only." -ForegroundColor Green
+        $AllowPilotControl = $false
+    }
+}
+
 $backendEnv = @{
     SUISUI_MAVLINK_MODE = if ($Real) { "real" } else { "mock" }
     SUISUI_MAVLINK_PORT = $Port
     SUISUI_MAVLINK_BAUD = "$Baud"
     SUISUI_MAVLINK_ALLOW_SAFE_COMMANDS = if ($AllowSafeCommands) { "1" } else { "0" }
+    SUISUI_MAVLINK_ALLOW_PILOT_CONTROL = if ($AllowPilotControl) { "1" } else { "0" }
 }
 
 $assignments = ($backendEnv.GetEnumerator() | ForEach-Object { "`$env:$($_.Key)='$($_.Value)'" }) -join "; "

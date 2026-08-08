@@ -30,12 +30,15 @@ from .mavlink.command_service import DISABLED_OPERATIONS, CommandRejected, Comma
 from .mavlink.interface import LinkError, MavlinkLink, PortBusyError, PortNotFoundError
 from .mavlink.link_manager import LinkBusyError, LinkManager
 from .mavlink.mock_connection import MockMavlinkLink
+from .mavlink.pilot_limits import REQUIRED_PILOT_MODE
+from .mavlink.pilot_service import PilotService
 from .models import (
     CommandResponse,
     ConfigResponse,
     ConnectRequest,
     HealthResponse,
     ModeRequest,
+    PilotInputRequest,
     StreamRequest,
 )
 
@@ -103,6 +106,20 @@ def create_app(settings: Settings | None = None, link_factory: LinkFactory | Non
     factory = link_factory or default_link_factory(resolved)
     manager = LinkManager(resolved, factory)
     commands = CommandService(manager, resolved)
+    # The pilot service is always constructed so the UI can report *why*
+    # control is unavailable, but it refuses to produce a setpoint unless
+    # SUISUI_MAVLINK_ALLOW_PILOT_CONTROL=1. Only then is it attached to the
+    # link worker, so an unconfigured backend has no code path from an HTTP
+    # request to a velocity frame at all.
+    pilot = PilotService(resolved, manager.state)
+    if pilot.available:
+        manager.attach_pilot_service(pilot)
+        logger.warning(
+            "pilot velocity control is ENABLED (limits: %s). The aircraft will only move if it is "
+            "separately armed and in %s; this backend never arms, takes off, or changes mode.",
+            pilot.limits.to_dict(),
+            REQUIRED_PILOT_MODE,
+        )
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
@@ -185,7 +202,89 @@ def create_app(settings: Settings | None = None, link_factory: LinkFactory | Non
     @app.get("/api/drone/status")
     async def drone_status() -> dict[str, Any]:
         """Complete normalized state. Works in mock and real mode, connected or not."""
-        return manager.snapshot()
+        snapshot = manager.snapshot()
+        snapshot["pilot"] = pilot.snapshot()
+        return snapshot
+
+    # ------------------------------------------------------------------
+    # Pilot velocity control
+    # ------------------------------------------------------------------
+    #
+    # Every route here is a no-op unless SUISUI_MAVLINK_ALLOW_PILOT_CONTROL=1.
+    # None of them arms, disarms, takes off, lands, or changes flight mode --
+    # they only express a desired velocity, which ArduPilot ignores entirely
+    # unless the operator has already armed the aircraft into GUIDED.
+
+    def _pilot_unavailable() -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_403_FORBIDDEN,
+            content={
+                "ok": False,
+                "reason": "pilot_control_disabled",
+                "message": (
+                    "Pilot velocity control is disabled. Start the backend with "
+                    "SUISUI_MAVLINK_ALLOW_PILOT_CONTROL=1 to enable it. This never arms the "
+                    "aircraft or changes its flight mode."
+                ),
+                "detail": {"pilot": pilot.snapshot()},
+            },
+        )
+
+    @app.post("/api/drone/pilot/enable")
+    async def pilot_enable() -> Any:
+        """Open the control channel. Does **not** arm anything."""
+        if not pilot.available:
+            return _pilot_unavailable()
+        return {
+            "ok": True,
+            "reason": "enabled",
+            "message": "Pilot control channel enabled. The aircraft must be armed and in "
+                       f"{REQUIRED_PILOT_MODE} separately before it will move.",
+            "detail": {"pilot": pilot.enable()},
+        }
+
+    @app.post("/api/drone/pilot/disable")
+    async def pilot_disable() -> Any:
+        """Close the control channel and command neutral on the way out."""
+        return {
+            "ok": True,
+            "reason": "disabled",
+            "message": "Pilot control channel disabled; commanding neutral.",
+            "detail": {"pilot": pilot.disable()},
+        }
+
+    @app.post("/api/drone/pilot/neutral")
+    async def pilot_neutral() -> Any:
+        """Stop movement now (Space, focus loss, tab hidden, page unload).
+
+        A movement command, not a motor kill: the channel stays open and the
+        operator can fly again immediately.
+        """
+        return {
+            "ok": True,
+            "reason": "neutral",
+            "message": "Movement neutralised.",
+            "detail": {"pilot": pilot.command_neutral()},
+        }
+
+    @app.post("/api/drone/pilot/input")
+    async def pilot_input(body: PilotInputRequest) -> Any:
+        """Accept one normalized pilot command from the browser.
+
+        Called continuously (~15 Hz) while control is active. The backend
+        keeps only the latest command with a monotonic timestamp and stops
+        moving on its own if these stop arriving.
+        """
+        if not pilot.available:
+            return _pilot_unavailable()
+        state = pilot.submit(
+            forward=body.forward,
+            right=body.right,
+            up=body.up,
+            yaw=body.yaw,
+            neutral=body.neutral,
+        )
+        return {"ok": True, "reason": "accepted", "message": "", "detail": {"pilot": state}}
 
     @app.get("/api/drone/config", response_model=ConfigResponse)
     async def drone_config() -> ConfigResponse:

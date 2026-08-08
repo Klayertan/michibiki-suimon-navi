@@ -1,5 +1,14 @@
 # Gamepad operator guide
 
+The gamepad panel described here is **input preview only**: it visualizes
+calibration and normalization and transmits nothing. Its modules contain no
+network transport at all, and an automated test keeps it that way.
+
+Low-speed flight control is a separate, opt-in feature that lives in
+`js/pilot/` and a distinct backend service. It reuses the same input providers
+but nothing else. See **[PILOT_CONTROL_GUIDE.md](PILOT_CONTROL_GUIDE.md)** —
+read it before enabling anything that can move an aircraft.
+
 ## A. Test now without hardware
 
 1. Start SuisuiNavi in development mode and open `http://127.0.0.1:8000/?gamepadMock=1#survey`.
@@ -28,7 +37,31 @@ Without `?gamepadMock=1`, simulator controls are absent. Simulation data is cali
 
 Physical DualSense validation is **NOT EXECUTED** in Phase 1.
 
-## C. Bluetooth test later
+## C. Keyboard input source
+
+The keyboard is selectable as an input source in the same panel, and drives the
+same axes as a stick. Capture is explicit: nothing is intercepted until
+**キーボードをキャプチャ / Capture keyboard** is pressed, and keys are ignored
+while a text field, textarea, select or editable region has focus.
+
+| Key | Axis (preview) | Meaning when flying |
+|---|---|---|
+| ↑ / ↓ | pitch | forward / backward |
+| ← / → | roll | left / right |
+| W / S | vertical | climb / descend |
+| A / D | yaw | yaw left / yaw right |
+| Space | all axes to zero | movement neutral — **not** a motor kill |
+| Left Shift (hold) | dead-man (preview gate) | — |
+| Esc | zero + stop capture | — |
+
+In the *preview* panel the dead-man gate applies, so released Shift shows zero
+gated output. The pilot panel does not use the dead-man; its equivalents are
+Space, focus loss, and the backend's 0.5 s input timeout.
+
+Space and the mapping above are shared with the pilot panel deliberately: an
+operator practises the same keys in preview that they will use in flight.
+
+## D. Bluetooth test later
 
 1. Pair DualSense through Windows Bluetooth settings.
 2. Verify it appears in `joy.cpl`.

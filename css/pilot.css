@@ -1,0 +1,142 @@
+/* Pilot control panel.
+   Reuses the existing card / kv / panel-button / drone-chip primitives so it
+   reads as part of the app. Only pilot-specific pieces live here. */
+
+.pilot-safety {
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  border-left: 3px solid #ea580c;
+  border-radius: 6px;
+  color: #9a3412;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  margin-bottom: 10px;
+  padding: 8px 10px;
+}
+
+.pilot-grid {
+  display: grid;
+  gap: 6px 12px;
+  grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr));
+}
+
+.pilot-axes-section {
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+}
+
+/* Axis row: label, bar, signed value, magnitude. The number is always
+   present, so the bar is decoration rather than the only signal. */
+.pilot-axis {
+  align-items: center;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 9em) minmax(0, 1fr) 4.5em 3em;
+}
+
+.pilot-axis-label {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.pilot-axis meter {
+  width: 100%;
+}
+
+.pilot-axis output {
+  font-variant-numeric: tabular-nums;
+  font-weight: 750;
+  text-align: right;
+}
+
+.pilot-axis output[data-tone="ok"] {
+  color: #065f46;
+}
+
+.pilot-axis-pct {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+/* Shown for a moment after Space / focus loss / an explicit neutral, so the
+   operator gets positive confirmation that the stop actually happened. */
+.pilot-neutral {
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  border-left: 3px solid #059669;
+  border-radius: 6px;
+  color: #065f46;
+  font-size: 0.82rem;
+  font-weight: 700;
+  margin: 0;
+  padding: 6px 9px;
+}
+
+.pilot-neutral[hidden] {
+  display: none;
+}
+
+.pilot-buttons {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 1fr;
+}
+
+.pilot-buttons .panel-button {
+  min-height: 44px;
+  min-width: 0;
+}
+
+.pilot-keymap {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  margin-top: 10px;
+  padding: 4px 10px;
+}
+
+.pilot-keymap summary {
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 700;
+  padding: 7px 0;
+}
+
+.pilot-keymap-table {
+  border-collapse: collapse;
+  font-size: 0.82rem;
+  width: 100%;
+}
+
+.pilot-keymap-table td {
+  border-bottom: 1px solid var(--line);
+  padding: 4px 2px;
+}
+
+.pilot-keymap-table td:first-child {
+  font-weight: 800;
+  white-space: nowrap;
+  width: 5em;
+}
+
+@container drone-panel (min-width: 300px) {
+  .pilot-buttons {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .pilot-axis {
+    grid-template-columns: minmax(0, 7em) minmax(0, 1fr) 4em;
+  }
+
+  .pilot-axis-pct {
+    display: none;
+  }
+}

@@ -1,0 +1,26 @@
+.field-workspace {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.field-workspace__summary {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-2);
+  margin: 0;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+}
+
+.field-workspace__summary dt {
+  color: var(--color-text-faint);
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.field-workspace__summary dd {
+  margin: 0;
+  font-size: var(--font-size-sm);
+}

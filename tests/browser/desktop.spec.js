@@ -137,7 +137,7 @@ test("W/A/S/D and arrow keys drive the preview only while the dead-man is held",
   await page.locator("#gpKeyCapture").click();
 
   // Keys without the dead-man: gated to zero.
-  await page.keyboard.down("KeyW");
+  await page.keyboard.down("ArrowUp");
   await expect(page.locator("#gpDeadmanState")).toContainText("deadman-released");
   const gatedOutputs = await page.locator(".gp-preview output").allInnerTexts();
   for (const text of gatedOutputs) {
@@ -150,7 +150,7 @@ test("W/A/S/D and arrow keys drive the preview only while the dead-man is held",
   await expect(page.locator("#gpInputActive")).toHaveText(/はい \/ yes/);
 
   const pitch = await page.locator(".gp-preview div", { hasText: "pitch" }).locator("output").innerText();
-  expect(parseFloat(pitch.split("→")[1])).toBeLessThan(0); // W = pitch forward = negative
+  expect(parseFloat(pitch.split("→")[1])).toBeLessThan(0); // ↑ = pitch forward = negative
 
   // Releasing the dead-man zeroes everything immediately.
   await page.keyboard.up("ShiftLeft");
@@ -159,7 +159,7 @@ test("W/A/S/D and arrow keys drive the preview only while the dead-man is held",
   for (const text of released) {
     expect(text.split("→")[1].trim()).toMatch(/^-?0\.000$/);
   }
-  await page.keyboard.up("KeyW");
+  await page.keyboard.up("ArrowUp");
 });
 
 test("each mapped key moves its own axis", async ({ page }) => {
@@ -173,12 +173,17 @@ test("each mapped key moves its own axis", async ({ page }) => {
     return parseFloat(text.split("→")[1]);
   };
 
+  // ↑/↓ pitch, ←/→ roll, W/S vertical, A/D yaw. Sticks read negative when
+  // pushed up, so "forward" and "climb" are the negative directions here.
   for (const [key, axis, sign] of [
-    ["KeyS", "pitch", 1],
-    ["KeyA", "roll", -1],
-    ["KeyD", "roll", 1],
-    ["ArrowLeft", "yaw", -1],
-    ["ArrowRight", "yaw", 1]
+    ["ArrowUp", "pitch", -1],
+    ["ArrowDown", "pitch", 1],
+    ["ArrowLeft", "roll", -1],
+    ["ArrowRight", "roll", 1],
+    ["KeyW", "Vertical input preview", -1],
+    ["KeyS", "Vertical input preview", 1],
+    ["KeyA", "yaw", -1],
+    ["KeyD", "yaw", 1]
   ]) {
     await page.keyboard.down(key);
     const value = await axisValue(axis);

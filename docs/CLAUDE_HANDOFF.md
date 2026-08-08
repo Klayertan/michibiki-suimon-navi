@@ -27,9 +27,9 @@ Relevant documents: `docs/MAVLINK_INTEGRATION_REPORT.md`, `docs/MAVLINK_OPERATOR
 
 - Added a browser gamepad / keyboard preview system under `js/gamepad/`.
 - It supports calibration, normalization, dead zones, an explicit dead-man gate, mock input (`?gamepadMock=1`), and a keyboard preview source.
-- This is **preview only**. Its modules deliberately contain no network transport or MAVLink command path; automated safety tests scan for prohibited command tokens.
+- The `js/gamepad/` modules remain **input sources only**. They deliberately contain no network transport or MAVLink command path; automated safety tests scan for prohibited command tokens and for `fetch(` / `WebSocket(`.
 - Real DualSense behavior inside WebView2 has not been tested. Do not claim physical-controller support as verified.
-- A future control phase, if ever pursued, must begin with ArduPilot SITL and a distinct backend command adapter; it must not reuse preview code as a flight-control channel.
+- The control phase described here as future work has since been implemented as a *separate* layer — see §6. The preview modules were not turned into a flight-control channel; they are read by a distinct one.
 
 Relevant documents: `docs/GAMEPAD_PHASE1_REPORT.md` and `docs/GAMEPAD_OPERATOR_GUIDE.md`.
 
@@ -57,13 +57,28 @@ Relevant documents: `docs/DESKTOP_APPLICATION_ARCHITECTURE.md`, `docs/DESKTOP_BU
 - An Intel RealSense depth camera is planned for the drone, primarily as a downward agricultural sensor. It can support RGB-based weed/plant/disease observation and depth-based canopy/terrain estimates. It is **not** a reliable standalone sensor for precise paddy-water height because reflective/textureless water produces unreliable stereo depth. A dedicated reference/sensor remains necessary for water level.
 - Camera model naming should be verified from the hardware label before writing integration code. Use M3 mounting hardware only after confirming the exact RealSense model and bracket design; do not assume an unverified model specification.
 
+### 6. Low-speed pilot velocity control (opt-in)
+
+Added at the operator's explicit request, as a deliberately separate layer rather than an extension of the preview code.
+
+- Off unless the backend is started with `SUISUI_MAVLINK_ALLOW_PILOT_CONTROL=1`. A default install cannot move an aircraft.
+- Browser side: `js/pilot/` (axes, HTTP client, send/stop controller, panel). It knows no MAVLink message, frame, or speed — it posts four numbers in `-1..+1` plus a neutral flag.
+- Backend side: `backend/app/mavlink/pilot_service.py` holds the latest desired state and applies every gate; `pilot_limits.py` is the **only** place speeds and MAVLink constants for this feature are written.
+- Transmits `SET_POSITION_TARGET_LOCAL_NED` in `MAV_FRAME_BODY_NED` with velocity + yaw rate only, so ArduPilot's stabilization is always in the loop. No motor PWM, no `MAV_CMD_DO_SET_SERVO`, no RC override.
+- **Still does not arm, take off, land, RTL, or change flight mode.** It refuses to transmit unless the operator has independently armed the vehicle and selected GUIDED, and it says which gate is closed.
+- Limits: 0.30 m/s horizontal (total, diagonals normalized), 0.30 m/s climb, 0.20 m/s descent, 12 °/s yaw. 15 Hz setpoints, 0.5 s input timeout, explicit neutral on key release / Space / focus loss / tab hidden / link loss.
+- **Not validated against SITL or real hardware.** Implementation, 273 backend tests, 194 JS unit tests and 26 browser tests pass, but no aircraft has flown on it. The propellers-removed bench procedure in `docs/PILOT_CONTROL_GUIDE.md` §7 is the first real check and has not been executed.
+
+Relevant document: `docs/PILOT_CONTROL_GUIDE.md`.
+
 ## Safety and compatibility constraints
 
-1. Never broaden drone control casually. Keep no-arm/no-takeoff/no-RTL/no-mission-upload boundaries unless a separately reviewed safety project authorizes them.
+1. Never broaden drone control casually. Keep no-arm/no-takeoff/no-RTL/no-mission-upload boundaries unless a separately reviewed safety project authorizes them. The velocity slice in §6 is the one authorized exception and is scoped to that: it moves an already-armed, already-GUIDED aircraft slowly, and nothing else.
 2. Do not test new drone behavior on a powered aircraft. Use mocks or SITL first; physical validation requires the documented propellers-removed procedure.
 3. Treat JSON exports, localStorage, and IndexedDB data as compatibility contracts. There are multiple existing schema conventions and an unversioned recording-store record format. Do not silently redesign or converge them during Stage 1.
 4. Preserve the desktop single-instance and shutdown safety properties. Do not reintroduce PID-based `os.kill(pid, 0)` liveness logic on Windows.
-5. Do not make gamepad or keyboard preview modules capable of sending aircraft commands.
+5. Do not make gamepad or keyboard input modules (`js/gamepad/`) capable of sending aircraft commands. They stay transport-free; anything that transmits belongs in `js/pilot/` behind the backend's gates.
+6. Do not raise the pilot velocity limits, shorten the input timeout, or remove a gate without a bench re-test. All of them live in `backend/app/mavlink/pilot_limits.py` and `pilot_service.py`; do not reintroduce speeds anywhere else.
 
 ## Recommended next work
 

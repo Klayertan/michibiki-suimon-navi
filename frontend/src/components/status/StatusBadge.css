@@ -1,0 +1,41 @@
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.status-badge__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--status-unknown);
+  flex: none;
+}
+
+.status-badge--connected .status-badge__dot {
+  background: var(--status-connected);
+}
+.status-badge--disconnected .status-badge__dot {
+  background: var(--status-disconnected);
+}
+.status-badge--warning .status-badge__dot {
+  background: var(--status-warning);
+}
+.status-badge--unknown .status-badge__dot {
+  background: var(--status-unknown);
+}
+.status-badge--not_integrated .status-badge__dot {
+  background: var(--status-not_integrated);
+}
+
+.status-badge__label {
+  text-transform: capitalize;
+  color: var(--color-text);
+}
+
+.status-badge__value {
+  color: var(--color-text-faint);
+}

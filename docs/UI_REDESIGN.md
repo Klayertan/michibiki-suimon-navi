@@ -1,6 +1,6 @@
 # UI / Architecture Redesign — Stage 0 Audit & Plan
 
-Status: **Stage 0 (audit) complete.** No application code has been changed by this document. This is the reference plan for all later stages; update it as decisions are made or revised.
+Status: **Stages 0, 1, 2, 3A, 3B, and 3C are complete.** Stage 3C is the smallest safe Survey-to-Field and field-observation bridge; Water/Stage 4 has not started. The implementation report is [`docs/FRONTEND_ARCHITECTURE.md`](./FRONTEND_ARCHITECTURE.md), and [`docs/HANDOFF.md`](./HANDOFF.md) is the authoritative continuation checkpoint.
 
 ## 1. Motivation
 
@@ -172,8 +172,75 @@ No new backend work is required to start the frontend migration. The existing Fa
 
 ## 21. Unresolved decisions (need a decision before the relevant stage, not now)
 
-1. **Export/import schema convergence** (§8): keep four independent versioned formats forever, or converge on one format with per-format import adapters? Affects Stage 5.
-2. **Routing model**: plain state-based workspace switch (matches today's tab behavior, no URL deep-linking) vs. a real router (enables bookmarkable/shareable workspace URLs, e.g. for desktop window restore)? Affects Stage 1.
-3. **Shared state library**: React Context vs. Zustand for the small cross-cutting state set in §6 — brief allows either; recommend Zustand once more than ~3-4 cross-cutting signals exist (avoids provider nesting), otherwise Context is sufficient. Decide at Stage 1 based on actual signal count once inventoried in code.
-4. **IndexedDB recording-store migration**: introduce record-level schema versioning now (proactive) or only if/when a shape change is actually needed (reactive)? Affects Stage 3/5.
-5. **Desktop dev-origin handling**: how the Vite dev server's origin gets allow-listed in the backend for local development without weakening the desktop build's same-origin posture — needs a decision before Stage 1's dev workflow is finalized.
+1. **Export/import schema convergence** (§8): keep four independent versioned formats forever, or converge on one format with per-format import adapters? Affects Stage 5. Still open.
+2. ~~**Routing model**~~ — resolved in Stage 1: React Router, not a plain state switch. See §22.
+3. ~~**Shared state library**~~ — resolved in Stage 1: Zustand, four small domain-oriented stores. See §22.
+4. **IndexedDB recording-store migration**: introduce record-level schema versioning now (proactive) or only if/when a shape change is actually needed (reactive)? Affects Stage 3/5. Still open.
+5. ~~**Desktop dev-origin handling**~~ — resolved in Stage 1: Vite dev-proxy, no backend origin change needed. See §22.
+6. **New: production mounting of the new frontend** (raised during Stage 1, not resolved): when a later stage decides the new UI should be reachable from the desktop build, should it be mounted at a sub-path (e.g. `/new/`) alongside the legacy app, or eventually replace it as the desktop's `/`? Affects whichever stage first needs the new UI runnable outside `npm run dev:new-ui`. See `docs/FRONTEND_ARCHITECTURE.md`'s "Production integration" section for the additive approach assumed if/when this happens.
+7. **Concurrent same-origin mounting**: the default `:4173` and `:5173` servers are different storage partitions. Stage 2 adds `npm run dev:new-ui:shared-storage` for a sequential React run on the legacy `localhost:4173` origin; a simultaneous `/new/` mount remains unresolved.
+8. **Cross-store field deletion policy**: field IDs also survive in recording IndexedDB data, vegetation records, and Satellite Assurance copies. Deletion remains disabled until those references have an explicit cascade, unlink, or retention policy.
+
+## 22. Stage 1 — what was actually built
+
+Full detail lives in [`docs/FRONTEND_ARCHITECTURE.md`](./FRONTEND_ARCHITECTURE.md); this is the summary of decisions made while implementing it, for anyone reading this plan document in isolation.
+
+- **Placement**: a new `frontend/` directory (React + TypeScript + Vite + React Router + Zustand), sibling to the existing root project, per §11's migration-boundary reasoning — the root project has no bundler today and shouldn't be made to host one just for this.
+- **Legacy coexistence**: `index.html`, `css/`, `js/`, `data/`, the backend, and desktop packaging are all byte-for-byte unchanged. The new UI runs at `http://localhost:5173` (`npm run dev:new-ui`) alongside the legacy app at `http://localhost:4173` (`npm run dev`, unchanged) — both were run simultaneously against the same mock backend during Stage 1 verification with no conflicts.
+- **Shell**: `AppShell` (top status bar, sidebar, one persistent `MapWorkspace`, contextual `InspectorPanel`, collapsible `TelemetryTray`) is mounted once by a pathless layout route; workspace routes only swap the inspector's content. Verified at 1366×768 and 1920×1080 with no document-level scroll (`document.documentElement.scrollHeight <= clientHeight`, checked live), and at 1024×768 for the tablet secondary target.
+- **Map**: plain Leaflet (not react-leaflet — see `docs/FRONTEND_ARCHITECTURE.md`'s reasoning), one instance, same default view/tiles as the legacy map, completely separate Leaflet instance from the legacy app's. No real layers migrated yet; `useMapLayersStore` only scaffolds the toggle model.
+- **Selection model**: implemented exactly as specified in the task (`SelectedEntity` discriminated union); `InspectorPanel` takes over the panel whenever a selection is present, from any workspace.
+- **Status model**: `not_integrated`/`unknown`/`connected`/`disconnected`/`warning`, never a faked "connected." Only `backend` and `drone` are wired to anything real in Stage 1 (via the existing FastAPI backend); `gnss`/`serial`/`recording`/`camera` correctly show `not_integrated` until their own migration stage.
+- **Drone integration**: `services/drone/droneService.ts` wraps the **existing, unmodified** `js/drone/drone-api-client.js` (imported via a new `@legacy` Vite/TS alias) behind a narrow, read-only `DroneService` interface — no flight command, no connect/disconnect UI. Verified against the real mock backend: `/api/health` and the telemetry WebSocket both worked end-to-end through the Vite dev proxy, and `DroneInspector` showed live telemetry (mode, commandable, arm/takeoff-supported flags) sourced entirely from the real backend response.
+- **Dev proxy**: `vite.config.ts` proxies `/api/*` (HTTP and WebSocket) to `127.0.0.1:8787`; `createDroneService()` defaults to `window.location.origin`. **No backend CORS/origin configuration was changed** — this was the resolution to unresolved decision #5 above.
+- **Tests**: 8 new Vitest files / 22 tests (stores, the selection model, the drone service adapter including a test that pins its surface to exactly the three read-only methods, `MapWorkspace` mounting/unmounting Leaflet cleanly, `AppShell` rendering, and workspace-routing behavior including a same-DOM-node assertion that the map is never remounted on navigation). All existing suites re-verified with zero regressions — see the Stage 1 report for exact counts.
+
+## 23. Stage 3A — what was actually built
+
+- **Read-only persistence boundary:** React reads `surveySessions` and `boundaryTracks` from the existing `suimonNaviFieldAnnotationsV2` schema-v3 store. It performs no survey writes and no schema migration.
+- **Typed adapters:** raw legacy point properties and boundary-track records are validated into `domain/surveys` types. Malformed children are skipped with warnings; fatal storage/version problems are distinct error states.
+- **Coordinate safety:** raw positions remain `{lat, lon}` and boundary tuples remain `[lat, lon]`. Tests pin exact order through persistence, domain joining, and the Leaflet view boundary. No GeoJSON order is inferred.
+- **Survey workspace:** the placeholder is replaced by a compact survey/session selector, explicit empty/error/warning states, and a read-only scope note. Synchronous localStorage does not get an artificial loading spinner.
+- **Persistent map layer:** `SurveyLayer` renders session tracks and orphan boundary tracks beside `FieldLayer` on the existing Leaflet map. Selector and path clicks drive shared survey selection; lifecycle tests pin non-recreation.
+- **Real inspector:** point count, recorded time, HDOP and satellite ranges, source/measurement metadata, and linked-field information are shown when authoritative data exists.
+- **Quality boundaries:** no React thresholds were invented. Raw GNSS values, annotation fix summaries, and QZ1/Satellite Assurance remain documented as separate systems.
+- **NMEA reuse:** a typed ephemeral adapter calls `js/gnss/nmea-parser.js` directly. No second parser, import persistence, WebSerial, or legacy controller migration was added.
+- **Verified layout:** 1366x768, 1920x1080, and 1024x768 retain the fixed shell with no document-level scrolling. Exact tests/counts and the full changed-file list are in `docs/HANDOFF.md`.
+
+Stage 3B was subsequently completed as the bounded live connection/recording slice described below. Stage 2B field drawing remains independently deferred.
+
+## 24. Stage 3B — what was actually built
+
+Stage 3B replaces only the Survey workspace's live-GNSS placeholder controls. `SerialGnssService` owns WebSerial permission, open/read/stall/disconnect state and passes framed lines to the unchanged legacy NMEA parser. The top bar reports real serial and recording state. The Survey inspector provides compact connect/disconnect, baud, start/stop, current-fix, counter, and error/warning feedback.
+
+`RecordingService` reuses the legacy recording state machine and exact IndexedDB adapter. It writes the existing session, raw-line, and structured-fix shapes to `suimon-navi-recording` v1 with one monotonic per-session sequence, batched flushes, and final flush before stop. No schema, backend, or legacy controller changed.
+
+The persistent Leaflet map adds independent current-fix and live-track layers alongside Field and saved Survey layers. Their subscriptions update Leaflet objects imperatively, so high-frequency GNSS input does not drive application-shell renders and never recreates the map.
+
+Stopped sessions are read back through a read-only IndexedDB adapter into the Stage 3A Survey model and become selectable after stop and reload. Coordinates remain named `lat`/`lon` in recording records and `[lat, lon]` in annotation boundary tuples; only the Leaflet boundary uses `[lat, lng]`.
+
+The safety boundary is explicit: unsupported browser, permission rejection, malformed NMEA, open/read failure, stalled input, storage/quota failure, and an existing unfinished session are separately surfaced. React does not resume unfinished sessions, retry transient serial loss automatically, or acquire wake locks. Stage 3C subsequently added annotation observations, but did not modify this recording pipeline.
+
+## 25. Stage 3C — what was actually built
+
+- **Boundary source is explicit:** an existing `boundaryTrack` wins; otherwise valid saved session/recording fixes are used. Invalid finite checks are narrow, `[lat, lon]` is pinned, and duplicate vertices are not silently removed.
+- **Preview before persistence:** the legacy closure and validation functions provide all geometry decisions. The hard floor is three points; gap/self-intersection warnings require explicit acknowledgment while retaining the legacy ability to force-close a walked path.
+- **FieldRepository remains the writer:** Survey UI never writes field storage directly. `FieldRepository.create()` delegates to the legacy field builder, records source provenance, links existing annotation session/track `fieldId` values in the same write, and immediately drives active-field selection and FieldLayer.
+- **Existing link semantics:** annotation sessions/tracks and recording sessions already have `fieldId`. IndexedDB recording links use the existing `RecordingStore.updateSession()` shape. Already-linked surveys show Open Existing or explicit Create Another; no silent duplicate/overwrite occurs.
+- **Narrow observations:** Stage 3C creates only legacy `note`, `weed`, `insect`, and `disease` records with legacy severity, memo, timestamp, active `fieldId`, source, and `[lat, lon]`. A typed repository preserves the exact annotation v3 root/record shapes and fails closed on malformed storage.
+- **Explicit placement:** current valid GNSS and armed one-shot map click both produce a preview. Normal clicks do nothing, Escape/Cancel disarm, and outside-field candidates require the visible Save Anyway action using the existing point-in-field helper.
+- **Persistent map/inspector:** `ObservationLayer` is independent of Field/Survey/live layers and uses the shared selected-entity model. The inspector displays only stored facts; no AI confidence/species/media is fabricated.
+- **Verified compatibility/layout:** representative legacy observations render in React, React-created field/observation bytes match the schema the legacy controller consumes, legacy observation browser tests remain green, and all three required viewports have no document scroll.
+- **Deferred:** observation editing/deletion/photos, Water, Stage 2B drawing, automatic reconnect, unfinished-session recovery, wake locks, and all later intelligence/AI/mission work.
+
+## 26. Historical Stage 2 — what was actually built
+
+Full detail lives in [`docs/FRONTEND_ARCHITECTURE.md`](./FRONTEND_ARCHITECTURE.md)'s "Stage 2 — Field management" section. Summary for anyone reading this plan document in isolation.
+
+- **Target identified correctly**: two different "field" concepts existed pre-Stage-2 (§4/§9) — `FieldRegistry` (in-memory, Satellite-Assurance-only) and `field-annotation-core.js`'s persisted records (`localStorage["suimonNaviFieldAnnotationsV2"]`, what the legacy field selector/registered-fields panel/decision workspace actually use). Stage 2 correctly targeted the second, the one holding real user data; `FieldRegistry`'s `validateBoundary` is reused, its class is untouched.
+- **`FieldRepository`**: `list`/`get`/`create`/`update`, implemented against the v3 annotation localStorage contract using the existing core's `buildField`/normalization/constants and `gnss-store.js`'s `makeId`. Writes preserve the legacy controller's exact seven root keys. Malformed or non-v3 bytes are never overwritten by a mutation. `delete` is deliberately absent because the legacy annotation cascade is not globally complete.
+- **Area parity**: `frontend/index.html` now loads the same Turf.js build the legacy app does, so `polygonAreaSquareMeters()` takes its Turf branch in both apps. Confirmed live in the browser, not just in unit tests.
+- **Compatibility is explicit**: a literal representative legacy-v3 field fixture is read unchanged through `list()` and `get()`, preserves exact `[lat, lon]` order, and performs no write. The area wrapper is compared directly with the authoritative legacy function. The default development ports have separate partitions; `dev:new-ui:shared-storage` supplies a sequential check against the real legacy origin, while concurrent mounting remains future work.
+- **Smallest safe UI slice**: existing fields load into a compact selector, render as a dedicated Leaflet layer, select consistently from selector or polygon, and drive a real field inspector. Name/memo edits are supported. Empty and persistence-error states are distinct. New Field, Edit Boundary, and Delete remain visible but disabled.
+- **Deferred, not overlooked**: map creation/boundary editing (Stage 2B), cross-store-safe deletion, field-id rename with FK cascade, and "save as boundary track" (Stage 3). No `paddy-intelligence.js` or `field-annotation-controller.js` migration occurred.
+- **Tests and viewport checks**: the Stage 2 suite covers representative legacy reads, fail-closed writes, authoritative area parity, active state/reconciliation, selector and polygon selection, inspector updates, layer/map lifecycle, and safety-disabled actions. Live checks at 1366×768, 1920×1080, and 1024×768 found no document-level scrolling. Exact final commands/results are recorded in `docs/HANDOFF.md`.

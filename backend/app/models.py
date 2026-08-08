@@ -55,6 +55,35 @@ class StreamRequest(StrictModel):
     streams: Annotated[list[AllowedStream], Field(max_length=len(REQUESTABLE_STREAMS))] | None = None
 
 
+#: A normalized pilot axis. Pydantic rejects anything outside -1..+1 at the
+#: API boundary, before any handler runs, so an out-of-range value can never
+#: reach the velocity conversion. NaN/inf are rejected too (Pydantic's
+#: ``allow_inf_nan=False``), because a NaN velocity would be a genuinely
+#: dangerous thing to hand an autopilot.
+PilotAxis = Annotated[float, Field(ge=-1.0, le=1.0, allow_inf_nan=False)]
+
+
+class PilotInputRequest(StrictModel):
+    """Body for ``POST /api/drone/pilot/input``.
+
+    Four normalized axes from the browser's pilot provider. The browser never
+    sends a speed, a MAVLink frame, or a message name -- only intent between
+    -1 and +1. Limits and units are applied server-side in
+    :mod:`app.mavlink.pilot_limits`.
+    """
+
+    #: +1 forward, -1 backward (Arrow Up / Arrow Down).
+    forward: PilotAxis = 0.0
+    #: +1 right, -1 left (Arrow Right / Arrow Left).
+    right: PilotAxis = 0.0
+    #: +1 climb, -1 descend (W / S).
+    up: PilotAxis = 0.0
+    #: +1 yaw right, -1 yaw left (D / A).
+    yaw: PilotAxis = 0.0
+    #: Space, blur, tab-hidden: force zero regardless of the axes above.
+    neutral: bool = False
+
+
 class HealthResponse(BaseModel):
     status: Literal["ok"]
     version: str

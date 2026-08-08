@@ -251,18 +251,99 @@ def test_constants_module_defines_no_arming_or_takeoff_command_ids() -> None:
         assert not hasattr(constants, forbidden)
 
 
-def test_the_transport_can_only_emit_a_heartbeat_and_an_allowlisted_command() -> None:
+def test_the_transport_can_only_emit_a_heartbeat_a_command_and_a_velocity_setpoint() -> None:
     """Lock the transmit surface of the link interface.
 
     Any new ``send_*`` method is a new way for bytes to reach the aircraft and
     must be a deliberate, reviewed decision — not something that appears
     because an implementation happened to need it.
+
+    ``send_velocity_setpoint`` was added deliberately for keyboard/gamepad
+    pilot control (see ``app.mavlink.pilot_service``). It emits
+    ``SET_POSITION_TARGET_LOCAL_NED``, which goes *through* ArduPilot's
+    stabilisation and position controller. It is not a way around them, and
+    the separate test below asserts that the genuinely dangerous senders are
+    still absent.
     """
     from app.mavlink.interface import MavlinkLink
 
     senders = {name for name in dir(MavlinkLink) if name.startswith("send")}
-    assert senders == {"send_gcs_heartbeat", "send_command_long"}
+    assert senders == {"send_gcs_heartbeat", "send_command_long", "send_velocity_setpoint"}
 
     for implementation in (MockMavlinkLink, __import__("app.mavlink.real_connection", fromlist=["RealMavlinkLink"]).RealMavlinkLink):
         extra = {name for name in dir(implementation) if name.startswith("send")} - senders
         assert not extra, f"{implementation.__name__} added transmit methods: {extra}"
+
+
+def executable_source(module) -> str:
+    """Module source with comments and docstrings removed.
+
+    These modules deliberately *document* which dangerous calls they exclude,
+    so a raw substring scan would flag their own safety notes. Compare code,
+    not prose.
+    """
+    import ast
+    import inspect
+    import io
+    import tokenize
+
+    source = inspect.getsource(module)
+    tree = ast.parse(source)
+
+    docstring_lines: set[int] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+            body = getattr(node, "body", [])
+            if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant):
+                if isinstance(body[0].value.value, str):
+                    for line in range(body[0].lineno, (body[0].end_lineno or body[0].lineno) + 1):
+                        docstring_lines.add(line)
+
+    comment_lines = {
+        token.start[0]
+        for token in tokenize.generate_tokens(io.StringIO(source).readline)
+        if token.type == tokenize.COMMENT
+    }
+
+    return "\n".join(
+        line
+        for number, line in enumerate(source.splitlines(), start=1)
+        if number not in docstring_lines and number not in comment_lines
+    )
+
+
+def test_no_transport_bypasses_arducopter_stabilisation() -> None:
+    """The dangerous senders must stay absent from every transport.
+
+    Velocity setpoints are safe precisely because ArduPilot's controllers
+    still fly the aircraft. Direct motor/servo output, RC override, raw
+    attitude targets and manual control all bypass some or all of that, and
+    none of them exists in this codebase.
+    """
+    from app.mavlink import interface, mock_connection, real_connection
+
+    forbidden = (
+        "manual_control_send",
+        "rc_channels_override_send",
+        "set_attitude_target_send",
+        "DO_SET_SERVO",
+        "DO_MOTOR_TEST",
+        "COMPONENT_ARM_DISARM",
+        "NAV_TAKEOFF",
+        "NAV_LAND",
+        "actuator_control_target_send",
+    )
+    for module in (real_connection, mock_connection, interface):
+        code = executable_source(module)
+        for token in forbidden:
+            assert token not in code, f"forbidden transport call in {module.__name__}: {token}"
+
+
+def test_the_pilot_service_only_reaches_the_velocity_sender() -> None:
+    """The pilot path may transmit velocity setpoints and nothing else."""
+    from app.mavlink import pilot_service
+
+    code = executable_source(pilot_service)
+    assert "send_velocity_setpoint" in code
+    for token in ("send_command_long", "send_gcs_heartbeat", "COMPONENT_ARM_DISARM", "DO_SET_MODE"):
+        assert token not in code, f"the pilot service must not reach {token}"

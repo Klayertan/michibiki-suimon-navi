@@ -15,6 +15,7 @@
   <link rel="stylesheet" href="css/field-report.css">
   <link rel="stylesheet" href="css/drone.css">
   <link rel="stylesheet" href="css/gamepad.css">
+  <link rel="stylesheet" href="css/pilot.css">
   <style>
     :root {
       color-scheme: light;
@@ -2877,6 +2878,17 @@
           <summary><span class="details-title">PS5コントローラー <span class="en">Gamepad</span></span></summary>
           <div id="gamepadRoot" class="details-content"></div>
         </details>
+
+        <!-- Pilot velocity control. Sends normalized axes to the backend,
+             which clamps them to the configured limits and emits
+             SET_POSITION_TARGET_LOCAL_NED. Requires the backend to be started
+             with SUISUI_MAVLINK_ALLOW_PILOT_CONTROL=1, the aircraft to be
+             armed by the operator, and GUIDED mode. This panel never arms,
+             takes off, lands, or changes mode. -->
+        <details id="pilotPanel" class="card paddy-collapsible pilot-panel" data-workspace="survey" hidden>
+          <summary><span class="details-title">操縦（低速テスト）<span class="en">Pilot — low-speed test</span></span></summary>
+          <div id="pilotRoot" class="details-content"></div>
+        </details>
       </aside>
     </main>
   </div>
@@ -3319,6 +3331,7 @@
     let fieldAnnotationController = null;
     let fieldReportController = null;
     let droneController = null;
+    let pilotControlPanel = null;
     let serialConnectionState = "disconnected";
 
     // Local MAVLink backend. Override before load (e.g. from the console or a
@@ -4736,6 +4749,16 @@
       // fieldRegDialog when entering QZ1測量, regardless of whether an
       // upload is actually pending — let the controller correct that.
       fieldAnnotationController?.syncDialogVisibility();
+      // Same problem, higher stakes: that pass would reveal the pilot panel on
+      // every entry to QZ1測量 even when the backend forbids pilot control.
+      // A flight-control surface must never appear unasked for.
+      syncPilotPanelVisibility();
+    }
+
+    /** Keep the pilot panel hidden unless a mounted panel says it is usable. */
+    function syncPilotPanelVisibility() {
+      const panel = document.getElementById("pilotPanel");
+      if (panel && !pilotControlPanel) panel.hidden = true;
     }
 
     function setLayerVisible(layer, visible) {
@@ -6109,6 +6132,22 @@
       } catch (error) {
         console.error("Gamepad initialization failed", error);
       }
+      try {
+        // Pilot velocity control. mount() returns false and leaves the panel
+        // hidden unless the backend reports the feature as permitted, so a
+        // default install never shows a flight-control surface at all.
+        const { PilotPanel } = await import("./js/pilot/pilot-panel.js");
+        const panel = new PilotPanel({ baseUrl: DRONE_BACKEND_URL });
+        if (await panel.mount()) {
+          pilotControlPanel = panel;
+          // Not `window.pilotPanel`: the <details id="pilotPanel"> element
+          // already owns that global, so the name would silently collide.
+          window.pilotControlPanel = panel;
+        }
+      } catch (error) {
+        console.error("Pilot control initialization failed", error);
+      }
+      syncPilotPanelVisibility();
       syncLayerVisibility();
       updateGatePanel();
       updateDecision();

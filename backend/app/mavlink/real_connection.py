@@ -19,7 +19,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Iterator
 
-from . import constants
+from . import constants, pilot_limits
 from .interface import (
     LinkClosedError,
     LinkError,
@@ -186,6 +186,33 @@ class RealMavlinkLink(MavlinkLink):
                 command,
                 0,  # confirmation
                 *params,
+            )
+        except Exception as exc:  # noqa: BLE001
+            raise classify_serial_error(exc, self._port) from exc
+
+    def send_velocity_setpoint(
+        self,
+        *,
+        target_system: int,
+        target_component: int,
+        vx: float,
+        vy: float,
+        vz: float,
+        yaw_rate: float,
+    ) -> None:
+        connection = self._require_open()
+        try:
+            connection.mav.set_position_target_local_ned_send(
+                0,  # time_boot_ms: ArduPilot ignores it on this message
+                target_system,
+                target_component,
+                pilot_limits.MAV_FRAME_BODY_NED,
+                pilot_limits.TYPE_MASK_VELOCITY_YAW_RATE,
+                0.0, 0.0, 0.0,  # x, y, z position: ignored by the type mask
+                float(vx), float(vy), float(vz),
+                0.0, 0.0, 0.0,  # afx, afy, afz: ignored by the type mask
+                0.0,  # yaw: ignored by the type mask
+                float(yaw_rate),
             )
         except Exception as exc:  # noqa: BLE001
             raise classify_serial_error(exc, self._port) from exc

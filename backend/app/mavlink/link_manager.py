@@ -40,6 +40,7 @@ aircraft, and it is never gated behind ``SUISUI_MAVLINK_ALLOW_SAFE_COMMANDS``.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import threading
 import time
@@ -201,6 +202,21 @@ class LinkManager:
         self._essential_stream_deadline: float | None = None
         self._essential_stream_finalized = False
 
+        # Pilot velocity control. Attached by the app factory when the
+        # feature is configured; None means the worker never even considers
+        # transmitting a setpoint.
+        self._pilot: Any = None
+
+    def attach_pilot_service(self, pilot: Any) -> None:
+        """Give the worker a :class:`~app.mavlink.pilot_service.PilotService`.
+
+        Injected rather than constructed here so the link manager keeps no
+        dependency on pilot control, and so the existing tests that build a
+        LinkManager directly continue to exercise a link that cannot move an
+        aircraft at all.
+        """
+        self._pilot = pilot
+
     # ------------------------------------------------------------------
     # Public state
     # ------------------------------------------------------------------
@@ -361,6 +377,12 @@ class LinkManager:
                     self._settled.set()
                     self._fail_pending_jobs(LinkError(str(error)))
                 finally:
+                    # Any desired movement dies with the session. Without
+                    # this, a reconnect could resume a command the operator
+                    # issued before the radio dropped.
+                    if self._pilot is not None:
+                        with contextlib.suppress(Exception):
+                            self._pilot.on_link_lost()
                     self._close_link()
 
                 if self._stop.is_set() or not self._settings.auto_reconnect:
@@ -415,6 +437,21 @@ class LinkManager:
 
             self._maybe_finalize_essential_streams()
             self._state.evaluate_freshness()
+
+            # Pilot velocity setpoints. Runs on the same thread that owns the
+            # transport, after freshness has been re-evaluated so the service
+            # gates on the current link state rather than a stale one. It is
+            # rate-limited internally and returns immediately when there is
+            # nothing to send.
+            if self._pilot is not None:
+                try:
+                    self._pilot.tick(
+                        link,
+                        target_system=self._settings.target_system,
+                        target_component=self._state.target_component(self._settings.target_component),
+                    )
+                except Exception:  # noqa: BLE001 - never let control kill the link
+                    logger.exception("pilot setpoint tick failed; continuing without movement")
             if not saw_vehicle_heartbeat and time.monotonic() - now > self._settings.connect_timeout:
                 # Port opened but nothing is talking: wrong baud, radio off,
                 # wrong TELEM port, or the aircraft is unpowered.

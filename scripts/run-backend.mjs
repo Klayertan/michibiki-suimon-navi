@@ -21,6 +21,9 @@ const FLAGS = {
 
 const BOOLEAN_FLAGS = {
   "--allow-safe-commands": "SUISUI_MAVLINK_ALLOW_SAFE_COMMANDS",
+  // Low-speed velocity control. Off by default; still cannot arm or take off.
+  // See docs/PILOT_CONTROL_GUIDE.md before using it on a real aircraft.
+  "--allow-pilot-control": "SUISUI_MAVLINK_ALLOW_PILOT_CONTROL",
   "--no-auto-reconnect": "SUISUI_MAVLINK_AUTO_RECONNECT"
 };
 
