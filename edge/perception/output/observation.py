@@ -1,0 +1,2 @@
+def build_drone_observation(*,observation_type,latitude,longitude,confidence,model,captured_at,depth_m=None,depth_quality="invalid",telemetry_age_ms=None):
+ return {"type":observation_type,"coordinates":[latitude,longitude] if latitude is not None and longitude is not None else None,"properties":{"sourceType":"drone_ai","confidence":confidence,"model":model,"cameraDepthM":depth_m,"depthQuality":depth_quality,"telemetryAgeMs":telemetry_age_ms,"estimatedWidthCm":None,"estimatedHeightCm":None,"capturedAt":captured_at}}

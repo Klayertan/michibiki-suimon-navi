@@ -153,6 +153,10 @@ data/*.nmea
 !data/samples/
 !data/samples/*.nmea
 
+# Local perception datasets / generated training data (back up separately)
+datasets/
+training/
+
 # Python — MAVLink backend
 # The virtual environment is repository-local by design (the backend must not
 # depend on globally installed packages) but is never committed.

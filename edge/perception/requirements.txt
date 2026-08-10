@@ -1,0 +1,5 @@
+# Do not pip-install opencv-python on Jetson: use/keep the JetPack/system cv2
+# build already validated for the device. Obtain pyrealsense2 from a
+# JetPack-compatible Intel/librealsense build, not an assumed generic PyPI wheel.
+numpy>=1.21
+# Future optional detector dependencies are intentionally not mandatory.
