@@ -110,14 +110,14 @@ export const OBSERVATION_TYPE_LABELS = {
 export const SEVERITY_LABELS = { low: "低", medium: "中", high: "高", urgent: "緊急" };
 
 // Provenance labels for observations.properties.sourceType — every value
-// here must read unambiguously as farmer-entered data, never as drone/AI/
-// automatic-detection/GNSS-derived, since this app has no such pipeline for
-// field observations. Unknown/future sourceType strings still fall back to
-// a manual-sounding label rather than showing something ambiguous.
+// Existing manual values remain unchanged; automatic sources are explicit so
+// imported drone observations can never be mistaken for farmer-entered data.
 export const OBSERVATION_SOURCE_LABELS = {
   manual_map_click: "手動配置（地図クリック）",
   qz1_current_position: "手動配置（QZ1現在地）",
-  phone_gps: "手動配置（スマホGPS）"
+  phone_gps: "手動配置（スマホGPS）",
+  drone_ai: "ドローンAI検出",
+  drone_ai_reviewed: "ドローンAI検出（確認済み）"
 };
 
 export function observationSourceLabel(sourceType) {
@@ -155,7 +155,8 @@ export function normalizeSeverity(severity) {
 
 export function buildFieldObservation({
   id, fieldId = null, type, name = "", severity = "medium", memo = "",
-  lat, lon, sourceType = "manual_map_click", nowIso = new Date().toISOString()
+  lat, lon, sourceType = "manual_map_click", nowIso = new Date().toISOString(),
+  observationProperties = {}
 }) {
   const internalType = normalizeObservationType(type);
   return {
@@ -171,7 +172,10 @@ export function buildFieldObservation({
       memo: String(memo ?? ""),
       sourceType,
       createdAt: nowIso,
-      updatedAt: nowIso
+      updatedAt: nowIso,
+      // Future import/publish paths may preserve model confidence/depth and
+      // capture fields here. Manual creation passes no extras, unchanged.
+      ...(observationProperties && typeof observationProperties === "object" ? observationProperties : {})
     }
   };
 }
