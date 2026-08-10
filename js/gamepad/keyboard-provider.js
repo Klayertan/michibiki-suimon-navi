@@ -1,8 +1,8 @@
 // Keyboard input provider — an input source only.
 //
-// Emits exactly the same sample shape as the browser and simulated gamepad
-// providers, so keyboard input flows through the identical normalization,
-// calibration and dead-man gating pipeline in gamepad-normalization.js.
+// Emits the same raw sample shape as the browser and simulated gamepad
+// providers. GamepadController turns that digital direction into a deliberately
+// reduced semantic deflection before it can reach the pilot layer.
 // There is deliberately no separate control path: anything the keyboard can
 // produce is subject to the same gatePreview() checks as a real stick.
 //
@@ -13,9 +13,11 @@
 //   this module  ->  js/pilot/pilot-controller.js  (when and whether to send)
 //                ->  backend PilotService          (all limits and safety gates)
 //
-// The pilot layer is opt-in, is off unless the backend was started with
-// SUISUI_MAVLINK_ALLOW_PILOT_CONTROL=1, and cannot arm or take off. Keeping
-// this file transport-free is what makes that separation checkable:
+// Manual output is opt-in and off unless the backend was started with
+// SUISUI_MAVLINK_ALLOW_PILOT_CONTROL=1. This provider itself cannot ARM,
+// DISARM, take off, or transmit anything; normal ARM/DISARM is a separate,
+// explicitly confirmed PilotClient action. Keeping this file transport-free
+// is what makes that separation checkable:
 // tests/unit/gamepad-safety.test.js scans this directory for fetch, sockets
 // and MAVLink identifiers and must keep finding none.
 //
@@ -59,8 +61,8 @@ export const DEFAULT_KEY_MAP = Object.freeze({
  * active, so the operator can fly again without re-enabling anything.
  *
  * This is deliberately **not** an emergency motor kill and must never be
- * described as one: it commands zero velocity, which a hovering aircraft
- * obeys by holding position.
+ * described as one: the pilot layer releases manual RC override while the
+ * autopilot remains responsible for the vehicle's resulting behavior.
  */
 export const NEUTRAL_CODE = "Space";
 
@@ -70,6 +72,9 @@ export const DEADMAN_BUTTON_INDEX = 4;
 export const DEADMAN_CODE = "ShiftLeft";
 /** Panic key: zero everything and drop capture. */
 export const PANIC_CODE = "Escape";
+
+/** One digital key press is a conservative quarter-stick command. */
+export const KEYBOARD_DEFLECTION = 0.25;
 
 const BUTTON_COUNT = 18;
 
@@ -94,7 +99,7 @@ export function isTextEntryTarget(target) {
 }
 
 export class KeyboardProvider extends GamepadProvider {
-  constructor({ win = window, doc = document, keyMap = DEFAULT_KEY_MAP } = {}) {
+  constructor({ win = globalThis.window, doc = globalThis.document, keyMap = DEFAULT_KEY_MAP } = {}) {
     super("keyboard");
     this.win = win;
     this.doc = doc;
@@ -160,11 +165,11 @@ export class KeyboardProvider extends GamepadProvider {
   }
 
   /** Release every key and zero the dead-man, then publish the zeroed sample. */
-  reset() {
+  reset({ emit = true } = {}) {
     const changed = this.held.size > 0 || this.deadman;
     this.held.clear();
     this.deadman = false;
-    if (changed || this.capturing) this.emitSample();
+    if (emit && (changed || this.capturing)) this.emitSample();
   }
 
   onKeyDown(event) {
@@ -176,6 +181,14 @@ export class KeyboardProvider extends GamepadProvider {
       return;
     }
     if (isTextEntryTarget(event.target)) return;
+
+    // If a Shift key-up was lost but a later real keyboard event reports that
+    // Shift is no longer depressed, fail closed immediately. We never infer a
+    // held dead-man from this generic modifier flag (Right Shift must not
+    // impersonate the configured Left Shift).
+    if (event.code !== DEADMAN_CODE && this.deadman && event.shiftKey === false) {
+      this.deadman = false;
+    }
 
     if (event.code === NEUTRAL_CODE) {
       // Movement-neutral: drop every held key so the very next sample is
@@ -199,8 +212,11 @@ export class KeyboardProvider extends GamepadProvider {
     if (!this.keyMap[event.code]) return;
     if (!this.held.has(event.code)) {
       this.held.add(event.code);
-      this.emitSample();
     }
+    // Key repeat is the keyboard provider's physical liveness signal. Emit
+    // every repeat so a held command remains fresh; if repeats stop, the
+    // common controller expires the cached keys and requires a new Shift.
+    this.emitSample();
     // Arrow keys would otherwise scroll the panel under the operator.
     event.preventDefault();
   }
@@ -256,6 +272,9 @@ export class KeyboardProvider extends GamepadProvider {
       mapping: "keyboard",
       axes: this.axes(),
       buttons: this.buttons(),
+      // Consumers of the common controller never need to know which synthetic
+      // button slot represents Shift.
+      deadmanHeld: this.deadman,
       timestamp: typeof performance !== "undefined" ? performance.now() : Date.now(),
       capturing: this.capturing
     };

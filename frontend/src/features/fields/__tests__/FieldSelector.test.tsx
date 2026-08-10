@@ -35,4 +35,12 @@ describe('FieldSelector', () => {
     expect(useActiveFieldStore.getState().activeFieldId).toBe(field.id)
     expect(useSelectedEntityStore.getState().selectedEntity).toEqual({ type: 'field', id: field.id })
   })
+
+  it('lists a compact ha area alongside each field name, without a full card list', async () => {
+    const field = await fieldRepository.create({ name: '北田', coordinates: SQUARE })
+    render(<FieldSelector />)
+
+    const expectedHa = (field.properties.areaM2 / 10000).toFixed(3)
+    expect(screen.getByRole('option', { name: `北田 · ${expectedHa} ha` })).toBeInTheDocument()
+  })
 })

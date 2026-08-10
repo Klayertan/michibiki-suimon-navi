@@ -23,6 +23,17 @@
   font-size: var(--font-size-sm);
 }
 
+.field-inspector__area {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.field-inspector__area-secondary {
+  color: var(--color-text-faint);
+  font-size: var(--font-size-xs);
+}
+
 .field-inspector__edit-form {
   display: flex;
   flex-direction: column;

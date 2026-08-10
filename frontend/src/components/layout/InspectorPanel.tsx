@@ -3,6 +3,8 @@ import { useSelectedEntityStore } from '../../store/useSelectedEntityStore'
 import { FieldInspector } from '../../features/fields/FieldInspector'
 import { SurveyDetail } from '../../features/survey/SurveyDetail'
 import { ObservationInspector } from '../../features/observations/ObservationInspector'
+import { WaterControlInspector } from '../../features/water/WaterControlInspector'
+import { WaterMeasurementInspector } from '../../features/water/WaterMeasurementInspector'
 import type { SelectedEntity } from '../../types/selection'
 import './InspectorPanel.css'
 
@@ -10,8 +12,8 @@ const ENTITY_LABELS: Record<NonNullable<SelectedEntity>['type'], string> = {
   field: 'Field',
   survey: 'Survey',
   observation: 'Observation',
-  water: 'Water point',
-  sluice: 'Sluice/gate',
+  waterControl: 'Water point',
+  waterMeasurement: 'Water level',
   mission: 'Mission',
   waypoint: 'Waypoint',
 }
@@ -55,6 +57,22 @@ export function InspectorPanel({ children }: InspectorPanelProps) {
     return (
       <aside className="inspector-panel" aria-label="Inspector">
         <ObservationInspector observationId={selectedEntity.id} onBack={clear} />
+      </aside>
+    )
+  }
+
+  if (selectedEntity?.type === 'waterControl') {
+    return (
+      <aside className="inspector-panel" aria-label="Inspector">
+        <WaterControlInspector pointId={selectedEntity.id} onBack={clear} />
+      </aside>
+    )
+  }
+
+  if (selectedEntity?.type === 'waterMeasurement') {
+    return (
+      <aside className="inspector-panel" aria-label="Inspector">
+        <WaterMeasurementInspector measurementId={selectedEntity.id} onBack={clear} />
       </aside>
     )
   }

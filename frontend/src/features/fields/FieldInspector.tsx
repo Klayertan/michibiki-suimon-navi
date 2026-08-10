@@ -8,6 +8,7 @@ import {
   findFieldById,
   formatAreaSquareMeters,
 } from '../../domain/fields/selectors'
+import { formatAreaA, formatAreaHa } from '../../domain/fields/area'
 import './FieldInspector.css'
 
 interface FieldInspectorProps {
@@ -95,7 +96,12 @@ export function FieldInspector({ fieldId, onBack }: FieldInspectorProps) {
         <dl className="field-inspector__detail">
           <div>
             <dt>Area</dt>
-            <dd>{formatAreaSquareMeters(fieldAreaSquareMeters(field))}</dd>
+            <dd className="field-inspector__area">
+              <span>{formatAreaSquareMeters(fieldAreaSquareMeters(field))}</span>
+              <span className="field-inspector__area-secondary">
+                {formatAreaA(fieldAreaSquareMeters(field))} · {formatAreaHa(fieldAreaSquareMeters(field))}
+              </span>
+            </dd>
           </div>
           <div>
             <dt>Boundary</dt>

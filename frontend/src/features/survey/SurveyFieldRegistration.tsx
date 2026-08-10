@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { prepareSurveyBoundary, SurveyBoundaryError, type SurveyBoundaryPreview } from '../../domain/surveys/surveyBoundary'
 import type { SurveyRecord } from '../../domain/surveys/types'
+import { getBoundaryAreaAvailability, formatAreaA, formatAreaHa } from '../../domain/fields/area'
+import { formatAreaSquareMeters } from '../../domain/fields/selectors'
 import { fieldRepository } from '../../services/fields/legacyFieldRepository'
 import { recordedSurveyRepository } from '../../services/recording/recordedSurveyRepository'
 import { surveyRepository } from '../../services/surveys/legacySurveyRepository'
@@ -87,10 +89,36 @@ export function SurveyFieldRegistration({ survey }: { survey: SurveyRecord }) {
     </section>
   )
 
+  const areaAvailability = getBoundaryAreaAvailability(preview.coordinates)
+  const closureValid = preview.warnings.length === 0
+
   return (
     <section className="survey-bridge" aria-label="Field boundary preview">
       <strong>Field boundary preview</strong>
       <p className="survey-live__message">{preview.coordinates.length} points · source: {preview.source} · persisted as [lat, lon]</p>
+      <dl className="survey-live__metrics">
+        <div>
+          <dt>Boundary points</dt>
+          <dd>{preview.coordinates.length}</dd>
+        </div>
+        <div>
+          <dt>Closure</dt>
+          <dd>{closureValid ? 'Valid' : 'Needs review'}</dd>
+        </div>
+        <div>
+          <dt>Area</dt>
+          {areaAvailability.status === 'ok' ? (
+            <dd className="survey-bridge__area">
+              <span>{formatAreaSquareMeters(areaAvailability.areaM2)}</span>
+              <span className="survey-bridge__area-secondary">
+                {formatAreaA(areaAvailability.areaM2)} · {formatAreaHa(areaAvailability.areaM2)}
+              </span>
+            </dd>
+          ) : (
+            <dd>Area unavailable</dd>
+          )}
+        </div>
+      </dl>
       <label>Field name<input value={name} onChange={(event) => setName(event.target.value)} /></label>
       {preview.warnings.length ? <p className="survey-live__message survey-live__message--error" role="alert">{preview.warnings.join(' ')}</p> : null}
       {preview.requiresConfirmation ? <label className="survey-bridge__confirm"><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} />I reviewed the geometry warning and want to close this walked boundary.</label> : null}

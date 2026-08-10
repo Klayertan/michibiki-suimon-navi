@@ -8,7 +8,20 @@ import { useActiveField } from '../../services/fields/useActiveField'
 import { SurveySelector } from './SurveySelector'
 import { SurveyFieldRegistration } from './SurveyFieldRegistration'
 import { ObservationComposer } from './ObservationComposer'
+import { RecoveryPanel } from './RecoveryPanel'
+import { GnssReconnectBanner } from './GnssReconnectBanner'
+import { wakeLockService } from '../../services/wakeLock/wakeLockService'
 import './SurveyInspector.css'
+
+function wakeLockLabel(state: ReturnType<typeof wakeLockService.getSnapshot>['state'], isRecording: boolean): string {
+  if (state === 'unsupported') return 'Unavailable'
+  if (!isRecording) return '—'
+  if (state === 'active') return '● Active'
+  if (state === 'requesting') return 'Requesting…'
+  if (state === 'released') return 'Reacquiring…'
+  if (state === 'error') return 'Failed'
+  return '—'
+}
 
 export function SurveyInspector() {
   const { surveys, warnings, error, loading } = useSurveySnapshot()
@@ -17,7 +30,10 @@ export function SurveyInspector() {
   const currentFix = useLiveGnssStore((state) => state.currentFix)
   const baudRate = useLiveGnssStore((state) => state.baudRate)
   const serialMessage = useLiveGnssStore((state) => state.message)
+  const reconnectAttempt = useLiveGnssStore((state) => state.reconnectAttempt)
+  const reconnectMaxAttempts = useLiveGnssStore((state) => state.reconnectMaxAttempts)
   const recording = useSyncExternalStore(recordingService.subscribe, recordingService.getSnapshot, recordingService.getSnapshot)
+  const wakeLock = useSyncExternalStore(wakeLockService.subscribe, wakeLockService.getSnapshot, wakeLockService.getSnapshot)
   const activeField = useActiveField()
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
   const activeSurvey = surveys.find((survey) => survey.id === activeSurveyId) ?? null
@@ -32,6 +48,7 @@ export function SurveyInspector() {
 
   const busy = ['requesting', 'opening', 'disconnecting'].includes(connectionState)
   const connected = connectionState === 'connected'
+  const reconnectPending = connectionState === 'reconnecting' || connectionState === 'reconnect_required'
   const canStart = recording.state === 'idle' || recording.state === 'stopped' || (recording.state === 'error' && !recording.activeSessionId)
   return (
     <div className="survey-workspace">
@@ -45,7 +62,7 @@ export function SurveyInspector() {
             disabled={connectionState === 'unsupported' || busy}
             onClick={() => connected ? void serialGnssService.disconnect() : void serialGnssService.connect()}
           >
-            {connected ? 'Disconnect GNSS' : busy ? 'Connecting…' : 'Connect GNSS'}
+            {connected ? 'Disconnect GNSS' : busy ? 'Connecting…' : reconnectPending ? 'Reconnect GNSS' : 'Connect GNSS'}
           </button>
           <select
             aria-label="GNSS baud rate"
@@ -66,6 +83,24 @@ export function SurveyInspector() {
         {serialMessage ? <p className="survey-live__message" role={connectionState === 'error' ? 'alert' : 'status'}>{serialMessage}</p> : null}
       </section>
 
+      <GnssReconnectBanner
+        connectionState={connectionState}
+        reconnectAttempt={reconnectAttempt}
+        reconnectMaxAttempts={reconnectMaxAttempts}
+        isRecording={recording.state === 'recording'}
+        onReconnect={() => void serialGnssService.connect()}
+        onStopRecording={() => void recordingService.stop()}
+      />
+
+      <RecoveryPanel
+        sessions={recording.recoverySessions}
+        inProgress={recording.recoveryInProgress}
+        warning={recording.recoveryWarning}
+        onResume={(sessionId) => void recordingService.resumeRecovery(sessionId)}
+        onFinalize={(sessionId) => void recordingService.finalizeRecovery(sessionId)}
+        onDiscard={(sessionId) => void recordingService.discardRecovery(sessionId)}
+      />
+
       <section className="survey-recording" aria-label="GNSS recording">
         <div className="survey-live__controls">
           <button type="button" className="ghost-button" disabled={!canStart} onClick={() => void recordingService.start(activeField)}>
@@ -80,9 +115,16 @@ export function SurveyInspector() {
           <div><dt>Points</dt><dd>{recording.pointCount}</dd></div>
           <div><dt>Duration</dt><dd>{recording.state === 'recording' ? `${elapsedSeconds}s` : '—'}</dd></div>
           <div><dt>Pending</dt><dd>{recording.pendingCount}</dd></div>
+          <div><dt>Keep screen awake</dt><dd>{wakeLockLabel(wakeLock.state, recording.state === 'recording')}</dd></div>
         </dl>
         {recording.warning ? <p className="survey-live__message" role="status">{recording.warning}</p> : null}
         {recording.error ? <p className="survey-live__message survey-live__message--error" role="alert">{recording.error}</p> : null}
+        {recording.state === 'recording' && wakeLock.state === 'unsupported' ? (
+          <p className="survey-live__message" role="status">Screen keep-awake unavailable. Recording will continue; prevent the device from sleeping manually.</p>
+        ) : null}
+        {recording.state === 'recording' && wakeLock.state === 'error' ? (
+          <p className="survey-live__message" role="status">Keep-awake request failed. Recording is still active.</p>
+        ) : null}
       </section>
 
       <SurveySelector />

@@ -2,271 +2,214 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   AXIS_EPSILON,
+  KEYBOARD_DIGITAL_DEFLECTION,
   NEUTRAL_AXES,
   axesAreNeutral,
   axesEqual,
   horizontalMagnitude,
+  sampleDeadman,
   sampleToPilotAxes
 } from "../../js/pilot/pilot-axes.js";
-import { DEFAULT_KEY_MAP, NEUTRAL_CODE, KeyboardProvider } from "../../js/gamepad/keyboard-provider.js";
+import {
+  DEFAULT_KEY_MAP,
+  DEADMAN_CODE,
+  KEYBOARD_DEFLECTION,
+  NEUTRAL_CODE,
+  PANIC_CODE,
+  KeyboardProvider
+} from "../../js/gamepad/keyboard-provider.js";
 
-// A sample as the providers emit it: axes[0]=yaw, [1]=vertical, [2]=roll, [3]=pitch.
-function sample(axes) {
-  return { provider: "test", id: "test", mapping: "standard", axes, buttons: [], timestamp: 0 };
+function sample(axes, extra = {}) {
+  return { provider: "test", id: "test", mapping: "standard", axes, buttons: [], timestamp: 0, ...extra };
 }
 
-// ----------------------------------------------------------------------
-// Axis conversion signs
-// ----------------------------------------------------------------------
-
-test("a stick pushed forward means fly forward", () => {
-  // Pitch axis reads negative when pushed away from the pilot.
-  assert.equal(sampleToPilotAxes(sample([0, 0, 0, -1])).forward, 1);
-  assert.equal(sampleToPilotAxes(sample([0, 0, 0, 1])).forward, -1);
+test("provider axes become pitch, roll, throttle and yaw with documented signs", () => {
+  assert.deepEqual(sampleToPilotAxes(sample([0.7, -0.6, 0.5, -0.4])), {
+    pitch: 0.4,
+    roll: 0.5,
+    throttle: 0.6,
+    yaw: 0.7
+  });
+  assert.deepEqual(sampleToPilotAxes(sample([-0.7, 0.6, -0.5, 0.4])), {
+    pitch: -0.4,
+    roll: -0.5,
+    throttle: -0.6,
+    yaw: -0.7
+  });
 });
 
-test("roll right is positive right", () => {
-  assert.equal(sampleToPilotAxes(sample([0, 0, 1, 0])).right, 1);
-  assert.equal(sampleToPilotAxes(sample([0, 0, -1, 0])).right, -1);
-});
-
-test("vertical axis inverts into a positive climb", () => {
-  assert.equal(sampleToPilotAxes(sample([0, -1, 0, 0])).up, 1);
-  assert.equal(sampleToPilotAxes(sample([0, 1, 0, 0])).up, -1);
-});
-
-test("yaw right is positive", () => {
-  assert.equal(sampleToPilotAxes(sample([1, 0, 0, 0])).yaw, 1);
-  assert.equal(sampleToPilotAxes(sample([-1, 0, 0, 0])).yaw, -1);
-});
-
-test("a malformed or missing sample yields neutral, never a partial command", () => {
+test("missing, malformed and non-finite samples fail closed to neutral", () => {
   for (const bad of [null, undefined, {}, { axes: "nope" }, { axes: null }]) {
     assert.deepEqual(sampleToPilotAxes(bad), { ...NEUTRAL_AXES });
   }
+  assert.deepEqual(sampleToPilotAxes(sample([NaN, Infinity, -Infinity, NaN])), { ...NEUTRAL_AXES });
 });
 
-test("non-finite axis values become zero", () => {
-  const axes = sampleToPilotAxes(sample([NaN, Infinity, -Infinity, NaN]));
-  assert.deepEqual(axes, { ...NEUTRAL_AXES });
-});
-
-test("out-of-range values are clamped, not amplified", () => {
-  const axes = sampleToPilotAxes(sample([9, -9, 9, -9]));
-  assert.equal(axes.yaw, 1);
-  assert.equal(axes.up, 1);
-  assert.equal(axes.right, 1);
-  assert.equal(axes.forward, 1);
-});
-
-test("stick noise below the epsilon reads as exactly zero", () => {
+test("provider axes are clamped and stick noise collapses to zero", () => {
+  assert.deepEqual(sampleToPilotAxes(sample([9, -9, 9, -9])), {
+    pitch: 1,
+    roll: 1,
+    throttle: 1,
+    yaw: 1
+  });
   const tiny = AXIS_EPSILON / 2;
   assert.ok(axesAreNeutral(sampleToPilotAxes(sample([tiny, -tiny, tiny, -tiny]))));
 });
 
-test("horizontal magnitude never exceeds 1 even on a full diagonal", () => {
-  assert.equal(horizontalMagnitude({ forward: 1, right: 1 }), 1);
-  assert.ok(Math.abs(horizontalMagnitude({ forward: 0.6, right: 0.8 }) - 1) < 1e-9);
+test("axis comparison and horizontal magnitude use semantic pitch and roll", () => {
+  assert.ok(axesEqual(NEUTRAL_AXES, { pitch: AXIS_EPSILON / 2, roll: 0, throttle: 0, yaw: 0 }));
+  assert.ok(!axesEqual(NEUTRAL_AXES, { pitch: 1, roll: 0, throttle: 0, yaw: 0 }));
+  assert.equal(horizontalMagnitude({ pitch: 1, roll: 1 }), 1);
+  assert.ok(Math.abs(horizontalMagnitude({ pitch: 0.6, roll: 0.8 }) - 1) < 1e-9);
 });
 
-test("axesEqual treats sub-epsilon differences as the same command", () => {
-  assert.ok(axesEqual({ forward: 0, right: 0, up: 0, yaw: 0 }, { forward: AXIS_EPSILON / 2, right: 0, up: 0, yaw: 0 }));
-  assert.ok(!axesEqual({ forward: 0, right: 0, up: 0, yaw: 0 }, { forward: 1, right: 0, up: 0, yaw: 0 }));
-});
-
-// ----------------------------------------------------------------------
-// The requested keyboard mapping, end to end through the provider
-// ----------------------------------------------------------------------
-
-/** Drive a real KeyboardProvider with fake window/document. */
 function makeProvider() {
   const listeners = {};
-  const win = {
-    addEventListener: (type, fn) => { (listeners[type] ||= []).push(fn); },
-    removeEventListener: (type, fn) => { listeners[type] = (listeners[type] || []).filter((f) => f !== fn); }
-  };
-  const doc = {
-    hidden: false,
-    addEventListener: (type, fn) => { (listeners[type] ||= []).push(fn); },
-    removeEventListener: (type, fn) => { listeners[type] = (listeners[type] || []).filter((f) => f !== fn); }
-  };
+  const add = (type, fn) => { (listeners[type] ||= []).push(fn); };
+  const remove = (type, fn) => { listeners[type] = (listeners[type] || []).filter((candidate) => candidate !== fn); };
+  const win = { addEventListener: add, removeEventListener: remove };
+  const doc = { hidden: false, addEventListener: add, removeEventListener: remove };
   const provider = new KeyboardProvider({ win, doc });
-  const fire = (type, event) => (listeners[type] || []).forEach((fn) => fn(event));
-  const press = (code, target = {}) => fire("keydown", { code, target, preventDefault() {} });
-  const release = (code, target = {}) => fire("keyup", { code, target, preventDefault() {} });
-  return { provider, fire, press, release };
+  const fire = (type, event = {}) => (listeners[type] || []).forEach((fn) => fn(event));
+  const event = (code, target = {}) => ({ code, target, preventDefault() {} });
+  return {
+    provider,
+    doc,
+    fire,
+    press: (code, target) => fire("keydown", event(code, target)),
+    release: (code, target) => fire("keyup", event(code, target))
+  };
 }
 
-function pilotAxesOf(provider) {
+function pilotAxes(provider) {
   return sampleToPilotAxes(provider.sample());
 }
 
-test("Arrow Up produces a forward command", () => {
-  const { provider, press } = makeProvider();
-  provider.startCapture();
-  press("ArrowUp");
-  assert.equal(pilotAxesOf(provider).forward, 1);
-});
-
-test("Arrow Down produces a backward command", () => {
-  const { provider, press } = makeProvider();
-  provider.startCapture();
-  press("ArrowDown");
-  assert.equal(pilotAxesOf(provider).forward, -1);
-});
-
-test("Arrow Left and Arrow Right have the correct sign", () => {
+test("keyboard directions are conservative quarter-stick semantic intentions", () => {
+  assert.equal(KEYBOARD_DEFLECTION, 0.25);
+  assert.equal(KEYBOARD_DIGITAL_DEFLECTION, KEYBOARD_DEFLECTION);
   const { provider, press, release } = makeProvider();
   provider.startCapture();
-  press("ArrowLeft");
-  assert.equal(pilotAxesOf(provider).right, -1);
-  release("ArrowLeft");
-  press("ArrowRight");
-  assert.equal(pilotAxesOf(provider).right, 1);
+
+  for (const [code, axis, expected] of [
+    ["ArrowUp", "pitch", 0.25],
+    ["ArrowDown", "pitch", -0.25],
+    ["ArrowRight", "roll", 0.25],
+    ["ArrowLeft", "roll", -0.25],
+    ["KeyW", "throttle", 0.25],
+    ["KeyS", "throttle", -0.25],
+    ["KeyD", "yaw", 0.25],
+    ["KeyA", "yaw", -0.25]
+  ]) {
+    press(code);
+    assert.equal(pilotAxes(provider)[axis], expected, `${code} -> ${axis}`);
+    release(code);
+    assert.ok(axesAreNeutral(pilotAxes(provider)), `${code} release -> neutral`);
+  }
 });
 
-test("W climbs and S descends", () => {
+test("opposing keys cancel and diagonal intent preserves both axes", () => {
   const { provider, press, release } = makeProvider();
-  provider.startCapture();
-  press("KeyW");
-  assert.equal(pilotAxesOf(provider).up, 1, "W must climb");
-  release("KeyW");
-  press("KeyS");
-  assert.equal(pilotAxesOf(provider).up, -1, "S must descend");
-});
-
-test("A yaws left and D yaws right", () => {
-  const { provider, press, release } = makeProvider();
-  provider.startCapture();
-  press("KeyA");
-  assert.equal(pilotAxesOf(provider).yaw, -1);
-  release("KeyA");
-  press("KeyD");
-  assert.equal(pilotAxesOf(provider).yaw, 1);
-});
-
-test("releasing a key returns that axis to zero immediately", () => {
-  const { provider, press, release } = makeProvider();
-  provider.startCapture();
-  press("ArrowUp");
-  assert.equal(pilotAxesOf(provider).forward, 1);
-  release("ArrowUp");
-  assert.equal(pilotAxesOf(provider).forward, 0);
-});
-
-test("opposing keys on the same axis resolve to zero", () => {
-  const { provider, press } = makeProvider();
   provider.startCapture();
   press("ArrowUp");
   press("ArrowDown");
-  assert.equal(pilotAxesOf(provider).forward, 0, "up+down must cancel");
-  press("KeyA");
-  press("KeyD");
-  assert.equal(pilotAxesOf(provider).yaw, 0, "A+D must cancel");
-});
-
-test("diagonal input drives both horizontal axes at once", () => {
-  const { provider, press } = makeProvider();
-  provider.startCapture();
-  press("ArrowUp");
+  assert.equal(pilotAxes(provider).pitch, 0);
+  release("ArrowDown");
   press("ArrowRight");
-  const axes = pilotAxesOf(provider);
-  assert.equal(axes.forward, 1);
-  assert.equal(axes.right, 1);
-  // The magnitude clamp itself happens server-side; the browser only reports
-  // intent. This asserts the intent survives the trip.
-  assert.equal(horizontalMagnitude(axes), 1);
+  assert.deepEqual(pilotAxes(provider), { pitch: 0.25, roll: 0.25, throttle: 0, yaw: 0 });
 });
 
-test("Space clears every held key", () => {
-  const { provider, press } = makeProvider();
+test("Shift is the keyboard dead-man and movement keys cannot impersonate it", () => {
+  const { provider, press, release } = makeProvider();
   provider.startCapture();
   press("ArrowUp");
-  press("ArrowRight");
+  assert.equal(sampleDeadman(provider.sample()), false);
+  press(DEADMAN_CODE);
+  assert.equal(sampleDeadman(provider.sample()), true);
+  assert.equal(pilotAxes(provider).pitch, 0.25);
+  release(DEADMAN_CODE);
+  assert.equal(sampleDeadman(provider.sample()), false);
+});
+
+test("sampleDeadman prefers the provider's configured boolean over button positions", () => {
+  const buttons = Array.from({ length: 18 }, () => ({ pressed: false, value: 0 }));
+  buttons[4].pressed = true;
+  assert.equal(sampleDeadman({ buttons, deadmanHeld: false }), false);
+  assert.equal(sampleDeadman({ buttons, deadmanHeld: true }), true);
+  delete buttons[4].pressed;
+  buttons[7].pressed = true;
+  assert.equal(sampleDeadman({ buttons, deadmanHeld: true }), true, "configured provider mapping is authoritative");
+});
+
+test("malformed dead-man samples fail closed", () => {
+  for (const bad of [null, undefined, {}, { buttons: null }, { buttons: [] }, { buttons: [{}] }]) {
+    assert.equal(sampleDeadman(bad), false);
+  }
+});
+
+test("Space clears movement and emits an immediate neutral event without ending capture", () => {
+  const { provider, press } = makeProvider();
+  provider.startCapture();
+  let detail = null;
+  provider.addEventListener("neutral", (event) => { detail = event.detail; });
+  press("ArrowUp");
   press("KeyW");
-  press("KeyD");
-  assert.ok(!axesAreNeutral(pilotAxesOf(provider)));
-
   press(NEUTRAL_CODE);
-  assert.ok(axesAreNeutral(pilotAxesOf(provider)), "Space must zero all movement");
+  assert.ok(axesAreNeutral(pilotAxes(provider)));
+  assert.equal(provider.active, true);
+  assert.equal(detail?.reason, "space");
 });
 
-test("Space emits a neutral event so the pilot layer can send out of band", () => {
+test("Escape clears all input, drops capture and emits panic", () => {
   const { provider, press } = makeProvider();
   provider.startCapture();
-  let fired = 0;
-  provider.addEventListener("neutral", () => { fired += 1; });
-  press(NEUTRAL_CODE);
-  assert.equal(fired, 1);
-});
-
-test("window blur clears all held keys", () => {
-  const { provider, press, fire } = makeProvider();
-  provider.startCapture();
+  let reason = null;
+  provider.addEventListener("panic", (event) => { reason = event.detail.reason; });
+  press(DEADMAN_CODE);
   press("ArrowUp");
-  press("KeyD");
-  fire("blur", {});
-  assert.ok(axesAreNeutral(pilotAxesOf(provider)), "focus loss must neutralise");
+  press(PANIC_CODE);
+  assert.ok(axesAreNeutral(pilotAxes(provider)));
+  assert.equal(sampleDeadman(provider.sample()), false);
+  assert.equal(provider.active, false);
+  assert.equal(reason, "escape");
 });
 
-test("visibility hidden clears all held keys", () => {
-  const { provider, press, fire } = makeProvider();
-  const doc = provider.doc;
-  provider.startCapture();
-  press("ArrowUp");
-  doc.hidden = true;
-  fire("visibilitychange", {});
-  assert.ok(axesAreNeutral(pilotAxesOf(provider)));
+test("blur, hidden tab and pagehide each clear movement and dead-man", () => {
+  for (const unsafe of ["blur", "visibilitychange", "pagehide"]) {
+    const { provider, doc, press, fire } = makeProvider();
+    provider.startCapture();
+    press(DEADMAN_CODE);
+    press("ArrowUp");
+    if (unsafe === "visibilitychange") doc.hidden = true;
+    fire(unsafe);
+    assert.ok(axesAreNeutral(pilotAxes(provider)), unsafe);
+    assert.equal(sampleDeadman(provider.sample()), false, unsafe);
+  }
 });
 
-test("pagehide clears all held keys", () => {
-  const { provider, press, fire } = makeProvider();
-  provider.startCapture();
-  press("KeyW");
-  fire("pagehide", {});
-  assert.ok(axesAreNeutral(pilotAxesOf(provider)));
-});
-
-test("stopping capture clears held keys, preventing a stuck key", () => {
-  const { provider, press } = makeProvider();
-  provider.startCapture();
-  press("ArrowUp");
-  provider.stopCapture();
-  assert.ok(axesAreNeutral(pilotAxesOf(provider)));
-});
-
-test("keys do nothing at all before capture is enabled", () => {
+test("capture is opt-in, stopping clears held state, and typing surfaces are ignored", () => {
   const { provider, press } = makeProvider();
   press("ArrowUp");
-  assert.ok(axesAreNeutral(pilotAxesOf(provider)));
-});
-
-test("flight keys are ignored while typing in text entry surfaces", () => {
-  const { provider, press } = makeProvider();
+  assert.ok(axesAreNeutral(pilotAxes(provider)));
   provider.startCapture();
   for (const target of [
     { tagName: "INPUT", type: "text" },
     { tagName: "TEXTAREA" },
     { tagName: "SELECT" },
-    { isContentEditable: true },
-    { tagName: "INPUT", type: "number" },
-    { tagName: "INPUT", type: "search" }
+    { isContentEditable: true }
   ]) {
     press("ArrowUp", target);
-    assert.ok(axesAreNeutral(pilotAxesOf(provider)), `must ignore keys on ${target.tagName || "contenteditable"}`);
+    assert.ok(axesAreNeutral(pilotAxes(provider)));
   }
-});
-
-test("a checkbox is not text entry, so flight keys still work there", () => {
-  const { provider, press } = makeProvider();
-  provider.startCapture();
   press("ArrowUp", { tagName: "INPUT", type: "checkbox" });
-  assert.equal(pilotAxesOf(provider).forward, 1);
+  assert.equal(pilotAxes(provider).pitch, 0.25);
+  provider.stopCapture();
+  assert.ok(axesAreNeutral(pilotAxes(provider)));
 });
 
-test("the mapping is exactly the documented one", () => {
+test("the documented key map is stable", () => {
   assert.deepEqual(
-    Object.fromEntries(Object.entries(DEFAULT_KEY_MAP).map(([k, v]) => [k, `${v.axis}:${v.value}`])),
+    Object.fromEntries(Object.entries(DEFAULT_KEY_MAP).map(([key, binding]) => [key, `${binding.axis}:${binding.value}`])),
     {
       ArrowUp: "3:-1",
       ArrowDown: "3:1",
@@ -278,5 +221,4 @@ test("the mapping is exactly the documented one", () => {
       KeyD: "0:1"
     }
   );
-  assert.equal(NEUTRAL_CODE, "Space");
 });

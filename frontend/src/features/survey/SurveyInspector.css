@@ -91,6 +91,17 @@
   font-variant-numeric: tabular-nums;
 }
 
+.survey-bridge__area {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.survey-bridge__area-secondary {
+  color: var(--color-text-faint);
+  font-size: var(--font-size-xs);
+}
+
 .survey-live__message {
   margin: 0;
   color: var(--color-text-muted);
@@ -137,4 +148,53 @@
   color: var(--color-text-faint);
   font-size: var(--font-size-xs);
   line-height: 1.45;
+}
+
+.recovery-panel {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--status-warning);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-raised);
+}
+
+.recovery-panel__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-3);
+}
+
+.recovery-card {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+.recovery-card__confirm {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  color: var(--status-disconnected);
+  font-size: var(--font-size-xs);
+}
+
+.gnss-reconnect-banner {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--status-warning);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-raised);
+}
+
+.gnss-reconnect-banner p {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  line-height: 1.4;
 }

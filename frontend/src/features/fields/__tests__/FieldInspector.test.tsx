@@ -24,6 +24,15 @@ describe('FieldInspector', () => {
     expect(screen.getByText('note')).toBeInTheDocument()
   })
 
+  it('shows m², a, and ha derived from the same persisted area', async () => {
+    const field = await fieldRepository.create({ name: '南田', coordinates: SQUARE })
+    render(<FieldInspector fieldId={field.id} onBack={() => {}} />)
+
+    const areaM2 = field.properties.areaM2
+    expect(screen.getByText(`${Math.round(areaM2).toLocaleString('en-US')} m²`)).toBeInTheDocument()
+    expect(screen.getByText(`${(areaM2 / 100).toFixed(2)} a · ${(areaM2 / 10000).toFixed(3)} ha`)).toBeInTheDocument()
+  })
+
   it('"This field no longer exists" for an id that is not (or no longer) in the repository, not a crash', () => {
     render(<FieldInspector fieldId="missing" onBack={() => {}} />)
     expect(screen.getByText('This field no longer exists.')).toBeInTheDocument()

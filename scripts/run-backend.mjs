@@ -21,7 +21,7 @@ const FLAGS = {
 
 const BOOLEAN_FLAGS = {
   "--allow-safe-commands": "SUISUI_MAVLINK_ALLOW_SAFE_COMMANDS",
-  // Low-speed velocity control. Off by default; still cannot arm or take off.
+  // Bounded manual RC override. Off by default; never auto-arms or takes off.
   // See docs/PILOT_CONTROL_GUIDE.md before using it on a real aircraft.
   "--allow-pilot-control": "SUISUI_MAVLINK_ALLOW_PILOT_CONTROL",
   "--no-auto-reconnect": "SUISUI_MAVLINK_AUTO_RECONNECT"
@@ -68,7 +68,8 @@ if (mode === "real") {
       "   • the aircraft is disarmed",
       "   • QGroundControl is CLOSED (it cannot share the port)",
       "",
-      " Arming and takeoff are not implemented in this backend.",
+      " Manual Control can request normal ARM/DISARM only after all UI/backend/ArduPilot gates pass.",
+      " Takeoff and force-arm are not implemented.",
       "──────────────────────────────────────────────────────────────",
       ""
     ].join("\n")

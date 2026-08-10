@@ -55,4 +55,29 @@ describe('FieldWorkspace', () => {
     expect(screen.getByText('北田', { selector: 'dd' })).toBeInTheDocument()
     expect(screen.getByText(/points/)).toBeInTheDocument()
   })
+
+  it('does not show total-area stats for a single field', async () => {
+    const field = await fieldRepository.create({ name: '北田', coordinates: SQUARE })
+    useActiveFieldStore.getState().setActiveFieldId(field.id)
+
+    render(<FieldWorkspace />)
+
+    expect(screen.queryByText(/Registered fields:/)).not.toBeInTheDocument()
+  })
+
+  it('shows registered-field count and total area once more than one field exists', async () => {
+    const SQUARE_2: [number, number][] = [
+      [36, 136],
+      [36, 136.001],
+      [36.001, 136.001],
+    ]
+    const fieldA = await fieldRepository.create({ name: '北田', coordinates: SQUARE })
+    const fieldB = await fieldRepository.create({ name: '南田', coordinates: SQUARE_2 })
+    useActiveFieldStore.getState().setActiveFieldId(fieldA.id)
+
+    render(<FieldWorkspace />)
+
+    const totalM2 = fieldA.properties.areaM2 + fieldB.properties.areaM2
+    expect(screen.getByText(`Registered fields: 2 · Total area: ${(totalM2 / 10000).toFixed(3)} ha`)).toBeInTheDocument()
+  })
 })

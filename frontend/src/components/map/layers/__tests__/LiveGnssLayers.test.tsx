@@ -14,7 +14,7 @@ function fix(lat: number, lon: number): LiveGnssFix {
 }
 
 function currentSource() {
-  let snapshot: GnssSerialSnapshot = { connectionState: 'connected', currentFix: null, baudRate: 115200, lineCount: 0, malformedLineCount: 0, message: null, transportLabel: 'test' }
+  let snapshot: GnssSerialSnapshot = { connectionState: 'connected', currentFix: null, baudRate: 115200, lineCount: 0, malformedLineCount: 0, message: null, transportLabel: 'test', reconnectAttempt: 0, reconnectMaxAttempts: 0 }
   const listeners = new Set<() => void>()
   return {
     getSnapshot: () => snapshot,
@@ -63,5 +63,32 @@ describe('live GNSS map layers', () => {
     source.emit({ type: 'stop' })
     await waitFor(() => expect(container.querySelector('path[stroke="#e11d48"]')).toBeNull())
     expect(container.querySelectorAll('.leaflet-overlay-pane path')).toHaveLength(1)
+  })
+
+  it('starts a fresh live segment on resume without recreating the map or duplicating the track', async () => {
+    const source = trackSource()
+    const { container } = render(<MapWorkspace><LiveSurveyLayer service={source} /></MapWorkspace>)
+    const mapNode = container.querySelector('.leaflet-container')
+
+    source.emit({ type: 'start' })
+    source.emit({ type: 'point', point: fix(34.65, 135.83) })
+    await waitFor(() => expect(container.querySelectorAll('.leaflet-overlay-pane path')).toHaveLength(1))
+    const preCrashPath = container.querySelector('path[stroke="#e11d48"]')
+
+    // Simulated crash + reload + Resume: recordingService.resumeRecovery()
+    // fires a 'start' event for the resumed session (see recordingService.ts),
+    // which must clear the stale in-memory polyline rather than append to it --
+    // the persisted portion already reloaded from storage lives on SurveyLayer,
+    // not here.
+    source.emit({ type: 'start' })
+    await waitFor(() => expect(container.querySelectorAll('.leaflet-overlay-pane path')).toHaveLength(0))
+
+    source.emit({ type: 'point', point: fix(34.652, 135.832) })
+    await waitFor(() => expect(container.querySelectorAll('.leaflet-overlay-pane path')).toHaveLength(1))
+    const resumedPath = container.querySelector('path[stroke="#e11d48"]')
+
+    expect(resumedPath).not.toBeNull()
+    expect(resumedPath).not.toBe(preCrashPath)
+    expect(container.querySelector('.leaflet-container')).toBe(mapNode)
   })
 })

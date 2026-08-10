@@ -13,6 +13,8 @@ const initial = {
   malformedLineCount: 0,
   message: null,
   transportLabel: null,
+  reconnectAttempt: 0,
+  reconnectMaxAttempts: 0,
 } satisfies GnssSerialSnapshot
 
 export const useLiveGnssStore = create<LiveGnssState>((set) => ({

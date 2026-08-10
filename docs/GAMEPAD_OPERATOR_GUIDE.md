@@ -1,71 +1,116 @@
-# Gamepad operator guide
+# Keyboard / PS5 operator guide
 
-The gamepad panel described here is **input preview only**: it visualizes
-calibration and normalization and transmits nothing. Its modules contain no
-network transport at all, and an automated test keeps it that way.
+Keyboard と PS5 は、ひとつの **手動操縦 / Manual Control** パネルにある2つの入力 source です。
+旧 Gamepad preview card と Pilot card は別々には存在しません。
 
-Low-speed flight control is a separate, opt-in feature that lives in
-`js/pilot/` and a distinct backend service. It reuses the same input providers
-but nothing else. See **[PILOT_CONTROL_GUIDE.md](PILOT_CONTROL_GUIDE.md)** —
-read it before enabling anything that can move an aircraft.
+`js/gamepad/` は browser input、normalization、calibration、dead-man gate の所有者であり、
+MAVLink/HTTP/WebSocket transport を持ちません。統合パネルで Bench Pilot を有効にしたときだけ、
+共通 `PilotController` が安全な axes を backend の manual RC path に渡します。つまり同じ UI は
+無効時には preview、明示的な有効化後には command input になります。
 
-## A. Test now without hardware
+実機を動かす前に [PILOT_CONTROL_GUIDE.md](PILOT_CONTROL_GUIDE.md) を読み、必ず全プロペラを
+外した bench procedure を完了してください。
 
-1. Start SuisuiNavi in development mode and open `http://127.0.0.1:8000/?gamepadMock=1#survey`.
-2. Open **PS5コントローラー / Gamepad**.
-3. Expand **シミュレーション / Simulated Gamepad** and select **接続**.
-4. Complete all eight calibration steps, moving both stick sliders to their extremes and exercising triggers/dead-man, then save.
-5. Move the simulated sticks and compare raw, normalized, and Mode 2 preview values.
-6. Hold and release L1 (or configure R1); release must immediately show zero gated outputs.
-7. Use sudden disconnect, sample staleness, and focus-loss simulation.
-8. Confirm every gated output returns to zero and the inactive reason is shown.
-9. Confirm the network inspector shows no aircraft command request. Closing the simulator panel resets it to neutral.
+## 1. Input source
 
-Without `?gamepadMock=1`, simulator controls are absent. Simulation data is calibration/input state only and is never aircraft telemetry.
+選択肢は次の2つだけです。
 
-## B. Test later after buying a controller
+- `Keyboard` (`source: "keyboard"`)
+- `PS5 Controller` (`source: "ps5"`)
 
-1. Connect DualSense using USB-C.
-2. Verify it in Windows using `joy.cpl`.
-3. Open SuisuiNavi (the simulator query parameter is unnecessary).
-4. Confirm controller ID, mapping, axes, and buttons in the raw monitor.
-5. Perform and save a fresh calibration for that controller ID.
-6. Compare every physical input against the visual monitor; do not infer correctness from the “DualSense hint”.
-7. Test dead-man press and release.
-8. Test cable disconnect and confirm all gated values become zero.
-9. Do not connect or power the aircraft during the first physical-controller validation.
+source switch は古い source の入力を引き継がず、即 neutral/release を発行します。
 
-Physical DualSense validation is **NOT EXECUTED** in Phase 1.
+### Keyboard
 
-## C. Keyboard input source
+| Key | Axis / action |
+|---|---|
+| ↑ / ↓ | pitch forward / back |
+| ← / → | roll left / right |
+| W / S | throttle up / down |
+| A / D | yaw left / right |
+| Left Shift | dead-man。常に保持が必要 |
+| Space | neutral + RC override release |
+| Escape | neutral + disable |
 
-The keyboard is selectable as an input source in the same panel, and drives the
-same axes as a stick. Capture is explicit: nothing is intercepted until
-**キーボードをキャプチャ / Capture keyboard** is pressed, and keys are ignored
-while a text field, textarea, select or editable region has focus.
+Keyboard は calibration 不要です。デジタル key は browser で `KEYBOARD_DEFLECTION=0.25` の
+quarter-stick input に縮小され、backend の ceiling（normal throttle 15%、Bench throttle 10%、
+Bench の他軸 15%）でさらに上限を守ります。これは二重乗算ではなく magnitude clamp です。
+capture は Bench Pilot enable 後だけ有効で、form field 編集中は key を奪いません。
 
-| Key | Axis (preview) | Meaning when flying |
-|---|---|---|
-| ↑ / ↓ | pitch | forward / backward |
-| ← / → | roll | left / right |
-| W / S | vertical | climb / descend |
-| A / D | yaw | yaw left / yaw right |
-| Space | all axes to zero | movement neutral — **not** a motor kill |
-| Left Shift (hold) | dead-man (preview gate) | — |
-| Esc | zero + stop capture | — |
+### PS5 Controller
 
-In the *preview* panel the dead-man gate applies, so released Shift shows zero
-gated output. The pilot panel does not use the dead-man; its equivalents are
-Space, focus loss, and the backend's 0.5 s input timeout.
+Mode 2 mapping:
 
-Space and the mapping above are shared with the pilot panel deliberately: an
-operator practises the same keys in preview that they will use in flight.
+- left stick horizontal = yaw
+- left stick vertical = throttle
+- right stick horizontal = roll
+- right stick vertical = pitch
 
-## D. Bluetooth test later
+最終的な正の意味は forward / right / climb / yaw-right です。browser が報告する raw axis/button
+index は controller、USB/Bluetooth、driver によって変わり得ます。保存された axis assignment、
+inversion、center/min/max、deadzone、expo と `deadmanButtonIndex` を使用し、L1 などを backend に
+決め打ちしません。
 
-1. Pair DualSense through Windows Bluetooth settings.
-2. Verify it appears in `joy.cpl`.
-3. Repeat calibration and save the record for the reported controller ID.
-4. Compare mapping with USB calibration.
-5. Record axis/button/ID differences.
-6. Do not assume USB and Bluetooth IDs or mappings are identical.
+## 2. Calibration と diagnostics
+
+Keyboard 選択中は `Calibration: not required` だけを表示し、PS5 の wizard/raw table を隠します。
+PS5 を選ぶと次が disclosure 内に現れます。
+
+- Advanced / Calibration
+- semantic-to-raw axis assignment と axis inversion
+- center/min/max、deadzone、expo
+- configured dead-man button
+- Raw input diagnostics
+
+calibration が incomplete/invalid の間、安全 axes は 0 のままです。保存済み calibration は同じ
+controller ID に対して再利用しますが、物理表示と raw monitor を目視で照合してください。
+
+## 3. Mock PS5 acceptance — hardware なし
+
+1. mock backend を `npm run backend:mock -- --allow-pilot-control` で起動し、別 terminal で `npm run serve`。
+2. `http://localhost:4173/?gamepadMock=1#survey` を開く。
+3. Manual Control を開き、Input source を `PS5 Controller` にする。
+4. Simulation / PS5 controller を開き、`Connect`。
+5. center、両 stick の全方向、trigger/dead-man を含む calibration step を完了し `Save`。
+6. raw、preview、normalized Mode 2 axes が一致することを確認。
+7. props acknowledgement、Enable Bench Pilot、mock ARM の順に操作。
+8. configured dead-man を保持し、小さい stick input で `TRANSMITTING` を確認。
+9. dead-man を放し、すべての安全 axes が 0、output inactive、RC override released になることを確認。
+10. sudden disconnect、stale sample、focus loss、source switch でも同じ release を確認し、DISARM。
+
+`?gamepadMock=1` は simulator の要求にすぎず、backend が `mode=mock` と確認した場合だけ simulation
+control を表示します。real backend では query を付けても simulator を active provider にせず、
+backend も active `provider=mock` を拒否します。mock sample は aircraft telemetry ではなく、
+COM10 や Pixhawk に接続しません。
+
+## 4. 物理 DualSense を購入後に確認する手順
+
+このリファクタでは物理 DualSense を検証していません。最初の確認では機体の電源を入れません。
+
+1. USB-C で接続し、Windows `joy.cpl` で認識を確認。
+2. simulator query なしでアプリを開き、PS5 Controller を選択。
+3. controller ID、raw axes/buttons を確認。
+4. calibration を最初から実行して保存。
+5. stick 4軸、dead-man press/release、cable disconnect を monitor だけで確認。
+6. Bluetooth でも別 calibration を実施し、USB と同じ ID/mapping だと仮定しない。
+7. その後にだけ、PILOT_CONTROL_GUIDE の propellers-removed real bench 手順へ進む。
+
+## 5. 共通 safety gate
+
+dead-man は preview、Bench Mode、Keyboard、PS5 の**すべてで常時必須**です。release または次の
+どれかで provider は gated axes を直ちに 0 にし、共通 controller が backend に release を伝えます。
+
+- source switch
+- controller/provider disconnect
+- focus loss、tab/page hidden
+- input stale
+- Space、Escape
+- capture stop / Pilot disable
+- calibration removal または mapping/dead-man reconfiguration
+
+gate が戻っても、押したままの dead-man/stick は自動再開しません。dead-man の release を一度観測し、
+新しく press した後の sample だけが再び active になります。Keyboard event stream 自体が止まった場合も
+cached key/Shift を期限切れにします。
+
+さらに backend が input age、MAVLink/telemetry、armed/mode、RC configuration を独立に再確認します。
+browser の表示や calibration だけで aircraft output を許可することはありません。

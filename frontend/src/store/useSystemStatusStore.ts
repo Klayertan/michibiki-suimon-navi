@@ -17,6 +17,7 @@ const INITIAL_STATUS: StatusMap = {
   gnss: NOT_INTEGRATED,
   serial: NOT_INTEGRATED,
   recording: NOT_INTEGRATED,
+  wakeLock: NOT_INTEGRATED,
   camera: NOT_INTEGRATED,
   drone: { value: 'unknown' },
   backend: { value: 'unknown' },

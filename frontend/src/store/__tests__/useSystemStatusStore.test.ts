@@ -11,6 +11,7 @@ describe('useSystemStatusStore', () => {
     expect(status.gnss.value).toBe('not_integrated')
     expect(status.serial.value).toBe('not_integrated')
     expect(status.recording.value).toBe('not_integrated')
+    expect(status.wakeLock.value).toBe('not_integrated')
     expect(status.camera.value).toBe('not_integrated')
     // Drone/backend are real services that just haven't reported yet.
     expect(status.drone.value).toBe('unknown')

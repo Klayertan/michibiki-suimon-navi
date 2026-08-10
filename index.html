@@ -2874,19 +2874,12 @@
             </section>
           </div>
         </details>
-        <details id="gamepadPanel" class="card paddy-collapsible gamepad-panel" data-workspace="survey" hidden>
-          <summary><span class="details-title">PS5コントローラー <span class="en">Gamepad</span></span></summary>
-          <div id="gamepadRoot" class="details-content"></div>
-        </details>
-
-        <!-- Pilot velocity control. Sends normalized axes to the backend,
-             which clamps them to the configured limits and emits
-             SET_POSITION_TARGET_LOCAL_NED. Requires the backend to be started
-             with SUISUI_MAVLINK_ALLOW_PILOT_CONTROL=1, the aircraft to be
-             armed by the operator, and GUIDED mode. This panel never arms,
-             takes off, lands, or changes mode. -->
-        <details id="pilotPanel" class="card paddy-collapsible pilot-panel" data-workspace="survey" hidden>
-          <summary><span class="details-title">操縦（低速テスト）<span class="en">Pilot — low-speed test</span></span></summary>
+        <!-- One manual-control surface. Keyboard and calibrated PS5 input use
+             the same provider/controller/backend path. The browser sends only
+             normalized intentions; the backend maps them to the vehicle's
+             RCMAP/RCx calibration and emits bounded RC override frames. -->
+        <details id="pilotPanel" class="card paddy-collapsible pilot-panel gamepad-panel" data-workspace="survey" hidden>
+          <summary><span class="details-title">手動操縦<span class="en">Manual Control</span></span></summary>
           <div id="pilotRoot" class="details-content"></div>
         </details>
       </aside>
@@ -6125,17 +6118,8 @@
         if (warning) warning.textContent = `ドローン連携を初期化できませんでした: ${error.message}`;
       }
       try {
-        const { GamepadController } = await import("./js/gamepad/gamepad-controller.js");
-        const gamepadController = new GamepadController();
-        await gamepadController.mount();
-        window.gamepadController = gamepadController;
-      } catch (error) {
-        console.error("Gamepad initialization failed", error);
-      }
-      try {
-        // Pilot velocity control. mount() returns false and leaves the panel
-        // hidden unless the backend reports the feature as permitted, so a
-        // default install never shows a flight-control surface at all.
+        // Unified Manual Control. It remains useful as a safe PREVIEW surface
+        // when the backend is offline or pilot output is not enabled.
         const { PilotPanel } = await import("./js/pilot/pilot-panel.js");
         const panel = new PilotPanel({ baseUrl: DRONE_BACKEND_URL });
         if (await panel.mount()) {
@@ -6143,6 +6127,9 @@
           // Not `window.pilotPanel`: the <details id="pilotPanel"> element
           // already owns that global, so the name would silently collide.
           window.pilotControlPanel = panel;
+          // Backwards-compatible console handle; there is no second card or
+          // second provider owner anymore.
+          window.gamepadController = panel.inputController;
         }
       } catch (error) {
         console.error("Pilot control initialization failed", error);

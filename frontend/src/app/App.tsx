@@ -3,6 +3,7 @@ import { routes } from './routes'
 import { useDroneBackendStatus } from '../services/drone/useDroneBackendStatus'
 import { useActiveFieldReconciliation } from '../services/fields/useActiveField'
 import { useGnssRuntime } from '../services/gnss/useGnssRuntime'
+import { useWakeLockRuntime } from '../services/wakeLock/useWakeLockRuntime'
 
 // import.meta.env.BASE_URL follows Vite's `base` build option, so building
 // this app with `--base=/new/` (for a future same-origin production mount
@@ -18,6 +19,7 @@ export function App() {
   // change whichever workspace the operator is looking at.
   useActiveFieldReconciliation()
   useGnssRuntime()
+  useWakeLockRuntime()
 
   return <RouterProvider router={router} />
 }

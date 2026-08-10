@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, model_validator
 
 from .config import ALLOWED_DISARMED_MODES
 from .mavlink.constants import REQUESTABLE_STREAMS
@@ -57,9 +57,9 @@ class StreamRequest(StrictModel):
 
 #: A normalized pilot axis. Pydantic rejects anything outside -1..+1 at the
 #: API boundary, before any handler runs, so an out-of-range value can never
-#: reach the velocity conversion. NaN/inf are rejected too (Pydantic's
-#: ``allow_inf_nan=False``), because a NaN velocity would be a genuinely
-#: dangerous thing to hand an autopilot.
+#: reach the calibrated PWM conversion. NaN/inf are rejected too (Pydantic's
+#: ``allow_inf_nan=False``), because a non-finite stick value would be a
+#: genuinely dangerous thing to hand an autopilot.
 PilotAxis = Annotated[float, Field(ge=-1.0, le=1.0, allow_inf_nan=False)]
 
 
@@ -73,15 +73,77 @@ class PilotInputRequest(StrictModel):
     """
 
     #: +1 forward, -1 backward (Arrow Up / Arrow Down).
-    forward: PilotAxis = 0.0
+    pitch: PilotAxis | None = None
     #: +1 right, -1 left (Arrow Right / Arrow Left).
-    right: PilotAxis = 0.0
-    #: +1 climb, -1 descend (W / S).
-    up: PilotAxis = 0.0
+    roll: PilotAxis | None = None
+    #: Common throttle/climb intent, centred at zero.
+    throttle: PilotAxis | None = None
     #: +1 yaw right, -1 yaw left (D / A).
     yaw: PilotAxis = 0.0
-    #: Space, blur, tab-hidden: force zero regardless of the axes above.
-    neutral: bool = False
+    #: Space, blur, tab-hidden: release the override regardless of the axes.
+    neutral: StrictBool = False
+    #: Dead-man state from the selected provider. Required on every active
+    #: manual frame in both normal and bench modes.
+    deadman: StrictBool = False
+    #: Provider diagnostic only; backend safety does not trust button indexes.
+    source: Annotated[str, Field(min_length=1, max_length=64)] = "keyboard"
+    #: Concrete provider implementation identity. ``mock`` is simulator-only
+    #: and cannot produce active output when the backend is in real mode.
+    provider: Literal["keyboard", "browser", "mock", "gamepad", "unknown"] | None = None
+    #: Monotonic client sequence. Delayed or replayed values are rejected by
+    #: PilotService so an older movement request cannot overtake a panic stop.
+    sequence: Annotated[StrictInt, Field(ge=0, le=9_007_199_254_740_991)]
+
+    # Compatibility input names used by the previous browser contract. They
+    # are resolved once here; snapshots and all downstream code remain
+    # canonical pitch/roll/throttle/yaw.
+    forward: PilotAxis | None = None
+    right: PilotAxis | None = None
+    up: PilotAxis | None = None
+
+    @model_validator(mode="after")
+    def resolve_legacy_axes(self) -> "PilotInputRequest":
+        pairs = (
+            ("pitch", "forward"),
+            ("roll", "right"),
+            ("throttle", "up"),
+        )
+        for canonical_name, legacy_name in pairs:
+            canonical = getattr(self, canonical_name)
+            legacy = getattr(self, legacy_name)
+            if canonical is not None and legacy is not None and canonical != legacy:
+                raise ValueError(
+                    f"{canonical_name} and legacy alias {legacy_name} disagree"
+                )
+            setattr(self, canonical_name, 0.0 if canonical is None and legacy is None else (
+                legacy if canonical is None else canonical
+            ))
+        return self
+
+
+class PilotNeutralRequest(StrictModel):
+    """Sequence barrier for the legacy explicit-neutral endpoint."""
+
+    sequence: Annotated[StrictInt, Field(ge=0, le=9_007_199_254_740_991)]
+
+
+class ArmDisarmRequest(StrictModel):
+    """Explicit operator action required by ARM and DISARM endpoints."""
+
+    confirmed: Literal[True]
+
+
+class PilotBenchEnableRequest(StrictModel):
+    """Body for ``POST /api/drone/pilot/bench/enable``.
+
+    ``propsRemovedAck`` must be exactly ``true`` -- Pydantic's ``Literal[True]``
+    rejects ``false``, an omitted field, or any other value, so the operator's
+    propellers-removed confirmation cannot be defaulted or silently skipped by
+    a caller. The backend still cannot verify propellers are physically off;
+    this only makes the confirmation mandatory at the API boundary.
+    """
+
+    propsRemovedAck: Literal[True]
 
 
 class HealthResponse(BaseModel):

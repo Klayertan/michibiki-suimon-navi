@@ -2,6 +2,7 @@ import { useFieldReadError, useFields } from '../../services/fields/useFields'
 import { useActiveField } from '../../services/fields/useActiveField'
 import { FieldToolbar } from './FieldToolbar'
 import { fieldAreaSquareMeters, fieldBoundaryPointCount, formatAreaSquareMeters } from '../../domain/fields/selectors'
+import { formatAreaA, formatAreaHa } from '../../domain/fields/area'
 import './FieldWorkspace.css'
 
 /**
@@ -17,6 +18,12 @@ export function FieldWorkspace() {
   const readError = useFieldReadError()
   const activeField = useActiveField()
 
+  // Only meaningful once there's more than one field to sum -- with a single
+  // field this would just repeat the active-field summary below (task
+  // section 12: "if multiple fields exist").
+  const totalAreaM2 =
+    fields.length > 1 ? fields.reduce((sum, field) => sum + fieldAreaSquareMeters(field), 0) : null
+
   return (
     <div className="field-workspace">
       <FieldToolbar />
@@ -31,6 +38,11 @@ export function FieldWorkspace() {
           interfaces run on the same origin. Field creation is deferred to Stage 2B.
         </p>
       ) : null}
+      {totalAreaM2 !== null ? (
+        <p className="field-workspace__totals">
+          Registered fields: {fields.length} · Total area: {formatAreaHa(totalAreaM2)}
+        </p>
+      ) : null}
       {activeField ? (
         <dl className="field-workspace__summary">
           <div>
@@ -39,7 +51,12 @@ export function FieldWorkspace() {
           </div>
           <div>
             <dt>Area</dt>
-            <dd>{formatAreaSquareMeters(fieldAreaSquareMeters(activeField))}</dd>
+            <dd className="field-workspace__area">
+              <span>{formatAreaSquareMeters(fieldAreaSquareMeters(activeField))}</span>
+              <span className="field-workspace__area-secondary">
+                {formatAreaA(fieldAreaSquareMeters(activeField))} · {formatAreaHa(fieldAreaSquareMeters(activeField))}
+              </span>
+            </dd>
           </div>
           <div>
             <dt>Boundary</dt>

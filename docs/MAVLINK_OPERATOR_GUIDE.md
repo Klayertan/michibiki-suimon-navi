@@ -1,309 +1,288 @@
-# MAVLink 運用ガイド (Operator guide)
+# MAVLink 運用ガイド / Operator guide
 
-Holybro X500 V2（Pixhawk 6C / ArduCopter 4.5.7）のテレメトリを SuisuiNavi に表示するための手順書。
+Holybro X500 V2（Pixhawk 6C / ArduCopter 4.5.7）向け telemetry と、明示的に有効化した
+Manual Control の運用境界を説明します。
 
-> **この統合はアーム・離陸・着陸・RTL・スロットル操作を実装していません。**
-> 設定フラグでも有効になりません。離陸・着陸・緊急時の操作は従来どおり
-> 送信機と QGroundControl で行ってください。
->
-> 低速の速度指令（キーボード操縦）だけは、明示的に有効化した場合に限り
-> 利用できます。既定では無効です。アームも離陸もしません。
-> 手順と安全上の前提は **[PILOT_CONTROL_GUIDE.md](PILOT_CONTROL_GUIDE.md)**
-> を必ず読んでください。
+> 通常起動と実機起動は既定で manual output を許可しません。Manual Control は
+> `-AllowPilotControl`、ARM/DISARM は `-AllowSafeCommands` が必要です。
+> takeoff、land、RTL、mission、motor test、raw caller-selected RC frame、parameter write は
+> 未実装です。force-arm と safety bypass はありません。
+
+実機 Manual Control の前に [PILOT_CONTROL_GUIDE.md](PILOT_CONTROL_GUIDE.md) の
+propellers-removed 15-step bench procedure を必ず実施してください。本リファクタでは COM10 と
+実 Pixhawk を使わず、mock backend だけで自動確認しています。
 
 ---
 
-## 1. 初回セットアップ（1回だけ）
+## 1. 初回 setup
 
 ```bash
 npm install
-```
-
-```bash
 npm run backend:setup
 ```
 
-`backend:setup` はリポジトリ内に `.venv` を作成し、`backend/requirements-dev.txt`
-をそこにインストールします。グローバルの Python 環境は変更しません。
-`.venv` は `.gitignore` 済みでコミットされません。
+`backend:setup` は repository 内の `.venv` に dependency を入れます。
 
 ---
 
-## 2. 毎回の起動（モックモード）
+## 2. Mock mode — hardware なし
 
-実機なしで UI を動かす通常の開発手順です。
+通常の telemetry UI:
 
 ```bash
 npm run dev
 ```
 
-フロントエンド `http://localhost:4173/` とモックバックエンド
-`http://127.0.0.1:8787/` が同時に起動します。Ctrl+C で両方停止します。
+Manual Control と mock ARM/DISARM acceptance:
 
-別々のターミナルで動かす場合:
+```powershell
+# terminal 1
+npm run backend:mock -- --allow-pilot-control
 
-```bash
+# terminal 2
 npm run serve
 ```
 
-```bash
-npm run backend:mock
-```
+- frontend: `http://localhost:4173/`
+- backend: `http://127.0.0.1:8787/`
 
-ブラウザで `http://localhost:4173/#survey` を開き、右パネルの
-**ドローン / MAVLink** カードを展開してください。
-
-Windows のランチャーを使う場合:
-
-```powershell
-.\scripts\dev.ps1
-```
+`backend:mock` は safe commands が有効です。mock ARM/DISARM は command/ACK/HEARTBEAT state flow を
+シミュレーションし、result を simulation と明示します。serial port、COM10、telemetry radio は
+開きません。
 
 ---
 
-## 3. 実機モード（COM10）
+## 3. Real mode
 
-### 3.1 事前チェックリスト（すべて必須）
+### 3.1 読み取り専用
 
-| # | 確認事項 |
-|---|---|
-| 1 | **プロペラを4枚すべて取り外した** |
-| 2 | 機体が DISARMED（解除）状態である |
-| 3 | バッテリーを接続し、電圧が 14.0V 以上ある |
-| 4 | 両方のテレメトリ無線にアンテナが接続されている |
-| 5 | **QGroundControl を完全に終了した** |
-| 6 | デバイスマネージャーで COM10 が存在する |
-| 7 | 周囲に人がいない |
-
-### 3.2 起動
+1. 全プロペラを外す。
+2. vehicle が DISARMED であることを確認。
+3. telemetry radio の両アンテナ、battery、周囲の安全を確認。
+4. QGroundControl、Mission Planner、serial terminal を終了する。
+5. Device Manager で port と baud を確認する。既定は COM10 / 57600。
 
 ```powershell
 .\scripts\dev.ps1 -Real
 ```
 
-`YES` と入力するまで COM10 は開きません。
+`YES` confirmation なしに real port を開きません。safe command と pilot output は無効です。
 
-コマンドを使わず、テレメトリの読み取りだけ行う場合はこれで十分です。
-バックエンドは既定で **読み取り専用** です。
-
-フライトモード変更まで行う場合のみ:
+### 3.2 Mode command のみ
 
 ```powershell
 .\scripts\dev.ps1 -Real -AllowSafeCommands
 ```
 
-npm から起動する場合:
+safe commands は既知の DISARMED + fresh link で STABILIZE/ALT_HOLD mode change、read-only
+version/stream requests を許可します。
 
-```bash
-npm run backend:real
-```
-
-### 3.3 接続
-
-1. パネルの「プロペラを取り外したことを確認しました」に**実際に取り外してから**チェック
-2. 「接続」を押す
-3. リンク状態が「接続済み」、テレメトリ鮮度が「正常」になることを確認
-4. アーム状態が **DISARMED** であることを確認
-
-### 3.4 停止
-
-バックエンドのターミナルで **Ctrl+C**。
-GCSハートビートを停止し、シリアルポートを解放してから終了します。
-
-> **重要:** バックエンドが動いている間、機体側では GCS ハートビートが
-> 届いている状態になります。GCS failsafe は 5 秒・RTL に設定されています。
-> **飛行中にバックエンドを停止しないでください。** 地上での使用に限定してください。
-
----
-
-## 4. なぜ QGroundControl を閉じる必要があるのか
-
-Windows はシリアルポートを**1つのプロセスにのみ**割り当てます。
-QGroundControl が COM10 を開いていると、このバックエンドは開けません
-（逆も同じです）。バックエンドはこの状態を検出し、次のように報告します:
-
-```
-Serial port COM10 is already in use by another program.
-QGroundControl and this backend cannot both own COM10 —
-close QGroundControl (or any other GCS / serial terminal) and try again.
-```
-
-パラメータ変更・キャリブレーション・ファームウェア更新は引き続き
-QGroundControl で行い、そのときはバックエンドを停止してください。
-
----
-
-## 5. MAVLink 接続設定
-
-| 項目 | 値 |
-|---|---|
-| 機体側ポート | TELEM2 |
-| `SERIAL2_PROTOCOL` | 2 (MAVLink2) |
-| `SERIAL2_BAUD` | 57 (= 57600) |
-| PC側ポート | COM10 |
-| ボーレート | 57600 |
-| 機体 System ID | 1 |
-| 地上局 System ID | 255 |
-| 地上局 Component ID | 190 |
-
-これらの機体側パラメータは**この統合では変更しません**。
-
-### 5.1 テレメトリストリームの自動要求
-
-機体の HEARTBEAT を最初に受信した直後（初回接続時・再接続のたびに毎回）、
-バックエンドは自動的に以下のテレメトリストリームを要求します
-（`MAV_CMD_SET_MESSAGE_INTERVAL`、コマンドID 511）。
-
-| メッセージ | ID | レート | 周期 (µs) |
-|---|---|---|---|
-| SYS_STATUS（バッテリー） | 1 | 1 Hz | 1,000,000 |
-| GPS_RAW_INT（GPS） | 24 | 2 Hz | 500,000 |
-| ATTITUDE（姿勢） | 30 | 10 Hz | 100,000 |
-| GLOBAL_POSITION_INT（統合位置） | 33 | 5 Hz | 200,000 |
-| VFR_HUD（対地速度・高度） | 74 | 2 Hz | 500,000 |
-| BATTERY_STATUS（バッテリー詳細） | 147 | 1 Hz | 1,000,000 |
-
-**なぜ必要か:** ArduPilot（他の多くのオートパイロットも同様）は、GCS側から
-明示的に要求されない限り、新しく接続したリンクに HEARTBEAT（と、ArduPilot
-の場合は時刻同期用の TIMESYNC）以外のメッセージを送信しません。
-QGroundControl や Mission Planner がこの挙動に気づかれにくいのは、それらの
-アプリが接続直後に自動でこの種の要求を送っているためです。本バックエンドは
-これまでこの要求を送っておらず、そのためフライトモードとアーム状態
-（HEARTBEATのみで得られる情報）は正しく表示される一方、バッテリー・GPS・
-姿勢・対地速度は常に null のままでした。
-
-この自動要求は:
-
-* **読み取り専用のテレメトリ設定**であり、フライトコマンドではありません。
-  アーム・モード変更・機体の移動は一切行いません。
-* `SUISUI_MAVLINK_ALLOW_SAFE_COMMANDS` の設定に**関係なく**、常に送信されます
-  （読み取り専用モードでも送信されます）。
-* GCSハートビート（1Hz）の送信を妨げません。6件の要求はブロッキングなしで
-  送信され、送信自体は数ミリ秒で完了します。
-* 個々のストリームが一つ拒否・未対応でも、バックエンドやリンクを異常終了
-  させません。**6件すべてが拒否・未応答の場合のみ**、バックエンドエラーとして
-  表示されます（`error.kind === "stream_request"`）。
-
-`REQUEST_DATA_STREAM`（旧式のストリーム要求方式）は使用していません。
-ArduCopter 4.5.7 は `MAV_CMD_SET_MESSAGE_INTERVAL` に完全対応しているため、
-フォールバックは実装していません。
-
----
-
-## 6. トラブルシューティング
-
-| 症状 | 原因 | 対処 |
-|---|---|---|
-| **COM10 access denied / port_busy** | QGroundControl か別のシリアル端末がポートを保持 | QGroundControl を終了。他に Mission Planner・Tera Term・Arduino IDE のシリアルモニタが開いていないか確認 |
-| **ポートが見つからない (port_not_found)** | 無線ドングル未接続、ポート番号違い | デバイスマネージャー → ポート(COM & LPT) で実際の番号を確認し `npm run backend:real -- --port COM7` のように指定 |
-| **ハートビートが来ない** | 機体の電源が入っていない／無線がペアリングしていない／ボーレート不一致 | 両方の無線の緑LEDが**点灯**（点滅ではない）していることを確認。`SERIAL2_BAUD` と `--baud` を一致させる |
-| **ボーレートが違う** | 57600 以外に設定されている | QGroundControl で `SERIAL2_BAUD` を確認し、`--baud` を合わせる |
-| **テレメトリ途絶（stale）** | 電波が弱い／障害物／干渉 | アンテナの向きと距離を確認。3秒以上メッセージが来ないと「途絶」、10秒でリンク喪失 |
-| **リンク喪失 → 再接続中** | 一時的な電波切れ | 自動的に再接続します。復帰しない場合は無線の電源を確認 |
-| **GPS Fix が「測位なし」** | 屋内では正常な動作 | GNSS は屋内で測位できません。屋外の開けた場所で 3D_FIX と衛星10個以上を確認 |
-| **バックエンド応答なし** | バックエンド未起動 | `npm run backend:mock` を実行。`http://127.0.0.1:8787/api/health` が応答するか確認 |
-| **コマンドが無効（読み取り専用）** | `ALLOW_SAFE_COMMANDS=0`（既定） | `npm run backend:mock`（モック）または `.\scripts\dev.ps1 -Real -AllowSafeCommands` |
-| **ARMED 警告が出る** | 機体がアーム状態 | 送信機または QGroundControl で解除。アーム中はすべてのコマンドが拒否されます |
-| **モード変更が verify_timeout** | ACK は返ったが機体がモードを報告しない | 機体側で拒否された可能性。QGroundControl で実際のモードを確認 |
-| **バッテリー・GPS・姿勢が null のまま（フライトモード/アームは表示される）** | テレメトリストリーム要求（§5.1）が全て拒否・未応答 | ステータス欄のエラーに `telemetry` を含むメッセージが出ていないか確認。出ている場合はバックエンドログで `telemetry stream ... not accepted` を確認し、機体のファームウェアが `MAV_CMD_SET_MESSAGE_INTERVAL` に対応しているか（ArduCopter 4.5系は対応済み）を確認。一度切断→再接続すると要求をやり直します |
-
----
-
-## 7. 安全上の制限（実装済み）
-
-* 実機モードは既定ではありません（`SUISUI_MAVLINK_MODE=mock`）
-* 実機接続時、バックエンドは既定で読み取り専用です
-* 実機接続には毎回「プロペラ取り外し確認」が必要です
-* 変更できるフライトモードは **STABILIZE / ALT_HOLD の2つのみ**、**解除中のみ**
-* 機体が ARMED を報告した時点で、すべてのコマンドを拒否します
-* アーム状態が**不明**な場合も拒否します（「たぶん解除」とは扱いません）
-* テレメトリ途絶中はコマンドを拒否します
-* モード変更は機体のハートビートで確認できるまで成功を報告しません
-* アーム・離陸・着陸・RTL・ミッション・RC override・モーターテストは
-  **未実装**で、要求すると MAVLink を一切送信せずに 501 を返します
-* GUIDED での**速度指令のみ**、`SUISUI_MAVLINK_ALLOW_PILOT_CONTROL=1` で
-  起動した場合に限り利用できます（§7.1）。既定では無効です
-* バックエンドは 127.0.0.1 のみで待ち受けます
-* 自動テレメトリストリーム要求（§5.1）は読み取り専用の設定コマンドのみで、
-  アーム・モード変更・機体移動のコマンドは一切含まれません
-
-### 7.1 低速操縦（キーボード）
-
-既定では**無効**です。有効化しても、以下がすべて満たされるまで機体は動きません。
-
-| ゲート | 条件 |
-|---|---|
-| 設定 | `SUISUI_MAVLINK_ALLOW_PILOT_CONTROL=1` で起動している |
-| 操作 | UI で「操縦を有効化」を押している |
-| リンク | 接続済み（途絶していない） |
-| モード | **GUIDED**（このバックエンドはモードを変更しません） |
-| アーム | **ARMED**（このバックエンドはアームしません） |
-| 入力 | 直近 0.5 秒以内に入力が届いている |
-
-上限は 水平 0.30 m/s、上昇 0.30 m/s、下降 0.20 m/s、ヨー 12 °/s。
-使用するメッセージは `SET_POSITION_TARGET_LOCAL_NED`（ボディフレーム、
-速度＋ヨーレートのみ）で、ArduPilot の安定化制御を経由します。
-モーター PWM やサーボ出力は一切送信しません。
-
-起動:
+### 3.3 Manual Control bench
 
 ```powershell
 .\scripts\dev.ps1 -Real -AllowSafeCommands -AllowPilotControl
 ```
 
-```bash
-npm run backend:mock -- --allow-pilot-control
-```
+real-link confirmation と pilot confirmation は別です。その後も UI の props acknowledgement、
+Enable Bench Pilot、ARM は3つの別操作です。起動 flag だけで ARM や mode change は起きません。
 
-**実施前に [PILOT_CONTROL_GUIDE.md](PILOT_CONTROL_GUIDE.md) を読み、
-プロペラを外したベンチテストを完了してください。**
-
----
-
-## 8. バックエンドの安全な停止
-
-1. ブラウザのパネルで「切断」を押す（任意）
-2. バックエンドのターミナルで **Ctrl+C**
-
-Ctrl+C により、GCS ハートビートの停止 → ワーカースレッドの停止 →
-シリアルポートのクローズ、の順で終了します。
-ポートは即座に解放され、QGroundControl から使えるようになります。
+Windows は同じ serial port を複数 process に割り当てないため、backend 使用中は QGroundControl を
+閉じます。parameter 設定・firmware update・calibration が必要なら backend を停止し、QGroundControl
+で行ってください。
 
 ---
 
-## 9. 統合を取り消す方法
+## 4. 接続設定と telemetry
 
-追加されたファイルを削除し、変更された3ファイルを戻すだけです。
-機体側のパラメータは一切変更していないため、機体側の作業は不要です。
+| 項目 | 既定値 |
+|---|---|
+| vehicle port | TELEM2 |
+| `SERIAL2_PROTOCOL` | 2 (MAVLink2) |
+| `SERIAL2_BAUD` | 57 (= 57600) |
+| PC port | COM10 |
+| backend source system/component | 255 / 190 |
+| target system | 1 |
 
-```bash
-git checkout -- index.html package.json .gitignore README.md docs/DRONE_LINK_PLAN.md
-```
+アプリはこれらの vehicle parameter を変更しません。
 
-```bash
-rm -rf backend js/drone css/drone.css .venv docs/MAVLINK_INTEGRATION_REPORT.md docs/MAVLINK_OPERATOR_GUIDE.md tests/browser/drone-panel.spec.js tests/unit/drone-formatters.test.js tests/unit/drone-store.test.js scripts/venv.mjs scripts/setup-backend.mjs scripts/run-backend.mjs scripts/run-pytest.mjs scripts/dev-all.mjs scripts/dev.ps1
-```
+最初の HEARTBEAT と再接続後、backend は次の stream を
+`MAV_CMD_SET_MESSAGE_INTERVAL` で read-only request します。
 
-確認:
+| Message | ID | Rate |
+|---|---:|---:|
+| SYS_STATUS | 1 | 1 Hz |
+| GPS_RAW_INT | 24 | 2 Hz |
+| ATTITUDE | 30 | 10 Hz |
+| GLOBAL_POSITION_INT | 33 | 5 Hz |
+| VFR_HUD | 74 | 2 Hz |
+| BATTERY_STATUS | 147 | 1 Hz |
 
-```bash
-npm test
-```
+これは aircraft state を変える command ではなく、telemetry を送るよう要求するだけです。
+`ALLOW_SAFE_COMMANDS` が無効でも実行され、個別 stream の unsupported/reject は link 全体を停止
+しません。
 
 ---
 
-## 10. まだ実装していないもの（今後の段階）
+## 5. Manual Control transport
 
-以下は**未実装**です。実装済みとして扱わないでください。
+### 5.1 二つの異なる control concept
 
-* ミッションプランニング・ウェイポイントのアップロード
-* GUIDED モードでの**位置**指令（速度指令のみ §7.1 で実装済み）
-* 自動離陸・自動着陸・RTL の実行
-* Jetson との連携
-* 圃場境界に追従した飛行
-* ジオフェンス
-* 農業用画像取得
+```text
+Manual Control          -> RC_CHANNELS_OVERRIDE (message 70)
+Guided external control -> send_velocity_setpoint()
+                           SET_POSITION_TARGET_LOCAL_NED (message 84)
+```
 
-次の段階として安全なのは、**このバックエンドを読み取り専用のまま地上で
-運用し、テレメトリログを SuisuiNavi の記録機能に統合すること**です。
-飛行制御の自動化は、その先の別課題として扱ってください。
+旧 Manual Pilot は後者を使用したため GUIDED が必要で、STABILIZE では
+`Blocked: Not in GUIDED mode` でした。現在の Keyboard/PS5 path は前者だけを使用し、
+**STABILIZE / ALT_HOLD** を support します。backend は enable/ARM 時に mode を自動変更しません。
+Guided velocity sender は別用途の低レベル interface として保持されています。
+
+### 5.2 Read-only RC discovery
+
+接続後に `PARAM_REQUEST_READ` で次を取得し、不足値は retry します。
+
+- `RCMAP_ROLL/PITCH/THROTTLE/YAW`
+- `RC1_MIN/TRIM/MAX/REVERSED` から `RC8_*`
+- `RC_OVERRIDE_TIME`、`RC_OPTIONS`
+- Copter 4.5 系の `SYSID_MYGCS`、または新しい
+  `MAV_GCS_SYSID/MAV_GCS_SYSID_HI`（optional diagnostic `MAV_OPTIONS`）
+
+標準 mapping は CH1 Roll / CH2 Pitch / CH3 Throttle / CH4 Yaw ですが、実際の RCMAP が権威です。
+primary axes は実 channel の MIN/TRIM/MAX/REVERSED で PWM に変換し、active frame の他 CH1-8 は
+`65535` (ignore) です。
+
+Throttle は mode-aware です。STABILIZE の semantic 0 は calibrated low-stick endpoint
+（reversed channel は反対 endpoint）で、ALT_HOLD の 0 は calibrated MIN/MAX midpoint です。
+したがって pitch-only の STABILIZE frame が throttle trim/half-stick を送ることはありません。
+
+release frame は CH1-8 がすべて `0` です。これは ArduPilot に override を解除して normal RC input
+へ戻す指示であり、trim command の保持ではありません。
+
+このアプリは **`PARAM_SET` を実装/送信しません**。次の状態では fail closed し、diagnostic を
+表示するだけです。
+
+- missing/invalid RCMAP または RC1-8 calibration
+- `RC_OVERRIDE_TIME == 0` (override disabled)
+- `RC_OVERRIDE_TIME < 0`、non-finite、または sender cadence に対して短すぎる timeout
+- `RC_OPTIONS` の bit 1（値 2）が MAVLink RC override を ignore
+- legacy/new GCS-ID parameter が未取得、または常時適用される許可 ID/range と backend source ID が mismatch
+
+finite positive `RC_OVERRIDE_TIME` が必須なので、browser/backend/radio が同時に失われても autopilot
+側 timeout が最後の override を永久に保持しません。値をアプリが勝手に書き換えることはありません。
+
+### 5.3 Runtime gates と release
+
+Manual output は次をすべて要求します。
+
+- `ALLOW_PILOT_CONTROL` + UI Pilot enabled
+- connected/fresh MAVLink telemetry
+- valid RC configuration
+- STABILIZE または ALT_HOLD
+- known ARMED telemetry
+- fresh, monotonic-sequence input
+- connected/calibrated selected provider
+- continuously held Keyboard/PS5 dead-man
+
+active override は 15 Hz、browser input timeout は 0.5 s です。dead-man release、focus/tab/page loss、
+provider/controller/WebSocket/MAVLink disconnect、telemetry/input stale、source switch、Space、Esc、disable、
+transmit failure、DISARM では desired axes と output-active state を消し、all-zero release を送ります。
+通常は2秒間反復し、graceful link close 前は3-frame burst を試みます。再接続しても古い stick state は
+復活しません。各 transport session で vehicle telemetry/RC parameter cache を捨て、再取得が完了するまで
+fail closed します。provider/WebSocket gate の復旧後も dead-man release/re-press が必要です。
+
+---
+
+## 6. Normal ARM / DISARM
+
+API:
+
+```http
+POST /api/drone/arm
+Content-Type: application/json
+
+{"confirmed": true}
+```
+
+```http
+POST /api/drone/disarm
+Content-Type: application/json
+
+{"confirmed": true}
+```
+
+送る command は `MAV_CMD_COMPONENT_ARM_DISARM` (400) だけです。
+
+| Operation | param1 | param2 |
+|---|---:|---:|
+| ARM | 1 | **0** |
+| DISARM | 0 | **0** |
+
+`21196` force value は codebase に定義せず、ArduPilot の通常 safety check を bypass しません。
+どちらも safe commands、explicit confirmation、fresh link、`COMMAND_ACK` acceptance、その後の
+HEARTBEAT state confirmation が必要です。ACK reject や telemetry verify timeout は成功ではありません。
+
+ARM はさらに vehicle DISARMED、Pilot enabled、valid RC config、STABILIZE/ALT_HOLD を要求し、Bench
+Mode なら stored props-removed acknowledgement も要求します。DISARM は安全方向なので Pilot が
+disable 済みでも実行でき、props ack は要求しません。既に DISARMED なら telemetry state を返して
+command を重ねて送りません。
+
+ARM は takeoff ではありません。Pilot enable も ARM ではありません。いずれも自動連鎖しません。
+
+---
+
+## 7. UI status の意味
+
+- `PREVIEW`: input monitor、manual output disabled
+- `READY`: link/configuration が利用可能で output inactive
+- `PILOT ENABLED`: control channel enabled。ARM または dead-man を意味しない
+- `TRANSMITTING`: backend が active RC override を送信中
+- `FAILSAFE`: active session 中の safety event で release
+- `DISCONNECTED`: telemetry link が usable でない
+
+Vehicle `DISARMED` は別表示です。意図した disarmed state は `Ready to arm` であり、それだけでは
+FAILSAFE にしません。blocked reason と RC diagnostics は action button より上に表示されます。
+
+---
+
+## 8. Troubleshooting
+
+| Symptom | Cause / response |
+|---|---|
+| port busy / access denied | QGroundControl 等を完全終了。port 番号を再確認 |
+| heartbeat なし | vehicle power、paired radio、antenna、baud を確認 |
+| telemetry stale | blind command を防ぐため全 command/override を拒否。link recovery を待つ |
+| commands disabled | ARM/DISARM/mode には `-AllowSafeCommands` が必要 |
+| pilot disabled | `-AllowPilotControl` が必要 |
+| wrong mode | STABILIZE/ALT_HOLD を選択。アプリは自動変更しない |
+| RC configuration pending/invalid | parameter response または QGroundControl の実設定を点検。アプリは書かない |
+| dead-man released | 設計どおり all-zero release。継続保持して再入力 |
+| ARM rejected | STATUSTEXT/pre-arm reason を確認。force/bypass しない |
+| ACK accepted but verify timeout | HEARTBEAT が最終 state を報告しないため成功扱いしない |
+
+---
+
+## 9. Safe shutdown
+
+1. dead-man を放す。
+2. Neutral / Release。
+3. ARMED なら DISARM し、telemetry で DISARMED を確認。
+4. Disable Bench Pilot。
+5. backend terminal で Ctrl+C。
+
+graceful shutdown は可能な限り RC release burst を送り、heartbeat/worker を停止して serial port を
+close します。physical link が既に失われている場合は finite `RC_OVERRIDE_TIME` が最後の防壁です。
+
+---
+
+## 10. 未実装 / 検証外
+
+- takeoff、land、RTL execution
+- mission upload、guided goto UI、raw public RC endpoint、MAVLink `MANUAL_CONTROL`
+- motor test、servo command、parameter write
+- force-arm、安全 check/failsafe の disable
+- real COM10/Pixhawk/DualSense/motor/flight validation for this refactor
+
+実機 Manual Control の次の安全な作業は、プロペラを付けることではなく、
+[PILOT_CONTROL_GUIDE.md](PILOT_CONTROL_GUIDE.md) の propellers-removed bench をレビュー付きで
+実施することです。

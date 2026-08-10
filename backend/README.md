@@ -4,8 +4,9 @@ A local-only FastAPI service that owns the serial telemetry link to a Holybro
 X500 V2 (Pixhawk 6C, ArduCopter 4.5.7) and exposes normalized telemetry to the
 SuisuiNavi browser frontend.
 
-**This backend does not arm, take off, land, return to launch, upload missions,
-override RC, or test motors. Those operations are not implemented.** See
+**Normal ARM/DISARM and bounded manual RC override exist only behind explicit
+safety gates. Force-arm, takeoff, land, RTL, mission upload, motor test,
+parameter writes and safety-check bypasses are not implemented.** See
 [Safety](#safety) below.
 
 ## Quick start
@@ -31,13 +32,14 @@ Full instructions, troubleshooting and the real-hardware procedure live in
 | `app/models.py` | Pydantic request/response models (strict, `extra="forbid"`) |
 | `app/logging_config.py` | Single structured stderr handler |
 | `app/main.py` | FastAPI app: REST routes, WebSocket, CORS, size limits |
-| `app/mavlink/interface.py` | The transport contract — only two `send_*` methods exist |
+| `app/mavlink/interface.py` | Transport contract for telemetry commands, read-only parameter requests, RC override, and the separately retained Guided velocity sender |
 | `app/mavlink/mock_connection.py` | Simulated ArduCopter; the default transport |
 | `app/mavlink/real_connection.py` | pymavlink over serial; imports pymavlink lazily |
 | `app/mavlink/normalizers.py` | The single place raw MAVLink units are converted |
 | `app/mavlink/telemetry_state.py` | Thread-safe normalized state + freshness machine |
 | `app/mavlink/link_manager.py` | Worker thread, heartbeat, reconnect, shutdown |
-| `app/mavlink/command_service.py` | The only module that transmits a command |
+| `app/mavlink/command_service.py` | Acknowledged commands, including normal command-400 ARM/DISARM |
+| `app/mavlink/pilot_service.py` | Manual-control gates, vehicle-calibrated RC mapping, cadence and override release |
 | `app/mavlink/constants.py` | MAVLink enums and the flight-mode allowlist |
 
 ## Concurrency model
@@ -65,15 +67,20 @@ out).
 | Refused while armed, or while the armed state is unknown | `command_service._require_disarmed` |
 | Refused while telemetry is stale | `command_service._require_live_link` |
 | Mode change confirmed by a vehicle HEARTBEAT, not just by the ack | `command_service.set_flight_mode` |
-| Arm / takeoff / land / RTL / RC override / motor test refuse without transmitting | `command_service.refuse` |
-| Only two `send_*` methods exist on the transport | `interface.MavlinkLink` |
+| ARM requires safe commands, enabled Manual Control, explicit confirmation, a fresh link, and props acknowledgement in Bench Mode | `main.py`, `command_service.py` |
+| ARM/DISARM use command 400 with `param2=0`; acknowledgement and HEARTBEAT state must confirm success | `command_service.py` |
+| Manual input requires a continuously-held dead-man and STABILIZE/ALT_HOLD | `pilot_service.py` |
+| RCMAP/RCx calibration, RC_OPTIONS, a finite RC_OVERRIDE_TIME with cadence margin, and legacy/new GCS source-ID range are read and validated; never written | `pilot_limits.py`, `pilot_service.py` |
+| STABILIZE throttle zero is calibrated low-stick; ALT_HOLD zero is the calibrated range midpoint | `pilot_limits.normalized_to_rc_override` |
+| Simulated provider input is refused in real backend mode | `models.py`, `pilot_service.py` |
+| Every manual gate closure releases RC channels 1-8 with MAVLink release semantics | `pilot_service.py` |
+| Takeoff / land / RTL / mission / motor-test / parameter-write operations refuse without transmitting | `command_service.refuse` |
 | Binds loopback only | `config.py` — `HOST=127.0.0.1` |
 
-`SUISUI_MAVLINK_ALLOW_ARM=1` and `SUISUI_MAVLINK_ALLOW_TAKEOFF=1` are parsed so
-the running configuration can be reported and a warning logged. **They enable
-nothing.** There is no code path from any endpoint to an arming or takeoff
-frame, and `test_command_service.py` asserts that the command ids do not exist
-in the codebase.
+`SUISUI_MAVLINK_ALLOW_ARM=1` and `SUISUI_MAVLINK_ALLOW_TAKEOFF=1` remain parsed
+only for backwards compatibility. **They bypass nothing.** Normal ARM/DISARM
+is governed by the gates above; takeoff remains unsupported. Force value
+`21196` is never used.
 
 ## Tests
 
@@ -81,5 +88,6 @@ in the codebase.
 npm run test:backend
 ```
 
-154 tests, all in mock mode. No test opens a serial port, and the suite runs on
-a machine with no telemetry radio attached.
+The suite forces mock mode. No test opens a serial port or requires a telemetry
+radio; use the operator guide for the separate propellers-removed real bench
+procedure.

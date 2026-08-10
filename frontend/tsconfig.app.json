@@ -19,8 +19,10 @@
     /* Importing existing framework-independent modules from ../js (see
        vite.config.ts's `@legacy` alias) without porting them to TS yet */
     "allowJs": true,
+    "resolveJsonModule": true,
     "paths": {
-      "@legacy/*": ["../js/*"]
+      "@legacy/*": ["../js/*"],
+      "@data/*": ["../data/*"]
     },
 
     /* Linting */

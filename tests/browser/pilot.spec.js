@@ -1,490 +1,667 @@
 import { test, expect } from "@playwright/test";
+import {
+  armMock,
+  enableBench,
+  openManualPanel,
+  pilotAxis,
+  pilotSnapshot,
+  telemetryStatus
+} from "./manual-control-helpers.js";
 
-// Pilot velocity control panel.
+test("Keyboard and PS5 live in one Manual Control panel with no duplicate cards or controls", async ({ page }) => {
+  await openManualPanel(page);
+
+  await expect(page.locator("#pilotPanel")).toHaveCount(1);
+  await expect(page.locator("#gamepadPanel")).toHaveCount(0);
+  await expect(page.locator("#pilotPanel > summary")).toContainText("手動操縦");
+  await expect(page.locator("#pilotPanel > summary")).toContainText("Manual Control");
+  await expect(page.locator("#gpSource")).toHaveCount(1);
+  await expect(page.locator("#pilotBenchEnableButton")).toHaveCount(1);
+  await expect(page.locator("#pilotArmButton")).toHaveCount(1);
+  await expect(page.locator("#pilotDisarmButton")).toHaveCount(1);
+
+  const sources = await page.locator("#gpSource option").allTextContents();
+  expect(sources).toEqual(["Keyboard", "PS5 Controller"]);
+  await expect(page.locator("#manualInputRoot")).toContainText("Calibration: not required");
+  await expect(page.locator("[data-input-calibration]")).toHaveCount(0);
+  await expect(page.locator("[data-input-raw]")).toHaveCount(0);
+
+  await page.locator("#gpSource").selectOption("ps5");
+  await expect(page.locator("[data-input-calibration]")).toBeAttached();
+  await expect(page.locator("[data-input-raw]")).toBeAttached();
+  await expect(page.locator("#manualInputRoot")).not.toContainText("Calibration: not required");
+
+  const placement = await page.evaluate(() => {
+    const banner = document.getElementById("pilotBlockedBanner").getBoundingClientRect();
+    const actions = document.querySelector(".pilot-action-row").getBoundingClientRect();
+    return { bannerBottom: banner.bottom, actionsTop: actions.top };
+  });
+  expect(placement.bannerBottom).toBeLessThan(placement.actionsTop);
+});
+
+test("Keyboard preview is opt-in, quarter-stick, and transport-free before Bench Pilot enable", async ({ page }) => {
+  const backend = await openManualPanel(page);
+  await expect(page.locator("#gpKeyCapture")).toContainText("Preview keyboard input");
+
+  await page.keyboard.down("ShiftLeft");
+  await page.keyboard.down("KeyW");
+  await page.waitForTimeout(100);
+  await expect(pilotAxis(page, "throttle")).toHaveText("0.00");
+  expect(backend.inputs()).toEqual([]);
+  await page.keyboard.up("KeyW");
+  await page.keyboard.up("ShiftLeft");
+
+  await page.locator("#gpKeyCapture").click();
+  await page.keyboard.down("ShiftLeft");
+  await page.keyboard.down("KeyW");
+  await expect(pilotAxis(page, "throttle")).toHaveText("0.25");
+  expect(backend.inputs()).toEqual([]);
+  await page.keyboard.up("KeyW");
+  await page.keyboard.up("ShiftLeft");
+});
+
+test("mock Keyboard bench flow enables, normally arms, transmits, releases dead-man, and disarms", async ({ page }) => {
+  const backend = await openManualPanel(page);
+  await enableBench(page);
+
+  const benchCall = backend.posts.find((post) => post.path === "/api/drone/pilot/bench/enable");
+  expect(benchCall.body).toEqual({ propsRemovedAck: true });
+  await expect(page.locator("#pilotStatusReady")).toHaveAttribute("data-tone", "ok");
+  await expect(page.locator("#pilotStatusFailsafe")).toHaveAttribute("data-tone", "idle");
+  await expect(page.locator("#pilotBlockedBanner")).toContainText("Ready to arm");
+  await expect(page.locator("#pilotArmed")).toHaveText("DISARMED");
+
+  await armMock(page);
+  expect(backend.posts.find((post) => post.path === "/api/drone/arm").body).toEqual({ confirmed: true });
+
+  await page.keyboard.down("ShiftLeft");
+  await expect(page.locator("#pilotDeadman")).toHaveText("HELD");
+  await page.waitForTimeout(50);
+  await page.keyboard.down("KeyW");
+
+  await expect.poll(() => backend.movementInputs().at(-1)?.body).toMatchObject({
+    pitch: 0,
+    roll: 0,
+    throttle: 0.25,
+    yaw: 0,
+    deadman: true,
+    neutral: false,
+    source: "keyboard"
+  });
+  const movement = backend.movementInputs().at(-1).body;
+  expect(movement).not.toHaveProperty("forward");
+  expect(movement).not.toHaveProperty("right");
+  expect(movement).not.toHaveProperty("up");
+  await expect(page.locator("#pilotStatusTransmitting")).toHaveAttribute("data-tone", "danger");
+  await expect(page.locator("#pilotBlockedBanner")).toContainText("None");
+
+  const beforeRelease = backend.inputs().length;
+  await page.keyboard.up("ShiftLeft");
+  await expect.poll(() => backend.inputs().slice(beforeRelease).some((post) => post.body?.neutral === true)).toBe(true);
+  await expect(page.locator("#pilotStatusTransmitting")).toHaveAttribute("data-tone", "idle");
+  await expect(page.locator("#pilotStatusFailsafe")).toHaveAttribute("data-tone", "warn");
+  await expect(page.locator("#pilotBlockedBanner")).toContainText("Dead-man released");
+  await page.keyboard.up("KeyW");
+
+  await expect(page.locator("#pilotDisarmButton")).toBeEnabled();
+  await page.locator("#pilotDisarmButton").click();
+  await expect.poll(() => backend.paths()).toContain("/api/drone/disarm");
+  expect(backend.posts.find((post) => post.path === "/api/drone/disarm").body).toEqual({ confirmed: true });
+  await expect(page.locator("#pilotArmed")).toHaveText("DISARMED");
+  await expect(page.locator("#pilotStatusFailsafe")).toHaveAttribute("data-tone", "idle");
+
+  const sequences = backend.inputs().map((post) => post.body.sequence);
+  expect(sequences.every((value, index) => index === 0 || value > sequences[index - 1])).toBe(true);
+});
+
+test("mock PS5 uses calibrated Mode 2 axes and the configured dead-man button on the same endpoint", async ({ page }) => {
+  const backend = await openManualPanel(page);
+  await page.locator("#gpSource").selectOption("ps5");
+  await page.evaluate(() => window.gamepadController.mock.connect());
+  await page.waitForFunction(() => Boolean(window.gamepadController?.calibration));
+  await page.evaluate(() => {
+    const controller = window.gamepadController;
+    const calibration = { ...controller.calibration, deadmanButtonIndex: 5, validationState: "valid" };
+    controller.setCalibration(calibration);
+  });
+  await expect(page.locator("[data-input-calibration] summary")).toContainText("valid");
+
+  await enableBench(page);
+  await armMock(page);
+
+  // L1/index 4 is deliberately not the configured dead-man in this test.
+  await page.evaluate(() => {
+    const controller = window.gamepadController;
+    controller.mock.setButton(4, 1);
+    controller.mock.setAxis(1, -0.35);
+  });
+  await page.waitForTimeout(150);
+  expect(backend.movementInputs().filter((post) => post.body.source === "ps5")).toHaveLength(0);
+
+  await page.evaluate(() => {
+    const controller = window.gamepadController;
+    controller.mock.setButton(4, 0);
+    controller.mock.setButton(5, 1);
+    controller.mock.setAxis(1, -0.4);
+  });
+  await expect.poll(() => backend.movementInputs().filter((post) => post.body.source === "ps5").at(-1)?.body?.throttle).toBeGreaterThan(0);
+  await expect(page.locator("#pilotStatusTransmitting")).toHaveAttribute("data-tone", "danger");
+  await expect(page.locator("#pilotDeadman")).toHaveText("HELD");
+
+  const beforeRelease = backend.inputs().length;
+  await page.evaluate(() => window.gamepadController.mock.setButton(5, 0));
+  await expect.poll(() => backend.inputs().slice(beforeRelease).some((post) => post.body?.neutral === true)).toBe(true);
+  await expect(page.locator("#pilotStatusTransmitting")).toHaveAttribute("data-tone", "idle");
+  await expect(page.locator("#pilotStatusFailsafe")).toHaveAttribute("data-tone", "warn");
+
+  await page.locator("#pilotDisarmButton").click();
+  await expect(page.locator("#pilotArmed")).toHaveText("DISARMED");
+});
+
+test("normal ARM rejection is surfaced and never claimed as ARMED", async ({ page }) => {
+  const backend = await openManualPanel(page, { rejectArm: true });
+  await enableBench(page);
+  await page.locator("#pilotArmButton").click();
+  await expect(page.locator("#pilotMessage")).toContainText("Pre-arm checks failed");
+  await expect(page.locator("#pilotArmed")).toHaveText("DISARMED");
+  expect(backend.posts.find((post) => post.path === "/api/drone/arm").body).toEqual({ confirmed: true });
+  expect(JSON.stringify(backend.posts)).not.toContain("21196");
+});
+
+// ----------------------------------------------------------------------
+// ARM rejection diagnostics
 //
-// No Python backend, no serial port and no aircraft are involved: every
-// request to 127.0.0.1:8787 is intercepted and recorded, so these tests prove
-// exactly *what the browser would transmit* for a given set of keypresses,
-// which is the part of the system a first flight depends on.
+// Reported symptom: a useful orange ArduPilot STATUSTEXT briefly appeared,
+// then Manual Control replaced it with "ARM rejected: The vehicle rejected
+// normal ARM: FAILED." — the numeric MAV_RESULT, with the vehicle's own
+// explanation discarded. These tests exercise the fix on the real page.
+// ----------------------------------------------------------------------
 
-const BACKEND = "http://127.0.0.1:8787";
+test("a PreArm vehicle reason is shown distinctly from the numeric command result", async ({ page }) => {
+  const backend = await openManualPanel(page, {
+    rejectArm: { resultName: "FAILED", vehicleReason: "PreArm: Hardware safety switch" }
+  });
+  await enableBench(page);
+  await page.locator("#pilotArmButton").click();
 
-const LIMITS = {
-  maxHorizontalSpeed: 0.3,
-  maxClimbSpeed: 0.3,
-  maxDescentSpeed: 0.2,
-  maxYawRateDeg: 12.0
+  await expect(page.locator("#pilotArmDiagnostic")).toBeVisible();
+  await expect(page.locator("#pilotArmCommandResult")).toHaveText("ARM FAILED");
+  await expect(page.locator("#pilotArmVehicleReason")).toHaveText("PreArm: Hardware safety switch");
+  await expect(page.locator("#pilotArmVehicleReason")).toHaveAttribute("data-fallback", "false");
+  await expect(page.locator("#pilotArmed")).toHaveText("DISARMED");
+
+  expect(backend.posts.find((post) => post.path === "/api/drone/arm").body).toEqual({ confirmed: true });
+  expect(JSON.stringify(backend.posts)).not.toContain("21196");
+});
+
+test("with no detailed STATUSTEXT, the UI states that honestly instead of inventing a cause", async ({ page }) => {
+  await openManualPanel(page, { rejectArm: { resultName: "FAILED", vehicleReason: null } });
+  await enableBench(page);
+  await page.locator("#pilotArmButton").click();
+
+  await expect(page.locator("#pilotArmDiagnostic")).toBeVisible();
+  await expect(page.locator("#pilotArmCommandResult")).toHaveText("ARM FAILED");
+  await expect(page.locator("#pilotArmVehicleReason")).toHaveText(
+    "Vehicle rejected ARM (MAV_RESULT_FAILED); no detailed reason received."
+  );
+  await expect(page.locator("#pilotArmVehicleReason")).toHaveAttribute("data-fallback", "true");
+});
+
+test("a different MAV_RESULT is named accurately, not hardcoded to FAILED", async ({ page }) => {
+  await openManualPanel(page, { rejectArm: { resultName: "DENIED", vehicleReason: null } });
+  await enableBench(page);
+  await page.locator("#pilotArmButton").click();
+  await expect(page.locator("#pilotArmCommandResult")).toHaveText("ARM DENIED");
+  await expect(page.locator("#pilotArmVehicleReason")).toHaveText(
+    "Vehicle rejected ARM (MAV_RESULT_DENIED); no detailed reason received."
+  );
+});
+
+// ----------------------------------------------------------------------
+// ARM rejection evidence
+//
+// Real-hardware report: "ARM rejected: FAILED" with no detailed reason at
+// all. These tests exercise the raw-evidence fallback that replaces a dead
+// end with the mode/armed/pre-arm-health/RC-input facts read at the moment
+// of rejection -- shown only when there is genuinely no vehicleReason.
+// ----------------------------------------------------------------------
+
+const SAMPLE_ARM_EVIDENCE = {
+  flightMode: "STABILIZE",
+  armed: false,
+  prearmCheck: false,
+  rc: { channels: [1500, 1500, 1100, 1500, null, null, null, null], receiverHealthy: true, ageSeconds: 0.2 },
+  pilot: {
+    enabled: true,
+    benchMode: true,
+    deadman: false,
+    override: { channels: [1500, 1500, 1100, 1500, 65535, 65535, 65535, 65535], released: false },
+    overrideOwned: true,
+    transmitting: false,
+    outputActive: false,
+    armingInputActive: true,
+    rcConfiguration: {
+      mapping: { roll: 1, pitch: 2, throttle: 3, yaw: 4 },
+      channels: { 3: { min: 1100, trim: 1500, max: 1900, reversed: false } }
+    },
+    throttleFailsafe: { enabled: true, enableRaw: 1, valuePwm: 975 }
+  },
+  recentStatusTexts: []
 };
 
-function pilotSnapshot(overrides = {}) {
-  return {
-    available: true,
-    enabled: false,
-    outputActive: false,
-    blockedReason: "not_enabled",
-    requiredMode: "GUIDED",
-    limits: LIMITS,
-    setpoint: { vx: 0, vy: 0, vz: 0, yawRate: 0 },
-    axes: { forward: 0, right: 0, up: 0, yaw: 0 },
-    inputAgeSeconds: null,
-    inputTimeoutSeconds: 0.5,
-    setpointRateHz: 15.0,
-    setpointsSent: 0,
-    lastSentAt: null,
-    sequence: 0,
-    error: null,
-    armSupported: false,
-    takeoffSupported: false,
-    ...overrides
-  };
-}
+test("with no vehicle reason, raw evidence is shown instead of a dead end", async ({ page }) => {
+  await openManualPanel(page, {
+    rejectArm: { resultName: "FAILED", vehicleReason: null, armEvidence: SAMPLE_ARM_EVIDENCE }
+  });
+  await enableBench(page);
+  await page.locator("#pilotArmButton").click();
 
-function status({ pilot = pilotSnapshot(), armed = false, flightMode = "STABILIZE" } = {}) {
-  return {
-    connectionState: "connected",
-    connected: true,
-    commandable: true,
-    mode: "mock",
-    allowSafeCommands: true,
-    armSupported: false,
-    takeoffSupported: false,
-    error: null,
-    transport: { transport: "mock", port: null, baud: null },
-    link: { stale: false, lastMessageAge: 0.2, lastHeartbeatAge: 0.3, messageCounts: {}, totalMessages: 10 },
-    vehicle: { armed, flightMode, vehicleTypeName: "QUADROTOR", autopilotName: "ARDUPILOTMEGA", systemId: 1, componentId: 1 },
-    battery: { voltage: 16.2, current: 1.4, remaining: 96, sensorsOk: true },
-    gps: { fixType: 3, fixTypeName: "3D_FIX", satellites: 14, lat: 34.54, lon: 135.735, altMsl: 62.0 },
-    attitude: { roll: 0, pitch: 0, yaw: 0, yawNormalized: 0 },
-    motion: { heading: 0, groundSpeed: 0, airSpeed: 0, altitude: 62, climbRate: 0 },
-    position: { lat: 34.54, lon: 135.735, altAmsl: 62, altRelative: 0.1, available: true },
-    version: { flightSwVersion: "4.5.7" },
-    statusTexts: [],
-    pilot
-  };
-}
+  await expect(page.locator("#pilotArmVehicleReason")).toHaveAttribute("data-fallback", "true");
+  const evidence = page.locator("#pilotArmEvidence");
+  await expect(evidence).toBeVisible();
+  await expect(evidence).toContainText("No detailed STATUSTEXT received");
+  await expect(evidence).toContainText("STABILIZE");
+  await expect(evidence).toContainText("DISARMED");
+  await expect(evidence).toContainText("FAIL"); // pre-arm check health
+  await expect(evidence).toContainText("1100"); // throttle PWM (CH3)
+  await expect(evidence).toContainText("975"); // FS_THR_VALUE
+  // Evidence reports facts; it must never claim to know the cause.
+  await expect(evidence).not.toContainText("caused by");
+  await expect(evidence).not.toContainText("because");
+});
 
-/**
- * Intercept the backend and record every pilot request.
- * Returns the recorder; `posts` is filled as the page runs.
- */
-async function stubBackend(page, statusBody) {
-  const posts = [];
-  await page.routeWebSocket(`${BACKEND.replace("http", "ws")}/api/drone/telemetry/ws`, (ws) => ws.close());
+test("with a vehicle reason present, the evidence block is not shown at all", async ({ page }) => {
+  await openManualPanel(page, {
+    rejectArm: {
+      resultName: "FAILED",
+      vehicleReason: "PreArm: Hardware safety switch",
+      armEvidence: SAMPLE_ARM_EVIDENCE
+    }
+  });
+  await enableBench(page);
+  await page.locator("#pilotArmButton").click();
 
-  await page.route(`${BACKEND}/**`, async (route) => {
-    const request = route.request();
-    const url = request.url();
+  await expect(page.locator("#pilotArmVehicleReason")).toHaveText("PreArm: Hardware safety switch");
+  await expect(page.locator("#pilotArmEvidence")).toHaveCount(0);
+});
 
-    if (url.includes("/api/drone/pilot/")) {
-      let body = null;
-      try {
-        body = request.postDataJSON();
-      } catch {
-        body = null;
-      }
-      posts.push({ path: url.replace(BACKEND, ""), body });
-      const enabled = !url.endsWith("/disable");
-      await route.fulfill({
-        json: { ok: true, reason: "accepted", message: "", detail: { pilot: pilotSnapshot({ enabled }) } }
-      });
-      return;
-    }
-    if (url.endsWith("/api/health")) {
-      await route.fulfill({ json: { status: "ok", version: "0.1.0", mode: "mock", linkRunning: true } });
-      return;
-    }
-    if (url.endsWith("/api/drone/config")) {
-      await route.fulfill({
-        json: {
-          config: { mode: "mock", port: null, baud: null, allowSafeCommands: true, armSupported: false, takeoffSupported: false, allowedModes: ["STABILIZE", "ALT_HOLD"] },
-          allowedModes: ["STABILIZE", "ALT_HOLD"],
-          allowedStreams: [],
-          disabledOperations: {}
-        }
-      });
-      return;
-    }
-    if (url.endsWith("/api/drone/status")) {
-      await route.fulfill({ json: statusBody });
-      return;
-    }
-    await route.fulfill({ json: { ok: true, reason: "accepted", message: "ok", detail: {} } });
+// ----------------------------------------------------------------------
+// "RC INPUT SEEN BY PIXHAWK": the vehicle's own reported RC input, not
+// merely what the browser intended to send.
+// ----------------------------------------------------------------------
+
+test("RC input seen by Pixhawk shows the vehicle's own reported channel values, mapped through RCMAP", async ({ page }) => {
+  await openManualPanel(page, {
+    initial: telemetryStatus({
+      rc: { channels: [1500, 1500, 1100, 1500, null, null, null, null], channelCount: 4, rssi: 200, receiverHealthy: true, ageSeconds: 0.3 },
+      prearmCheck: true
+    })
   });
 
-  const inputs = () => posts.filter((p) => p.path.endsWith("/input"));
-  return {
-    posts,
-    inputs,
-    paths: () => posts.map((p) => p.path),
-    /**
-     * Frames sent from `index` onwards. Used to assert that a stop really
-     * stopped: after a neutral, the controller keeps refreshing at the
-     * keepalive interval, and those refresh frames carry `neutral: false`
-     * with zero axes. Checking only the *last* frame would therefore be a
-     * race. What must hold is that a neutral was sent and nothing after it
-     * commands movement.
-     */
-    since: (index) => inputs().slice(index),
-    movement: (frames) =>
-      frames.filter((p) => ["forward", "right", "up", "yaw"].some((k) => (p.body?.[k] ?? 0) !== 0))
-  };
-}
+  const section = page.locator(".pilot-rc-input-section");
+  await expect(section).toContainText("1500 µs"); // roll / CH1
+  await expect(section).toContainText("1100 µs"); // throttle / CH3
+  await expect(page.locator("#pilotRcFailsafe")).toHaveText("NO");
+  await expect(page.locator("#pilotPrearmHealth")).toHaveText("PASS");
+  await expect(page.locator("#pilotRcAge")).toContainText("0.3 s");
+});
 
-async function openPilotPanel(page, statusBody = status()) {
-  const recorder = await stubBackend(page, statusBody);
-  await page.goto("/#survey");
-  await expect(page.locator("#pilotPanel")).toBeAttached({ timeout: 15_000 });
-  return recorder;
-}
+test("RC input seen by Pixhawk shows UNKNOWN, not a false PASS, when the vehicle has not reported it", async ({ page }) => {
+  await openManualPanel(page); // default telemetryStatus(): rc channels all null, prearmCheck null
 
-async function reveal(page) {
-  await page.waitForFunction(() => Boolean(window.pilotControlPanel));
-  await page.evaluate(() => {
-    const panel = document.getElementById("pilotPanel");
-    panel.hidden = false;
-    panel.open = true;
+  await expect(page.locator("#pilotPrearmHealth")).toHaveText("UNKNOWN");
+  await expect(page.locator("#pilotRcFailsafe")).toHaveText("UNKNOWN");
+  const section = page.locator(".pilot-rc-input-section");
+  await expect(section).toContainText("—"); // no channel data yet, never a fabricated PWM
+});
+
+test("RC input seen by Pixhawk reports failsafe YES when the vehicle's RC receiver is unhealthy", async ({ page }) => {
+  await openManualPanel(page, {
+    initial: telemetryStatus({
+      rc: { channels: [0, 0, 0, 0, null, null, null, null], channelCount: 4, rssi: 0, receiverHealthy: false, ageSeconds: 1.1 }
+    })
   });
-}
-
-/** Enable the control channel the way an operator would: by clicking. */
-async function enableControl(page) {
-  await page.locator("#pilotEnableButton").click();
-  await expect(page.locator("#pilotEnabled")).toContainText("有効");
-}
-
-const axis = (page, name) => page.locator(`#pilotAxis-${name}`);
-
-/**
- * Assert that a stop actually stopped: a neutral frame was sent after `from`,
- * and no frame from that neutral onwards commands movement.
- *
- * Checking only the newest frame would be a race — after a neutral the
- * controller keeps refreshing at its keepalive interval, and those refreshes
- * are ordinary zero frames with `neutral: false`.
- */
-async function expectStopped(backend, from) {
-  await expect.poll(() => backend.since(from).some((p) => p.body?.neutral === true)).toBe(true);
-  const frames = backend.since(from);
-  const neutralAt = frames.findIndex((p) => p.body?.neutral === true);
-  expect(backend.movement(frames.slice(neutralAt))).toEqual([]);
-}
-
-// ----------------------------------------------------------------------
-// Visibility and defaults
-// ----------------------------------------------------------------------
-
-test("the panel stays hidden and unmounted when the backend has not enabled pilot control", async ({ page }) => {
-  await openPilotPanel(page, status({ pilot: pilotSnapshot({ available: false, blockedReason: "pilot_control_disabled" }) }));
-  // Give the bootstrap the same time it would have had to mount.
-  await page.waitForTimeout(1000);
-
-  expect(await page.evaluate(() => Boolean(window.pilotControlPanel))).toBe(false);
-  await expect(page.locator("#pilotPanel")).toBeHidden();
-  await expect(page.locator("#pilotRoot")).toBeEmpty();
+  await expect(page.locator("#pilotRcFailsafe")).toHaveText("YES");
 });
 
-test("an available panel shows the source, mode, armed state and the configured limits", async ({ page }) => {
-  await openPilotPanel(page);
-  await reveal(page);
-
-  await expect(page.locator("#pilotSource")).toContainText("None");
-  await expect(page.locator("#pilotEnabled")).toContainText("無効");
-  await expect(page.locator("#pilotOutput")).toContainText("停止");
-  await expect(page.locator("#pilotMode")).toHaveText("STABILIZE");
-  await expect(page.locator("#pilotArmed")).toContainText("DISARMED");
-
-  await expect(page.locator("#pilotLimitH")).toHaveText("0.30 m/s");
-  await expect(page.locator("#pilotLimitUp")).toHaveText("0.30 m/s");
-  await expect(page.locator("#pilotLimitDown")).toHaveText("0.20 m/s");
-  await expect(page.locator("#pilotLimitYaw")).toHaveText("12 °/s");
-});
-
-test("the panel says plainly that this is a low-speed test mode, not an RC replacement", async ({ page }) => {
-  await openPilotPanel(page);
-  await reveal(page);
-  await expect(page.locator("#pilotPanel")).toContainText("not a replacement for an RC transmitter");
-});
-
-test("the panel exposes no arm, takeoff, land or motor control, and Space is not called a kill switch", async ({ page }) => {
-  await openPilotPanel(page);
-  await reveal(page);
-
-  const labels = await page.locator("#pilotPanel button").allInnerTexts();
-  for (const label of labels) {
-    expect(label, `unsafe control found: ${label}`).not.toMatch(/arm|アーム|takeoff|離陸|land|着陸|rtl|throttle|スロットル|motor|モーター/i);
-  }
-  // textContent, not innerText: the key-mapping table is inside a collapsed
-  // <details> and its wording matters just as much as the visible copy.
-  const text = await page.locator("#pilotPanel").textContent();
-  expect(text).not.toMatch(/緊急停止|モーター停止|emergency stop/i);
-  // The one permitted use of the word is the disclaimer itself.
-  expect(text).toMatch(/not a motor kill/i);
-  expect(text.replace(/not a motor kill/gi, "")).not.toMatch(/kill/i);
-});
-
-// ----------------------------------------------------------------------
-// Keys only work once the operator opts in
-// ----------------------------------------------------------------------
-
-test("arrow keys transmit nothing before the channel is enabled", async ({ page }) => {
-  const backend = await openPilotPanel(page);
-  await reveal(page);
-
-  await page.keyboard.down("ArrowUp");
-  await page.waitForTimeout(400);
-  await page.keyboard.up("ArrowUp");
-
-  expect(backend.inputs()).toEqual([]);
-  await expect(axis(page, "forward")).toHaveText("0.00");
-});
-
-test("enabling opens the channel without arming anything", async ({ page }) => {
-  const backend = await openPilotPanel(page);
-  await reveal(page);
-  await enableControl(page);
-
-  expect(backend.paths()).toContain("/api/drone/pilot/enable");
-  // Nothing that could arm, take off or move a servo may ever be requested.
-  for (const path of backend.paths()) {
-    expect(path).not.toMatch(/arm|takeoff|land|rtl|servo|motor/i);
-  }
-  await expect(page.locator("#pilotSource")).toContainText("Keyboard");
-});
-
-// ----------------------------------------------------------------------
-// The mapping
-// ----------------------------------------------------------------------
-
-const MAPPING = [
-  { key: "ArrowUp", name: "forward", value: "1.00" },
-  { key: "ArrowDown", name: "forward", value: "-1.00" },
-  { key: "ArrowRight", name: "right", value: "1.00" },
-  { key: "ArrowLeft", name: "right", value: "-1.00" },
-  { key: "KeyW", name: "up", value: "1.00" },
-  { key: "KeyS", name: "up", value: "-1.00" },
-  { key: "KeyD", name: "yaw", value: "1.00" },
-  { key: "KeyA", name: "yaw", value: "-1.00" }
-];
-
-for (const { key, name, value } of MAPPING) {
-  test(`holding ${key} drives the ${name} axis to ${value}`, async ({ page }) => {
-    const backend = await openPilotPanel(page);
-    await reveal(page);
-    await enableControl(page);
-
-    await page.keyboard.down(key);
-    await expect(axis(page, name)).toHaveText(value);
-
-    // And it actually reaches the backend, not just the display.
-    await expect
-      .poll(() => backend.inputs().at(-1)?.body?.[name])
-      .toBe(Number(value));
-
-    await page.keyboard.up(key);
-    await expect(axis(page, name)).toHaveText("0.00");
+test("the diagnostic survives the 500 ms telemetry poll instead of disappearing", async ({ page }) => {
+  await openManualPanel(page, {
+    rejectArm: { vehicleReason: "PreArm: Hardware safety switch" }
   });
-}
+  await enableBench(page);
+  await page.locator("#pilotArmButton").click();
+  await expect(page.locator("#pilotArmVehicleReason")).toHaveText("PreArm: Hardware safety switch");
 
-test("releasing a key returns the axis to neutral at the backend too", async ({ page }) => {
-  const backend = await openPilotPanel(page);
-  await reveal(page);
-  await enableControl(page);
-
-  await page.keyboard.down("ArrowUp");
-  await expect.poll(() => backend.inputs().at(-1)?.body?.forward).toBe(1);
-  await page.keyboard.up("ArrowUp");
-  await expect.poll(() => backend.inputs().at(-1)?.body?.forward).toBe(0);
+  // Comfortably longer than TELEMETRY_POLL_MS (500 ms): several polls must
+  // pass without the reason being blanked or replaced.
+  await page.waitForTimeout(1300);
+  await expect(page.locator("#pilotArmVehicleReason")).toHaveText("PreArm: Hardware safety switch");
 });
 
-test("opposing keys held together cancel to zero", async ({ page }) => {
-  await openPilotPanel(page);
-  await reveal(page);
-  await enableControl(page);
+test("a successful ARM clears the earlier rejection's vehicle reason", async ({ page }) => {
+  const backend = await openManualPanel(page, {
+    rejectArm: { vehicleReason: "PreArm: Hardware safety switch" }
+  });
+  await enableBench(page);
 
-  await page.keyboard.down("ArrowUp");
-  await expect(axis(page, "forward")).toHaveText("1.00");
-  await page.keyboard.down("ArrowDown");
-  await expect(axis(page, "forward")).toHaveText("0.00");
+  await page.locator("#pilotArmButton").click();
+  await expect(page.locator("#pilotArmVehicleReason")).toHaveText("PreArm: Hardware safety switch");
 
-  await page.keyboard.up("ArrowUp");
-  await page.keyboard.up("ArrowDown");
+  backend.setArmRejection(false);
+  await page.locator("#pilotArmButton").click();
+  await expect(page.locator("#pilotArmed")).toHaveText("ARMED");
+  await expect(page.locator("#pilotArmDiagnostic")).toHaveCount(0);
 });
 
-test("a diagonal holds both axes at full normalized deflection; the backend does the clamping", async ({ page }) => {
-  const backend = await openPilotPanel(page);
-  await reveal(page);
-  await enableControl(page);
+test("the diagnostic is cleared once the vehicle reports ARMED, even without a fresh ARM click", async ({ page }) => {
+  const backend = await openManualPanel(page, {
+    rejectArm: { vehicleReason: "PreArm: Hardware safety switch" }
+  });
+  await enableBench(page);
+  await page.locator("#pilotArmButton").click();
+  await expect(page.locator("#pilotArmVehicleReason")).toHaveText("PreArm: Hardware safety switch");
 
-  await page.keyboard.down("ArrowUp");
-  await page.keyboard.down("ArrowRight");
-  await expect(axis(page, "forward")).toHaveText("1.00");
-  await expect(axis(page, "right")).toHaveText("1.00");
-
-  await expect.poll(() => backend.inputs().at(-1)?.body).toMatchObject({ forward: 1, right: 1 });
-  // The browser never scales speed; it says "full stick", and the backend
-  // turns that into 0.30 m/s of *total* horizontal velocity.
-  await page.keyboard.up("ArrowUp");
-  await page.keyboard.up("ArrowRight");
+  // The vehicle arms by some other means (transmitter) while the browser was
+  // just polling -- the held reason is now moot and must not linger.
+  backend.pushTelemetry({ vehicle: { ...backend.state.vehicle, armed: true } });
+  await expect(page.locator("#pilotArmed")).toHaveText("ARMED");
+  await expect(page.locator("#pilotArmDiagnostic")).toHaveCount(0);
 });
 
-// ----------------------------------------------------------------------
-// Stopping
-// ----------------------------------------------------------------------
+test("the full Messages list still carries every STATUSTEXT untouched", async ({ page }) => {
+  const initial = telemetryStatus();
+  initial.statusTexts = [
+    { severity: 6, severityName: "INFO", text: "ArduCopter V4.5.7", receivedAt: 1 },
+    { severity: 4, severityName: "WARNING", text: "PreArm: Hardware safety switch", receivedAt: 2 }
+  ];
+  await openManualPanel(page, {
+    initial,
+    rejectArm: { vehicleReason: "PreArm: Hardware safety switch" }
+  });
+  await enableBench(page);
+  await page.locator("#pilotArmButton").click();
+  await expect(page.locator("#pilotArmVehicleReason")).toHaveText("PreArm: Hardware safety switch");
 
-test("Space neutralises every axis, tells the backend, and shows it happened", async ({ page }) => {
-  const backend = await openPilotPanel(page);
-  await reveal(page);
-  await enableControl(page);
+  // The dedicated diagnostic block does not remove or replace the ordinary
+  // Messages surface; both statustext entries are still present wherever
+  // that list is rendered.
+  const messages = await page.evaluate(() => window.pilotControlPanel?.telemetry?.statusTexts ?? []);
+  const texts = messages.map((entry) => entry.text);
+  expect(texts).toContain("ArduCopter V4.5.7");
+  expect(texts).toContain("PreArm: Hardware safety switch");
+});
 
-  await page.keyboard.down("ArrowUp");
+test("WebSocket loss stays gated and cannot resume a held command", async ({ page }) => {
+  const backend = await openManualPanel(page);
+  await enableBench(page);
+  await armMock(page);
+  await page.keyboard.down("ShiftLeft");
   await page.keyboard.down("KeyW");
-  await expect(axis(page, "forward")).toHaveText("1.00");
+  await expect(page.locator("#pilotStatusTransmitting")).toHaveAttribute("data-tone", "danger");
 
-  // Mark the position in the stream *before* the key, so the neutral frame
-  // cannot slip past while the assertions below are running.
   const before = backend.inputs().length;
-  await page.keyboard.press("Space");
+  backend.closeWebSocket();
+  await expect.poll(() => backend.inputs().slice(before).some((post) => post.body?.neutral === true)).toBe(true);
+  await expect(page.locator("#pilotStatusTransmitting")).toHaveAttribute("data-tone", "idle");
+  await expect(page.locator("#pilotBlockedBanner")).toContainText("WebSocket disconnected");
 
-  // The confirmation indicator is time-limited (it tracks the window in which
-  // zeros are actually being transmitted), so check it before anything slower.
-  await expect(page.locator("#pilotNeutralFlash")).toBeVisible();
-  await expect(axis(page, "forward")).toHaveText("0.00");
-  await expect(axis(page, "up")).toHaveText("0.00");
-
-  await expectStopped(backend, before);
-
-  // Space is a movement command, not a disable: the channel stays open.
-  await expect(page.locator("#pilotEnabled")).toContainText("有効");
-  await page.keyboard.up("ArrowUp");
+  const movementCount = backend.movementInputs().length;
   await page.keyboard.up("KeyW");
+  await page.keyboard.down("ArrowRight");
+  await page.waitForTimeout(350);
+  expect(backend.movementInputs()).toHaveLength(movementCount);
+  await expect(page.locator("#pilotStatusTransmitting")).toHaveAttribute("data-tone", "idle");
+  await page.keyboard.up("ArrowRight");
+  await page.keyboard.up("ShiftLeft");
 });
 
-test("losing window focus while a key is held commands neutral", async ({ page }) => {
-  const backend = await openPilotPanel(page);
-  await reveal(page);
-  await enableControl(page);
+test("WebSocket loss before ARM hides Ready and disables ARM", async ({ page }) => {
+  const backend = await openManualPanel(page);
+  await enableBench(page);
+  await expect(page.locator("#pilotArmButton")).toBeEnabled();
 
-  await page.keyboard.down("ArrowUp");
-  await expect.poll(() => backend.inputs().at(-1)?.body?.forward).toBe(1);
-
-  const before = backend.inputs().length;
-  await page.evaluate(() => window.dispatchEvent(new Event("blur")));
-
-  await expect(axis(page, "forward")).toHaveText("0.00");
-  // A key the browser can no longer see released must not keep commanding.
-  await expectStopped(backend, before);
+  backend.closeWebSocket();
+  await expect(page.locator("#pilotBlockedBanner")).toContainText("WebSocket disconnected");
+  await expect(page.locator("#pilotArmButton")).toBeDisabled();
+  await expect(page.locator("#pilotStatusFailsafe")).toHaveAttribute("data-tone", "warn");
 });
 
-test("the tab becoming hidden commands neutral", async ({ page }) => {
-  const backend = await openPilotPanel(page);
-  await reveal(page);
-  await enableControl(page);
-
-  await page.keyboard.down("ArrowUp");
-  await expect.poll(() => backend.inputs().at(-1)?.body?.forward).toBe(1);
-
-  const before = backend.inputs().length;
-  await page.evaluate(() => {
-    Object.defineProperty(document, "hidden", { value: true, configurable: true });
-    document.dispatchEvent(new Event("visibilitychange"));
+test("a WebSocket that never opens cannot enable or transmit manual control", async ({ page }) => {
+  const backend = await openManualPanel(page, {
+    initial: telemetryStatus({ armed: true })
   });
+  await page.evaluate(() => {
+    const panel = window.pilotControlPanel;
+    panel.socketHandle?.close?.();
+    panel.droneClient.WebSocketImpl = class StuckWebSocket extends EventTarget {
+      static CONNECTING = 0;
+      constructor() {
+        super();
+        this.readyState = 0;
+      }
+      close() {}
+    };
+    panel.openSocket();
+  });
+  await page.locator("#pilotBenchPropsAck").check();
+  await expect(page.locator("#pilotBenchEnableButton")).toBeDisabled();
+  await expect(page.locator("#pilotBlockedBanner")).toContainText("WebSocket disconnected");
 
-  await expect(axis(page, "forward")).toHaveText("0.00");
-  await expectStopped(backend, before);
+  await page.locator("#gpKeyCapture").click();
+  await page.keyboard.down("ShiftLeft");
+  await page.keyboard.down("KeyW");
+  await page.waitForTimeout(300);
+  expect(backend.movementInputs()).toHaveLength(0);
+  await page.keyboard.up("KeyW");
+  await page.keyboard.up("ShiftLeft");
 });
 
-test("the neutral button stops movement without closing the channel", async ({ page }) => {
-  const backend = await openPilotPanel(page);
-  await reveal(page);
-  await enableControl(page);
+test("backend readiness and RC diagnostics remain authoritative", async ({ page }) => {
+  const pilot = pilotSnapshot({
+    enabled: true,
+    readyToArm: false,
+    blockedReason: "rc_overrides_ignored",
+    rcConfiguration: null,
+    rcConfigurationError: {
+      reason: "rc_overrides_ignored",
+      message: "RC_OPTIONS bit 1 ignores MAVLink overrides"
+    }
+  });
+  await openManualPanel(page, { initial: telemetryStatus({ pilot }) });
 
-  await page.keyboard.down("ArrowUp");
-  await expect.poll(() => backend.inputs().at(-1)?.body?.forward).toBe(1);
+  await expect(page.locator("#pilotBlockedBanner")).toContainText("RC_OPTIONS");
+  await expect(page.locator("#pilotBlockedBanner")).not.toContainText("Ready to arm");
+  await expect(page.locator("#pilotArmButton")).toBeDisabled();
+  await page.getByText("RC mapping / Safety diagnostics").click();
+  await expect(page.locator("#pilotRoot")).toContainText("Pending / incompatible");
+});
+
+test("the mock-provider query cannot drive input when the backend reports real mode", async ({ page }) => {
+  const initial = telemetryStatus();
+  initial.mode = "real";
+  const backend = await openManualPanel(page, { initial });
+  await page.locator("#gpSource").selectOption("ps5");
+
+  await expect(page.locator("[data-mock-connect]")).toHaveCount(0);
+  expect(await page.evaluate(() => window.gamepadController.mockEnabled)).toBe(false);
+  await enableBench(page);
+  await armMock(page);
+  await page.evaluate(() => {
+    window.gamepadController.mock.connect();
+    window.gamepadController.mock.setButton(4, 1);
+    window.gamepadController.mock.setAxis(1, -0.8);
+  });
+  await page.waitForTimeout(350);
+  expect(backend.movementInputs()).toHaveLength(0);
+  await expect(page.locator("#pilotStatusTransmitting")).toHaveAttribute("data-tone", "idle");
+});
+
+test("a live WebSocket payload reporting stale MAVLink clears output immediately", async ({ page }) => {
+  const backend = await openManualPanel(page);
+  await enableBench(page);
+  await armMock(page);
+  await page.keyboard.down("ShiftLeft");
+  await page.keyboard.down("KeyW");
+  await expect(page.locator("#pilotStatusTransmitting")).toHaveAttribute("data-tone", "danger");
 
   const before = backend.inputs().length;
-  await page.locator("#pilotNeutralButton").click();
-  await expect.poll(() => backend.since(before).some((p) => p.body?.neutral === true)).toBe(true);
-  await expect(page.locator("#pilotEnabled")).toContainText("有効");
+  backend.pushTelemetry({ connectionState: "telemetry_stale", link: { stale: true, lastMessageAge: 8.4 } });
+  await expect.poll(() => backend.inputs().slice(before).some((post) => post.body?.neutral === true)).toBe(true);
+  await expect(page.locator("#pilotStatusTransmitting")).toHaveAttribute("data-tone", "idle");
+  await expect(page.locator("#pilotBlockedBanner")).toContainText("Telemetry is stale");
+  await page.keyboard.up("KeyW");
+  await page.keyboard.up("ShiftLeft");
+});
+
+for (const viewport of [
+  { width: 1024, height: 768 },
+  { width: 1366, height: 768 },
+  { width: 1920, height: 1080 }
+]) {
+  test(`Manual Control is readable without document overflow at ${viewport.width}x${viewport.height}`, async ({ page }) => {
+    await page.setViewportSize(viewport);
+    await openManualPanel(page);
+    const layout = await page.evaluate(() => {
+      const chips = [...document.querySelectorAll("#pilotRoot .drone-chip")];
+      return {
+        overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        chips: chips.map((chip) => {
+          const style = getComputedStyle(chip);
+          return {
+            text: chip.textContent.trim(),
+            whiteSpace: style.whiteSpace,
+            wordBreak: style.wordBreak,
+            height: chip.getBoundingClientRect().height,
+            lineHeight: parseFloat(style.lineHeight) || chip.getBoundingClientRect().height
+          };
+        })
+      };
+    });
+    expect(layout.overflow).toBeLessThanOrEqual(1);
+    for (const chip of layout.chips) {
+      expect(chip.whiteSpace, chip.text).toBe("nowrap");
+      expect(chip.wordBreak, chip.text).not.toBe("break-all");
+      expect(chip.height / chip.lineHeight, chip.text).toBeLessThan(1.8);
+    }
+  });
+}
+
+// ----------------------------------------------------------------------
+// ARM eligibility and the HTTP 422 regression
+//
+// Reported symptom: the ARM button was disabled (bare "not-allowed" cursor,
+// no stated reason) while the blocked banner read "Blocked: http 422".
+//
+// Two independent defects, both covered here:
+//   1. The browser could send `provider: "ps5"` — a UI *source* id in a field
+//      whose backend contract is a provider Literal — so FastAPI rejected the
+//      frame with 422. Release/neutral frames were rejected too, and the
+//      failure latched into the gate banner.
+//   2. A disabled ARM button explained nothing.
+//
+// The dead-man is deliberately NOT an ARM gate: it authorises continuous
+// manual RC movement, whereas ARM is one deliberate operator action.
+// ----------------------------------------------------------------------
+
+test("ARM is enabled with the dead-man released, and stays enabled while it is held", async ({ page }) => {
+  await openManualPanel(page);
+  await enableBench(page);
+
+  await expect(page.locator("#pilotDeadman")).toHaveText("RELEASED");
+  await expect(page.locator("#pilotArmButton")).toBeEnabled();
+  await expect(page.locator("#pilotArmStatus")).toHaveText("READY");
+  await expect(page.locator("#pilotArmReason")).toHaveCount(0);
+
+  await page.keyboard.down("ShiftLeft");
+  await expect(page.locator("#pilotDeadman")).toHaveText("HELD");
+  await expect(page.locator("#pilotArmButton")).toBeEnabled();
+  await page.keyboard.up("ShiftLeft");
+});
+
+test("a disabled ARM button always states why, in words", async ({ page }) => {
+  await openManualPanel(page);
+
+  // Bench Pilot not enabled yet.
+  await expect(page.locator("#pilotArmButton")).toBeDisabled();
+  await expect(page.locator("#pilotArmReason")).toContainText("Enable Bench Pilot first");
+  await expect(page.locator("#pilotArmStatus")).toHaveText("UNAVAILABLE");
+
+  // Ticking the acknowledgement alone must not enable ARM.
+  await page.locator("#pilotBenchPropsAck").check();
+  await expect(page.locator("#pilotArmButton")).toBeDisabled();
+  await expect(page.locator("#pilotArmReason")).toContainText("Enable Bench Pilot first");
+});
+
+test("ARM is disabled with a stated reason when MAVLink drops, and DISARM is offered once ARMED", async ({ page }) => {
+  const backend = await openManualPanel(page);
+  await enableBench(page);
+  await expect(page.locator("#pilotArmButton")).toBeEnabled();
+
+  await armMock(page);
+  await expect(page.locator("#pilotArmButton")).toBeDisabled();
+  await expect(page.locator("#pilotArmReason")).toContainText("already ARMED");
+  await expect(page.locator("#pilotDisarmButton")).toBeEnabled();
+
+  backend.pushTelemetry({ connectionState: "disconnected", connected: false, link: { stale: true } });
+  await expect(page.locator("#pilotArmButton")).toBeDisabled();
+  await expect(page.locator("#pilotArmReason")).toContainText("MAVLink is disconnected or telemetry is stale");
+});
+
+test("no manual frame is ever rejected as an API validation error, on either input source", async ({ page }) => {
+  const backend = await openManualPanel(page);
+
+  // Exercise the PS5 source too: its UI id ("ps5") is not a wire provider id,
+  // and sending it verbatim is what produced HTTP 422.
+  await page.locator("#gpSource").selectOption("ps5");
+  await page.locator("#gpSource").selectOption("keyboard");
+
+  await enableBench(page);
+  await page.keyboard.down("ShiftLeft");
+  await page.keyboard.down("ArrowUp");
+  await expect.poll(() => backend.inputs().length).toBeGreaterThan(0);
   await page.keyboard.up("ArrowUp");
+  await page.keyboard.up("ShiftLeft");
+
+  const allowed = ["keyboard", "browser", "mock", "gamepad", "unknown"];
+  for (const post of backend.inputs()) {
+    expect(allowed, `provider ${post.body?.provider}`).toContain(post.body?.provider ?? "unknown");
+    expect(typeof post.body?.source).toBe("string");
+    expect(post.body.source.length).toBeGreaterThan(0);
+    expect(Number.isInteger(post.body?.sequence)).toBe(true);
+  }
+
+  // And nothing latched an HTTP validation failure into the gate banner.
+  await expect(page.locator("#pilotBlockedBanner")).not.toContainText("422");
 });
 
-test("disabling stops the stream entirely", async ({ page }) => {
-  const backend = await openPilotPanel(page);
-  await reveal(page);
-  await enableControl(page);
+test("a stale transport failure stops masquerading as the current gate once frames flow again", async ({ page }) => {
+  await openManualPanel(page);
+  await enableBench(page);
+  // Arm first: while the vehicle is ready-to-arm the banner deliberately shows
+  // "Ready to arm", so a latched gate is only observable once it is armed —
+  // which is also the state the operator reported the sticky 422 in.
+  await armMock(page);
 
-  await page.locator("#pilotEnableButton").click();
-  await expect(page.locator("#pilotEnabled")).toContainText("無効");
-  expect(backend.paths()).toContain("/api/drone/pilot/disable");
+  // Latch a transport failure the same way a failed frame does.
+  await page.evaluate(() => {
+    window.pilotControlPanel.controller.failsafeReason = "http_422";
+    window.pilotControlPanel.render();
+  });
+  await expect(page.locator("#pilotBlockedBanner")).toContainText("http 422");
 
-  const sent = backend.inputs().length;
+  // A delivered frame proves the transport recovered.
+  await page.keyboard.down("ShiftLeft");
   await page.keyboard.down("ArrowUp");
-  await page.waitForTimeout(400);
+  await expect(page.locator("#pilotBlockedBanner")).not.toContainText("422");
   await page.keyboard.up("ArrowUp");
-  expect(backend.inputs().length).toBe(sent);
+  await page.keyboard.up("ShiftLeft");
 });
 
-// ----------------------------------------------------------------------
-// Not stealing the keyboard
-// ----------------------------------------------------------------------
+test("an idle, disarmed bench vehicle with the dead-man released is not a FAILSAFE", async ({ page }) => {
+  await openManualPanel(page);
+  await enableBench(page);
 
-test("typing into a survey field never moves an axis, even with control enabled", async ({ page }) => {
-  const backend = await openPilotPanel(page);
-  await reveal(page);
-  await enableControl(page);
-
-  // The guard keys off the event target's element type, so any focused text
-  // field exercises it. The survey's own fields live inside collapsed panels
-  // in this workspace, so plant a visible one rather than fight the layout.
-  await page.evaluate(() => {
-    const field = document.createElement("input");
-    field.type = "text";
-    field.id = "pilotTypingProbe";
-    document.body.prepend(field);
-  });
-  const field = page.locator("#pilotTypingProbe");
-  await field.click();
-  await page.keyboard.type("wasd");
-  await page.keyboard.press("ArrowLeft");
-  await page.keyboard.press("ArrowRight");
-
-  await expect(axis(page, "up")).toHaveText("0.00");
-  await expect(axis(page, "yaw")).toHaveText("0.00");
-  await expect(axis(page, "right")).toHaveText("0.00");
-
-  const moved = backend.inputs().some((p) => Object.values(p.body || {}).some((v) => typeof v === "number" && v !== 0));
-  expect(moved, "typing must never produce a movement command").toBe(false);
-});
-
-test("the page does not scroll away under the operator while flying", async ({ page }) => {
-  await openPilotPanel(page);
-  await reveal(page);
-  await enableControl(page);
-
-  const before = await page.evaluate(() => window.scrollY);
-  await page.keyboard.press("ArrowDown");
-  await page.keyboard.press("Space");
-  await page.waitForTimeout(150);
-  expect(await page.evaluate(() => window.scrollY)).toBe(before);
-});
-
-// ----------------------------------------------------------------------
-// The rest of the app
-// ----------------------------------------------------------------------
-
-test("the gamepad preview panel is unaffected by the pilot panel being present", async ({ page }) => {
-  await openPilotPanel(page);
-  await page.waitForFunction(() => Boolean(window.gamepadController));
-  await page.evaluate(() => {
-    const panel = document.getElementById("gamepadPanel");
-    panel.hidden = false;
-    panel.open = true;
-  });
-  await expect(page.locator("#gamepadPanel")).toContainText("No aircraft commands are being transmitted");
-});
-
-test("the survey workflow still works with the pilot panel mounted", async ({ page }) => {
-  await openPilotPanel(page);
-  await expect(page.locator("#serialConnectButton")).toBeAttached();
-  await expect(page.locator("#recStartButton")).toBeAttached();
+  await expect(page.locator("#pilotDeadman")).toHaveText("RELEASED");
+  await expect(page.locator("#pilotStatusFailsafe")).toHaveAttribute("data-tone", "idle");
+  await expect(page.locator("#pilotBlockedBanner")).toContainText("Ready to arm");
 });

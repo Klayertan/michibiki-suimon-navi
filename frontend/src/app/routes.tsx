@@ -5,7 +5,7 @@ import { WORKSPACES } from './workspaces'
 import { OverviewInspector } from '../features/overview/OverviewInspector'
 import { FieldWorkspace } from '../features/fields/FieldWorkspace'
 import { SurveyInspector } from '../features/survey/SurveyInspector'
-import { WaterInspector } from '../features/water/WaterInspector'
+import { WaterWorkspace } from '../features/water/WaterWorkspace'
 import { DroneInspector } from '../features/drone/DroneInspector'
 import { AiInspector } from '../features/ai/AiInspector'
 import { DataInspector } from '../features/data/DataInspector'
@@ -16,7 +16,7 @@ const INSPECTORS: Record<string, ComponentType> = {
   overview: OverviewInspector,
   field: FieldWorkspace,
   survey: SurveyInspector,
-  water: WaterInspector,
+  water: WaterWorkspace,
   drone: DroneInspector,
   ai: AiInspector,
   data: DataInspector,

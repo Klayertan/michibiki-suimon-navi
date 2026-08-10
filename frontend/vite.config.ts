@@ -11,6 +11,12 @@ import react from '@vitejs/plugin-react'
 //   already-working, framework-independent modules straight from the
 //   repository's `js/` tree (e.g. `js/drone/drone-api-client.js`) instead of
 //   duplicating them. Stage 1 only imports drone-api-client.js this way.
+// - `resolve.alias['@data']` (Stage 4B) does the same for the repository's
+//   static `data/*.json` (e.g. `data/gate_rules.json`) so the gate-decision
+//   thresholds are imported, not duplicated as a second literal in React.
+//   This is a build-time read, unlike the legacy app's runtime `fetch()` of
+//   the same file -- see docs/FRONTEND_ARCHITECTURE.md's Stage 4B section for
+//   why that difference doesn't change observable behavior today.
 // - `server.proxy['/api']` forwards this dev server's `/api/*` calls
 //   (HTTP *and* the telemetry WebSocket, `ws: true`) to the existing FastAPI
 //   backend on 127.0.0.1:8787. The frontend therefore never hard-codes the
@@ -21,6 +27,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@legacy': fileURLToPath(new URL('../js', import.meta.url)),
+      '@data': fileURLToPath(new URL('../data', import.meta.url)),
     },
   },
   server: {

@@ -1,6 +1,232 @@
-# Frontend Architecture — `frontend/` (through Stage 3C)
+# Frontend Architecture — `frontend/` (through Stage 5B)
 
-This documents the new React/TypeScript/Vite frontend, living at `frontend/` beside the existing static app (`index.html`, `css/`, `js/`, `data/` at the repository root). Stage 1 established the shell, Stage 2 added Field management, Stage 3A added read-only saved surveys, Stage 3B added live WebSerial/recording, and Stage 3C bridges saved surveys into fields and field-aware observations. See [`docs/UI_REDESIGN.md`](./UI_REDESIGN.md) for the Stage 0 audit and migration plan.
+This documents the new React/TypeScript/Vite frontend, living at `frontend/` beside the existing static app (`index.html`, `css/`, `js/`, `data/` at the repository root). Stage 1 established the shell, Stage 2 added Field management, Stage 3A added read-only saved surveys, Stage 3B added live WebSerial/recording, Stage 3C bridged saved surveys into fields and field-aware observations, Stage 4A added the water foundation, Stage 4B added the gate decision/recommendation, Stage 5A added recording crash recovery, and Stage 5B added transient GNSS serial disconnect/reconnect reliability. See [`docs/UI_REDESIGN.md`](./UI_REDESIGN.md) for the Stage 0 audit and migration plan.
+
+## Stage 5B — GNSS reconnect reliability
+
+Stage 3B's `SerialGnssService` already silently retried every already-granted port on a manual `connect()` call, but nothing triggered that retry automatically, and a declared-but-dead `'stalled'` state sat unused in the type since Stage 3B. Stage 5B wires both up without adding a second serial service or a parallel connection concept.
+
+### Disconnect classes, and which ones retry
+
+| Class | What it is | Reconnects automatically? |
+|---|---|---|
+| A — device disconnect event | The browser's native `serial` `'disconnect'` event | Yes |
+| B — read-loop failure | `reader.read()` rejects, or the stream ends without an event | Yes (same path as A) |
+| C — malformed NMEA | One bad sentence | No — parser-level, unchanged since Stage 3B |
+| D — stalled input | Port open, read loop healthy, no byte for 8s (`DEFAULT_STALL_TIMEOUT_MS`, reused from `js/recording/recording-core.js`'s `DEFAULT_DIAGNOSTIC_THRESHOLDS_MS.byteStallMs`) | No — the transport is fine; reopening a healthy port cannot make a receiver produce fixes it doesn't have |
+
+### State machine
+
+`GnssConnectionState` gained `'reconnecting'` and `'reconnect_required'` — no parallel `isReconnecting`/`connectionLost` booleans anywhere. `'stalled'` (declared in Stage 3B, never previously set) is now wired to a lightweight watchdog that tracks the last time any byte arrived and flips `connected ⇄ stalled` independently of the reconnect path — it never touches the port.
+
+```
+                     Class A/B loss                     bounded attempts exhausted
+        connected ──────────────────────► reconnecting ─────────────────────────► reconnect_required
+            ▲                                  │  ▲                                      │
+            │        attempt succeeds          │  │ attempt fails, more remain           │
+            └──────────────────────────────────┘  └──────────────────────────────────────┘
+            ▲                                                                             │
+            └───────────────────────── manual connect() / "Reconnect now" ────────────────┘
+```
+
+An explicit `disconnect()` always lands on plain `disconnected` and clears the retry target, so nothing automatic ever follows a deliberate user action.
+
+### Retry policy
+
+Bounded, capped-exponential: `[1000, 2000, 4000, 8000]` ms, four attempts, ~15s worst case, injectable via the constructor for tests. Automatic reconnect retries **only the specific port (`lastPort`) that was already open** — it never calls `getPorts()`/`requestPort()` itself, so it can neither trigger a permission prompt nor arbitrarily pick a different granted device when more than one exists. A generation counter guards the race between a manual action and a pending automatic attempt: whichever wins closes what the other one just opened rather than leaving two live ports.
+
+### Recording continuity — a guarantee that mostly already existed
+
+`ingest()` only ever fires while a read loop is delivering lines; nothing calls it during a disconnect, so `RecordingService`'s monotonic `seq` counter is simply untouched by the gap — no reset, no duplicate, no loss, by construction. Stage 5B's contribution here is proof (a unit-level integration test wiring a real `SerialGnssService` to a real `RecordingService`, plus three Playwright cases covering a single cycle, repeated cycles, and Resume-then-reconnect), and one real messaging fix: `RecordingService.setConnectionMeta()` now distinguishes `reconnecting` (with the live attempt count), `reconnect_required`, `stalled`, and a plain disconnect, instead of one generic warning for all of them. `Stop Recording` was already independent of connection state and remains so — proven directly rather than assumed.
+
+### Stale-fix gating — closing a real gap in Stage 3C/4A code
+
+`ObservationComposer` and `WaterControlComposer`'s "Use Current GNSS" buttons previously disabled only on `!currentFix`. Both now call the exact legacy gate (`validateObservationCreation()`/`isFixStale()` from `js/recording/recording-core.js`, `DEFAULT_FIX_STALE_MS = 10000`) instead of a re-derived rule. This specifically matters for `'stalled'`: `currentFix` is deliberately preserved (not cleared) while stalled, so a bare null-check would have let an operator record a position from a fix that stopped updating minutes ago. Both components now also subscribe to `connectionState` (not just `currentFix`) so they re-render the instant a stalled transition makes an unchanged fix newly stale.
+
+### UI
+
+```
+useLiveGnssStore ──► SurveyInspector ──┬──► "Connect GNSS" / "Reconnect GNSS" (state-aware label)
+                                        └──► GnssReconnectBanner (presentational; reconnecting/reconnect_required only)
+                                                   │
+                                    onReconnect ───┘──► serialGnssService.connect()
+                                    onStopRecording ──► recordingService.stop()
+```
+
+`GnssReconnectBanner` follows Stage 5A's `RecoveryPanel` pattern exactly: props in, callbacks out, renders nothing outside its two target states, and is unit-testable without any SerialPort at all. It shows only inside the existing Survey inspector — no full-page workflow, no blocking modal — so Survey stays map-first even mid-retry.
+
+The status bar (`useGnssRuntime.ts`'s `publishSerialStatus`, now exported for direct testing) maps `reconnecting`/`reconnect_required`/`stalled` to their own `warning` badges with the attempt count in the detail text, distinct from a plain `disconnected`.
+
+### Stage 5B safety boundary
+
+No IndexedDB schema change, no automatic session resume, no automatic permission prompt, no Wake Lock, no legacy `js/` file touched, no backend file touched.
+
+## Stage 5A — recording crash recovery
+
+Stage 3B could *detect* that an unfinished IndexedDB session existed (it blocked starting a new one) but offered no way to resolve it. Stage 5A closes that gap without adding a second recording system: the existing `RecordingService` singleton gained four methods, and the existing legacy state machine supplied the vocabulary.
+
+### "Unfinished" is defined by the existing store, not by this stage
+
+`RecordingStore.listUnfinishedSessions()` (`js/recording/recording-store.js:131`) already answers this: `status === "recording" || status === "paused"`. React writes only `"recording"`/`"stopped"`, but the unmodified query is used, so a legacy-created *paused* session is detected too. There is no heartbeat, no crash flag, and no timestamp heuristic — a session is unfinished precisely because nothing ever wrote `"stopped"` to it.
+
+### No schema change
+
+`suimon-navi-recording` v1 is untouched — same DB name, version, five object stores, keyPaths, indexes, and field names. Recovery reads only fields `recording-controller.js` already writes. This is verified rather than assumed: a Playwright fixture seeds a session shaped exactly as the legacy controller would have written it and proves React detects and finalizes it, after which the full 14-case legacy recording browser suite still passes against the same database.
+
+### State machine — reused, not duplicated
+
+`RecordingState` gained `'recovery_available'`, which is **not new**: `js/recording/recording-core.js` already lists it in `RECORDING_STATES` with transitions `recovery_available → {resume, finish, delete}`. React now speaks the same vocabulary.
+
+```
+                 checkForRecovery() finds candidates
+        idle ──────────────────────────────────────► recovery_available
+          ▲                                            │      │      │
+          │   checkForRecovery() finds none left       │      │      │
+          └────────────────────────────────────────────┘      │      │
+                                    resumeRecovery() ──────────┘      │
+                                          │                           │
+                                          ▼          finalizeRecovery()
+                                      recording ──────────► stopped
+```
+
+Two invariants the code enforces structurally:
+
+- **`recovery_available` is entered only from `idle`** and released back to `idle` only when the last candidate is resolved. A background scan can never overwrite an in-flight recording or an error state, and `recording` + `recoveryRequired` can never both be true.
+- **`recoveryInProgress` is checked synchronously before any `await`**, so a double-click cannot race two resumes against the same session. Legacy has the identical guard.
+
+Both directions of the idle transition matter. The initial implementation had only the forward one, which left the app permanently unable to start a new recording after finalizing a session inherited from a previous page load — see `docs/HANDOFF.md` §2.9.
+
+### Sequence integrity
+
+`rawNmeaLines` and `structuredFixes` share **one** monotonic per-session `seq`. `resumeRecovery()` sets `this.seq = await store.getMaxSeq(sessionId)` — the max across both stores — and never resets to zero, so post-resume records cannot collide with pre-crash ones.
+
+Counters are handled differently from the counter *display*, deliberately:
+
+| Value | Source | Why |
+|---|---|---|
+| Resumed `pointCount`/`lineCount` | The session record's own `validFixCount`/`totalReceivedLines` | Mirrors legacy's `resumeSession()` exactly, including its staleness tradeoff. A "more correct" recount would make React and legacy disagree about the same session. |
+| Recovery card's "Raw lines saved" | A live `countRawLines()` query | Matches legacy's own `recoveryLineCounts` display mechanism. |
+
+### Resume does not touch the transport
+
+`resumeRecovery()` opens no port, prompts for no permission, starts no reconnect, and takes no wake lock. Resuming restores recording state; connecting GNSS stays a separate explicit action — the same separation legacy documents in its own resume path. A unit test and a Playwright assertion both pin it.
+
+### Failing closed
+
+Every recovery method catches, reports, and returns `false` rather than claiming success. A failed *scan* is reported distinctly from "nothing to recover" — those are different facts. On any storage failure the original session record is left exactly as it was, and no "recovered successfully" state is ever entered.
+
+`adaptRecoverableSession()` is a pure, exported, never-throwing adapter. It drops a candidate **only** when `sessionId` is missing or unusable (no action could safely target it); everything else degrades to a safe default — malformed timestamps to `null`, a non-numeric count to `0`, a fix with non-finite coordinates to `null`. Dropped candidates are counted and surfaced, never silently hidden. Detection performs no writes.
+
+A stale field link is preserved, not cleared: if `fieldId` names a field that no longer exists, the card renders `Linked field no longer exists (<fieldId>)`.
+
+### Discard is destructive and that was proven safe first
+
+Unlike Stage 2's deferred field deletion, Discard shipped — because `RecordingStore.deleteSession()` (`recording-store.js:136`) opens one transaction across all five stores and cascades via `deleteByIndexCursor` on `by_sessionId` for raw lines, structured fixes, marked observations, and image blobs. Nothing can be orphaned. That was read in source before the UI exposed the action. The UI requires a two-step inline confirmation rather than `window.confirm()`, because the panel can list several sessions and a native modal gives no indication which one it targets.
+
+### UI and map ownership
+
+```
+useGnssRuntime (app root)  ──► recordingService.checkForRecovery()   once per app load
+                                        │
+                              RecordingSnapshot.recoverySessions
+                                        │
+SurveyInspector ──► RecoveryPanel (presentational; props in, callbacks out)
+                                        │
+                       resumeRecovery / finalizeRecovery / discardRecovery
+```
+
+`RecoveryPanel` reads no service or store directly (only `useFields()` for a field name), which is why its rendering and interaction logic is unit-testable in jsdom with no IndexedDB at all — the repository has no `fake-indexeddb` polyfill, so anything requiring real IndexedDB must go through Playwright. `SurveyInspector` owns the wiring to the real singleton.
+
+The panel is a compact card list inside the existing inspector, not a new full-page workflow; Survey stays map-first at 1366×768, 1920×1080, and 1024×768 with no document-level scrolling. The status bar reuses the existing `recording` slot with a `warning` tone and the message `RECOVERY REQUIRED` rather than inventing a subsystem category — and never reports recording as actively running merely because an unfinished record exists.
+
+On the map, `resumeRecovery()` fires a `{type: 'start'}` live-track event, which clears `LiveSurveyLayer`'s stale in-memory polyline so the resumed portion begins a fresh segment. The persisted pre-crash portion is drawn by `SurveyLayer` from storage, so the two coexist without duplication, and no map instance or `LayerGroup` is recreated.
+
+### Stage 5A safety boundary
+
+No schema migration, no automatic resume, no silent discard, no automatic serial reconnect, no retry loop, no wake lock, no hardware access. No legacy `js/` file, backend file, or pilot/MAVLink file was modified.
+
+## Stage 4B — gate decision
+
+`evaluateGate()` is unlike every domain function wrapped so far: it has no export boundary to import through at all. It lives inline inside `index.html`'s ~3,270-line monolithic `<script>` (`index.html:3672-3710`), so `frontend/src/domain/water/decision.ts` hand-transcribes it — same branch order, same `>=` comparisons at every threshold, same Japanese output strings — rather than importing it via the `@legacy` alias pattern Stages 1-4A established. Because no legacy unit test of this function exists anywhere in the repository, the transcription is pinned by tests that reproduce the legacy source's literal expected outputs directly (documented in the file's own header), not by cross-executing against a legacy reference.
+
+**Inputs and units** (see `docs/HANDOFF.md` §2.2 for the full provenance table): `rain24hMm`/`daysSinceRain`/`forecastRainProbPct` are operator-editable, prefilled from a build-time import of `data/weather.json`; the four thresholds (`heavyRain24hMm`/`lightRain24hMm`/`forecastRainProbPct`/`drySpellDays`) are shown read-only, sourced from a build-time import of `data/gate_rules.json`. A new `@data` Vite/TS alias (`vite.config.ts`, `tsconfig.app.json`) resolves both, mirroring the existing `@legacy` alias exactly. This is a **build-time read**, unlike legacy's runtime `fetch()` of the same files — the only behavior this could change (a fetch failure falling back to a hardcoded default) cannot happen for a bundled JSON import, so it isn't reproduced; `frontend/src/domain/water/gateRules.ts` documents the resulting per-field fallback semantics precisely.
+
+**Two audited traps are structurally impossible to violate, not just avoided by convention:**
+- The legacy "判断プロファイル" (decision profile) selector is confirmed display-only at two independent legacy call sites and has no React counterpart at all; `evaluateGate.length === 2` is asserted by a test, so an accidental future profile parameter fails immediately rather than silently changing behavior.
+- Stage 4A's water data (control points, level readings) cannot reach this function — `GateDecisionPanel` never imports either water repository, and a test proves an identical verdict whether the panel is told 0 or 3 contextual readings exist for the active field. Where readings are surfaced nearby, the UI text is explicit: "Context only — not used by this recommendation."
+
+**Architecture:**
+
+```
+data/gate_rules.json   data/weather.json        (@data alias, build-time import)
+       │                      │
+resolveGateThresholds   resolveDefaultWeather     domain/water/gateRules.ts
+       │                      │
+       └──────────┬───────────┘
+                   │
+         evaluateGate(weather, thresholds)         domain/water/decision.ts (hand-ported)
+                   │
+            GateDecisionPanel                      features/water/ (local useState only)
+                   │
+              WaterWorkspace                       mounted above the Stage 4A sections
+```
+
+`GateDecisionPanel` is field-independent (legacy's own decision inputs are one global configuration, not one per field) and touches no map, no `MapContext`, and no Leaflet API — it cannot recreate the map by construction, which a dedicated test also verifies directly (typing in the rainfall field while Field/Water map layers are mounted leaves the map DOM node and every layer's `LayerGroup` count unchanged). No persistence, no new repository, no new Zustand store, and no new `SelectedEntity` member were introduced — this is the smallest-footprint stage of the migration by file count.
+
+**Deliberately not reproduced:** legacy's in-app "what-if" threshold override UI (explicitly framed by legacy itself as temporary, layered on top of the authoritative JSON file) and the Open-Meteo live weather auto-fetch (a separate, DOM-coupled function that would additionally require reproducing legacy's `activeGate()`/`surveyedGate` position-resolution concept, which has no React equivalent). Both are documented as deferred in `docs/HANDOFF.md` §2.7, not silently dropped.
+
+**Safety boundary:** no gate/actuator/MAVLink/backend command was added or considered. The panel is purely informational, matching the task's explicit separation between a recommendation (判断) and a physical command (制御).
+
+## Stage 4A — water foundation
+
+### Water is two unrelated persisted things
+
+The single most important finding of the Stage 4A audit, and the thing that shapes every decision below:
+
+| | Water control point | Water level reading |
+|---|---|---|
+| What it is | A *location* — 水門 / 給水口 / 排水口 / 水位センサ / 撮影地点 | A *reading* — a number captured at a position and time |
+| Storage | `localStorage["suimonNaviFieldAnnotationsV2"].waterControlPoints` | IndexedDB `suimon-navi-recording` v1, store `markedObservations`, `observationType === "water_level"` |
+| Builder | `buildWaterControlPoint()` (`js/fields/field-annotation-core.js:323-342`) | `buildMarkedObservation()` (`js/recording/recording-core.js:197-225`) |
+| Coordinates | `coordinates: [lat, lon]` tuple | named `latitude` / `longitude` |
+| Field link | **`relatedFieldId`** | `fieldId` |
+| Owner | Standalone; unlinked when its field is deleted | Child of a recording session; cascade-deleted with it |
+
+Nothing links the two. A 水位センサ control point marks *where a sensor sits*; it carries no reading. They are therefore modelled as two domain types, two repositories, two map layers and two selected-entity types — never merged into one ambiguous "water" entity.
+
+### What Stage 4A migrated, and what it deliberately did not
+
+- **Water control points — read + create.** `LegacyWaterControlRepository` (`frontend/src/services/water/legacyWaterControlRepository.ts`) is `list`/`get`/`create` only, mirroring Stage 3C's observation repository: same fail-closed rules, same snapshot-carried read error, same explicit seven-key write. Creation delegates record construction, naming and ids to the unchanged `buildWaterControlPoint()`, `nextWaterControlName()` and `makeId('wcp')`.
+- **Water level readings — read only.** `RecordedWaterMeasurementRepository` reads them through the unchanged `RecordingStore.readAll()`. **No creation.** A reading is a child of a recording session and legacy only ever builds one from a validated, non-stale live fix, filling `fixQuality`/`hdop`/`satelliteCount`/`rawSourceSentence` from it. A map click has no such provenance, and fabricating it is exactly what this migration forbids. There is also no unit in the schema (see below).
+- **No update, no delete, anywhere in water.** Legacy water-point deletion is a bare identity filter with no cascade, but `js/reports/field-report.js:225` and `index.html:3822` read that same array live. Stage 2 already established that destructive operations wait for a cross-store reference policy.
+
+### Compatibility rules the code and tests pin
+
+- **`type` persists the LONG exported string** — `water_gate`, `water_inlet`, `water_outlet`, `water_level_sensor`, `photo_point`. The short keys (`gate`, …) drive labels and styling only. This is the opposite of field observations, which persist the *short* key plus a `label`. A water point has **no `label` key**.
+- **Coordinates are `[lat, lon]`**, Leaflet order, never GeoJSON.
+- **The field link is `relatedFieldId`**, unlike every sibling collection.
+- **All seven root keys** (`schemaVersion`, `fields`, `boundaryTracks`, `waterControlPoints`, `surveySessions`, `fieldObservations`, `workflowState`) are written from an explicit literal, and sibling datasets round-trip untouched. Reads never rewrite storage. Writes fail closed on a malformed store, an unsupported `schemaVersion`, or *any* of the five arrays being malformed — including ones water does not own, because writing would persist a silently normalized version of them.
+- **An unknown type normalizes to `gate`**, matching `normalizeWaterControlType()`, rather than being dropped.
+- **`properties.updatedAt` is not durable.** Legacy rehydration re-runs every stored point through the builder with `nowIso: properties.createdAt`, resetting `updatedAt` on each page load. No UI or test depends on an edit timestamp surviving a reload.
+
+### Two legacy behaviours that surprised the audit
+
+1. **There is no outside-field check for water.** `isPointInsideBoundary` is called exactly once in the entire 1,928-line legacy controller — inside the *observation* map-click handler. Water placement (`createWaterControlPoint`, `js/fields/field-annotation-controller.js:833`) persists unconditionally. Stage 4A therefore does **not** add a Save-Anyway gate for water; it shows a non-blocking note so the position is not accepted *silently*, and saves normally. Adding a block would have invented semantics.
+2. **A stored `waterLevel` of `0` is ambiguous, and common.** The builder's default parameter is `waterLevel = null`, and `Number(null) === 0` passes its finiteness check — so a blank legacy input *and* an omitted argument both persist as `0`. A stored `null` only occurs for a non-numeric value. The adapter preserves the raw value and the inspector explains a zero rather than presenting it as a measured depth. (The Stage 4A audit's own first pass got this partly wrong; a test pins the real behaviour.)
+
+### Units
+
+The reading carries **no unit anywhere in the persisted schema**. "cm" appears only in a legacy input label (`index.html:2705`) and in no code or test. Stage 4A therefore renders readings as `"<value> (unit not recorded)"` and performs no conversion, and a test asserts no selector ever emits `cm`/`mm`.
+
+### Map, state and selection
+
+`WaterControlLayer`, `WaterMeasurementLayer` and `WaterPlacementLayer` each own a long-lived `L.LayerGroup` whose lifetime is tied only to the map instance, alongside Field/Survey/live-GNSS/Observation layers on the one `MapWorkspace` map. Symbols are shape- and glyph-coded, not colour-only: control points are squares carrying `G`/`I`/`O`/`S`/`P`, readings are diamonds carrying `L`; fills reuse the legacy `WATER_CONTROL_STYLES` palette. Visibility is driven by `useMapLayersStore` ids `water-points` and the new `water-measurements`.
+
+`SelectedEntity` gained `waterControl` and `waterMeasurement`, replacing the never-backed `water`/`sluice` placeholders from Stage 1. Active field remains `useActiveFieldStore` — no separate "water active field" concept was introduced, because the legacy domain has none.
+
+### Stage 4A safety boundary
+
+No decision/recommendation logic was migrated or altered, no agronomic threshold was added or changed, `js/paddy-intelligence.js` was not touched, and no backend, MAVLink, pilot or flight-control file was modified.
 
 ## Stage 3C — survey registration and observations
 

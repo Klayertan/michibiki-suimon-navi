@@ -85,6 +85,20 @@ def test_freshness_recovers_when_messages_resume(state: TelemetryState) -> None:
     assert state.evaluate_freshness() is ConnectionState.CONNECTED
 
 
+def test_fresh_nonheartbeat_telemetry_cannot_mask_stale_vehicle_heartbeat(
+    state: TelemetryState,
+) -> None:
+    state.apply_message(heartbeat(armed=False, custom_mode=0), system_id=1, component_id=1)
+    state.apply_message(MockMessage("SYS_STATUS", voltage_battery=16000))
+    state.set_connection_state(ConnectionState.CONNECTED)
+    with state._lock:
+        state._last_heartbeat_mono = 100.0
+        state._last_message_mono = 101.5
+
+    assert state.evaluate_freshness(101.5) is ConnectionState.TELEMETRY_STALE
+    assert state.is_stale(101.5) is True
+
+
 def test_freshness_never_overwrites_a_deliberate_state(state: TelemetryState) -> None:
     """Losing telemetry while reconnecting must not relabel the state."""
     for deliberate in (
@@ -140,6 +154,35 @@ def test_reset_clears_vehicle_data_so_stale_values_cannot_look_live(state: Telem
     assert snapshot["battery"]["voltage"] is None
     assert snapshot["vehicle"]["armed"] is None
     assert snapshot["statusTexts"] == []
+
+
+def test_parameter_cache_is_normalized_filterable_and_session_scoped(state: TelemetryState) -> None:
+    state.apply_message(
+        MockMessage(
+            "PARAM_VALUE",
+            param_id=b"rcmap_roll\x00",
+            param_value=1.0,
+            param_type=9,
+            param_count=2,
+            param_index=0,
+        )
+    )
+    state.apply_message(
+        MockMessage(
+            "PARAM_VALUE",
+            param_id=b"RC_OVERRIDE_TIME",
+            param_value=3.0,
+            param_type=9,
+            param_count=2,
+            param_index=1,
+        )
+    )
+    assert state.get_parameters(["RCMAP_ROLL"]) == {"RCMAP_ROLL": 1.0}
+    assert state.snapshot()["parameters"]["RC_OVERRIDE_TIME"] == 3.0
+
+    state.reset_vehicle_data()
+    assert state.get_parameters() == {}
+    assert state.snapshot()["parameters"] == {}
 
 
 def test_errors_are_recorded_not_swallowed(state: TelemetryState) -> None:

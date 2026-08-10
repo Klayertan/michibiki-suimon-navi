@@ -6,6 +6,7 @@ import { useFields } from '../../../services/fields/useFields'
 import { useActiveFieldStore } from '../../../store/useActiveFieldStore'
 import { useSelectedEntityStore } from '../../../store/useSelectedEntityStore'
 import { useMapLayersStore } from '../../../store/useMapLayersStore'
+import { fieldAreaSquareMeters, formatAreaSquareMeters } from '../../../domain/fields/selectors'
 
 // Same style object the legacy app renders field polygons with (task section
 // 13: reuse, don't invent a second palette) plus one active-field variant.
@@ -63,7 +64,9 @@ export function FieldLayer() {
     polygonsByFieldId.current.clear()
     fields.forEach((field) => {
       const polygon = L.polygon(field.coordinates, styleFor(field.id === activeFieldId))
-      polygon.bindTooltip(field.name, { sticky: true })
+      // Compact hover label, not a permanent map overlay (task section 8) --
+      // name plus area, same formatter the inspector uses.
+      polygon.bindTooltip(`${field.name} · ${formatAreaSquareMeters(fieldAreaSquareMeters(field))}`, { sticky: true })
       polygon.on('click', (event) => {
         // Keep a polygon selection from also reaching the base map. Future
         // map tools can therefore add their own click modes without treating

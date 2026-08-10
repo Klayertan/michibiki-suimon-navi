@@ -1,6 +1,6 @@
 # UI / Architecture Redesign — Stage 0 Audit & Plan
 
-Status: **Stages 0, 1, 2, 3A, 3B, and 3C are complete.** Stage 3C is the smallest safe Survey-to-Field and field-observation bridge; Water/Stage 4 has not started. The implementation report is [`docs/FRONTEND_ARCHITECTURE.md`](./FRONTEND_ARCHITECTURE.md), and [`docs/HANDOFF.md`](./HANDOFF.md) is the authoritative continuation checkpoint.
+Status: **Stages 0, 1, 2, 3A, 3B, 3C, 4A, and 4B are complete.** Stage 4A built the water *foundation* (control points read+create, level readings read-only); Stage 4B ported the existing gate open/hold/close recommendation (`evaluateGate()`) into a typed, tested domain function with a compact React panel, with no algorithm change and no coupling to Stage 4A's water data. The implementation report is [`docs/FRONTEND_ARCHITECTURE.md`](./FRONTEND_ARCHITECTURE.md), and [`docs/HANDOFF.md`](./HANDOFF.md) is the authoritative continuation checkpoint.
 
 ## 1. Motivation
 
@@ -233,7 +233,62 @@ The safety boundary is explicit: unsupported browser, permission rejection, malf
 - **Verified compatibility/layout:** representative legacy observations render in React, React-created field/observation bytes match the schema the legacy controller consumes, legacy observation browser tests remain green, and all three required viewports have no document scroll.
 - **Deferred:** observation editing/deletion/photos, Water, Stage 2B drawing, automatic reconnect, unfinished-session recovery, wake locks, and all later intelligence/AI/mission work.
 
-## 26. Historical Stage 2 — what was actually built
+## 26. Stage 4A — what was actually built
+
+Full detail lives in [`docs/FRONTEND_ARCHITECTURE.md`](./FRONTEND_ARCHITECTURE.md)'s "Stage 4A — water foundation" section.
+
+- **The audit's headline finding: water is two unrelated persisted things.** Water *control points* (locations: 水門/給水口/排水口/水位センサ/撮影地点) live in the localStorage annotation store; water *level readings* live in the IndexedDB recording store as `markedObservations` with `observationType === "water_level"`. Different builders, different coordinate conventions (`[lat, lon]` tuple vs named `latitude`/`longitude`), different field-link property names (`relatedFieldId` vs `fieldId`), different ownership (standalone vs child of a recording session). Nothing links them. A 水位センサ point is a pin, not a reading. They stay two entity types.
+- **This resolves §21's implicit question about "water measurements".** They exist, but not where the water UI lives, and not in a form that can be created safely from the Water workspace.
+- **Control points: read + create.** Create supports the two positions legacy supports — current QZ1 fix and one explicit map click. No phone-GPS path, because legacy has none for water. Records are built by the unchanged legacy builder and are byte-identical to what the legacy controller writes.
+- **Readings: read-only.** Creation is deferred, not forgotten: a reading is a session child, legacy only builds one from a validated non-stale fix, and the schema records no unit.
+- **No outside-field gate for water.** `isPointInsideBoundary` is called exactly once in the legacy controller, for observations only. Stage 4A shows a non-blocking note instead of inventing a Save-Anyway step.
+- **No update or delete in water**, matching the Stage 2/3C precedent while reports and the decision panel still read the same array.
+- **Two legacy quirks pinned by tests:** `updatedAt` does not survive a reload (rehydration resets it), and a stored `waterLevel` of `0` usually means "left blank" rather than a measured zero.
+- **Deferred:** the Stage 4B decision engine, water-point editing/deletion, reading creation, Stage 2B drawing, Paddy Intelligence, reports, AI/camera, drone missions.
+
+## 27. Stage 4B — what was actually built
+
+Full detail lives in [`docs/FRONTEND_ARCHITECTURE.md`](./FRONTEND_ARCHITECTURE.md)'s "Stage 4B — gate decision" section and [`docs/HANDOFF.md`](./HANDOFF.md) §2.
+
+- **`evaluateGate()` had no export boundary to import through** — it lives inline in `index.html`'s monolithic `<script>`, unlike every other domain wrapper so far in this migration. Stage 4B hand-transcribes it verbatim into `frontend/src/domain/water/decision.ts` and pins the transcription with tests reproducing the legacy source's exact branches, `>=` comparisons, and Japanese strings, since no legacy test of this function existed to cross-check against.
+- **Algorithm unchanged.** Same two inputs (weather values, four `data/gate_rules.json` thresholds), same fixed priority order (heavy rain → light rain → forecast → dry spell → generic hold), same inclusive `>=` at every boundary, same exact output strings. Every threshold has a dedicated `threshold − ε / threshold / threshold + ε` test.
+- **Both audited traps confirmed and preserved, not just avoided:** the 判断プロファイル selector is display-only at two independent legacy call sites and was not reproduced (`evaluateGate.length === 2` is pinned so a future accidental profile parameter is caught); `data/field.json`'s `gate` and the paddy-intelligence `targetWaterDepthInput` remain untouched and unreferenced.
+- **Stage 4A's water data provably does not influence the decision.** A test renders the panel with 0 and with 3 contextual water-level readings and asserts an identical verdict; the UI labels any shown reading count "Context only — not used by this recommendation." No water control point is referenced by the decision panel at all.
+- **No new persistence, no new store, no new selected-entity type, no map interaction.** Weather inputs are local component state, exactly as ephemeral as legacy's DOM values; thresholds are read-only, sourced from a build-time `data/gate_rules.json` import via a new `@data` alias (mirroring the existing `@legacy` alias). This is the smallest-footprint stage of the migration so far.
+- **Threshold overrides and the Open-Meteo live-fetch pipeline were deliberately not reproduced** — both are legacy features layered on top of the core recommendation, not part of it, and reproducing the fetch would require a position-resolution concept (`surveyedGate`) React has no equivalent of. Documented as deferred, not lost.
+- **No gate actuation of any kind was added or considered** — the panel is informational only, with no MAVLink/actuator/backend call anywhere in the change.
+- **Deferred:** editable threshold overrides, live weather auto-fetch, the legacy decision tab's independent field-selector/proof-card subsystem, water-level reading creation, Stage 2B, Paddy Intelligence, Reports, AI/camera, drone missions.
+
+## 28. Stage 5A — what was actually built
+
+Full detail lives in [`docs/FRONTEND_ARCHITECTURE.md`](./FRONTEND_ARCHITECTURE.md)'s "Stage 5A — recording crash recovery" section and [`docs/HANDOFF.md`](./HANDOFF.md) §3.
+
+- **This closes the gap Stage 3B explicitly left open.** Stage 3B blocked a new recording when an unfinished session existed but gave the operator no way to resolve it. Stage 5A adds the three explicit choices — **Resume**, **Finish & Save**, **Discard** — with no automatic resume, no silent discard, and no hidden condition.
+- **"Unfinished" was derived, not invented.** It is exactly what `RecordingStore.listUnfinishedSessions()` already returns: `status === "recording" || status === "paused"`. No heartbeat, no crash flag, no timestamp heuristic. Because the unmodified query is used, a legacy-created *paused* session is detected too, even though React never writes that status.
+- **No IndexedDB schema change.** `suimon-navi-recording` v1 — same name, version, five stores, keyPaths, indexes, field names. Verified by seeding a legacy-shaped session and proving React detects and finalizes it, then confirming all 14 legacy recording browser tests still pass against the same database.
+- **No second recording state machine.** `recovery_available` was already defined in `js/recording/recording-core.js`'s `RECORDING_STATES` with `{resume, finish, delete}` transitions; React now uses that same vocabulary on the existing Stage 3B `RecordingService` singleton. The `idle ⇄ recovery_available` transition is symmetric in both directions, and `recording` + `recoveryRequired` can never both be true.
+- **Sequence integrity is the core correctness property.** Resume continues the shared per-session `seq` from `getMaxSeq()` across both `rawNmeaLines` and `structuredFixes` and never resets to zero, so pre-crash and post-resume records coexist exactly once with no collisions. Proven at both the unit level and end-to-end against real IndexedDB.
+- **Resume and GNSS stay separate concerns.** Resuming opens no port, triggers no WebSerial permission prompt, starts no reconnect, and takes no wake lock — matching the separation legacy already documents.
+- **Discard shipped because cascade safety was proven, not assumed.** Unlike Stage 2's deferred field deletion, `RecordingStore.deleteSession()` was read in source and confirmed to cascade across all five stores via `by_sessionId`, so nothing can be orphaned. The UI requires a two-step inline confirmation.
+- **Corrupt candidates fail safely without mutation.** A candidate is dropped only when `sessionId` is unusable; malformed timestamps, counts, and fixes degrade to safe defaults. Dropped candidates are counted and reported rather than silently hidden. A field link pointing at a deleted field shows `Linked field no longer exists (<fieldId>)`, preserving the original identifier.
+- **A real bug was caught by the real-IndexedDB test, not by unit tests.** Finalizing the only unfinished session left the app permanently unable to start a new recording, because the `recovery_available → idle` transition was missing and the finalize path's own state patch only fires for the *active* session. Fixed and pinned by both a Playwright case and a unit test.
+- **Compatibility is claimed only where tested:** legacy-created session → detected/resumable/finalizable by React (tested); React-finalized session → still readable by legacy readers with the legacy suite green (tested). No broader bidirectional claim is made.
+- **Deferred / explicitly not started:** Stage 5B automatic transient WebSerial reconnect (scoped in `docs/HANDOFF.md` §3.16 at the time, since implemented — see §29 below), retry loops, wake locks, Visibility API work, Reports, Paddy Intelligence, observation photos, water-level creation, Stage 2B, gate actuation, pilot/MAVLink/backend changes, schema convergence, bundle optimization.
+
+## 29. Stage 5B — what was actually built
+
+Full detail lives in [`docs/FRONTEND_ARCHITECTURE.md`](./FRONTEND_ARCHITECTURE.md)'s "Stage 5B — GNSS reconnect reliability" section and [`docs/HANDOFF.md`](./HANDOFF.md) §2.
+
+- **Closes the reliability gap Stage 5A's own recommendation flagged.** A transient WebSerial interruption (cable wiggle, read-loop rejection, a stalled receiver) previously required a full manual reconnect with no automatic recovery at all — Stage 3B's `'stalled'` connection state was declared but never wired to anything.
+- **Four disconnect classes, audited and handled differently on purpose.** Physical disconnect and read-loop failure both trigger a bounded automatic reconnect; malformed NMEA (already a parser-level concern) and a stalled-but-otherwise-healthy port do not — reopening a fine port cannot make a receiver produce fixes it doesn't have.
+- **One authoritative state, no parallel booleans.** `GnssConnectionState` gained `reconnecting` and `reconnect_required`; no `isReconnecting`/`connectionLost` flags were added anywhere that could contradict it.
+- **Bounded, capped-exponential retry against one specific port only.** `[1000, 2000, 4000, 8000]`ms, four attempts, ~15s worst case before giving up — and the automatic path never calls `getPorts()`/`requestPort()` itself, so it can neither prompt for permission nor pick a different granted device when more than one exists. A manual "Reconnect now"/"Reconnect GNSS" action always remains available and always wins any race against a pending automatic attempt.
+- **Recording continuity was mostly already guaranteed by the existing architecture** — `ingest()` only fires while a read loop is delivering lines, so a disconnect cannot fabricate, duplicate, or reset a sequence number by construction. Stage 5B's job here was proving it (a unit-level service integration test plus three Playwright cases covering single-cycle, repeated-cycle, and Resume-then-reconnect scenarios) and fixing the one place that needed a real change: interruption messaging, which previously said "GNSS disconnected" for every non-connected state and now distinguishes reconnecting/reconnect_required/stalled/disconnected.
+- **A real, pre-existing gap was found and closed in Stage 3C/4A code.** `ObservationComposer` and `WaterControlComposer`'s "Use Current GNSS" buttons checked only `!currentFix`, never staleness — meaning a `'stalled'` link's deliberately-preserved-but-aging fix could have been used to record a "current" position that was actually minutes old. Both now call the exact legacy staleness gate (`validateObservationCreation()`, `js/recording/recording-core.js`) instead of a re-derived rule.
+- **No IndexedDB schema change, no automatic session resume, no automatic permission prompt.** Recovery (Stage 5A) and reconnect (Stage 5B) remain deliberately separate concerns — resuming an unfinished session still never touches the serial transport, and a legacy-inherited unfinished session still cannot receive live data before the operator explicitly clicks Resume.
+- **Deferred / explicitly not started:** Stage 5C Wake Lock / display-sleep prevention (scoped as a recommendation in `docs/HANDOFF.md` §2.16, deliberately not implemented), Reports, Data workspace redesign, Paddy Intelligence, AI, RealSense, pilot/manual flight, MAVLink, field boundary editing, observation photos, water-level recording creation, schema convergence.
+
+## 30. Historical Stage 2 — what was actually built
 
 Full detail lives in [`docs/FRONTEND_ARCHITECTURE.md`](./FRONTEND_ARCHITECTURE.md)'s "Stage 2 — Field management" section. Summary for anyone reading this plan document in isolation.
 

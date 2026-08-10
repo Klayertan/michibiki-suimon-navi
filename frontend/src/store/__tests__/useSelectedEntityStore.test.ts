@@ -24,7 +24,7 @@ describe('useSelectedEntityStore', () => {
 
   it('clear() resets to null', () => {
     const { select, clear } = useSelectedEntityStore.getState()
-    select({ type: 'sluice', id: 's1' })
+    select({ type: 'waterControl', id: 'wcp-1' })
     clear()
     expect(useSelectedEntityStore.getState().selectedEntity).toBeNull()
   })

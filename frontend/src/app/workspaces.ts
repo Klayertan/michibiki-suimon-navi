@@ -39,7 +39,7 @@ export const WORKSPACES: WorkspaceDescriptor[] = [
     path: '/water',
     label: 'Water',
     summary: 'Water level, sluice/gate locations, irrigation decisions.',
-    recommendedLayers: ['field-boundary', 'water-points'],
+    recommendedLayers: ['field-boundary', 'water-points', 'water-measurements'],
   },
   {
     id: 'drone',

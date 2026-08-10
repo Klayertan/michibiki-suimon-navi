@@ -11,6 +11,9 @@ import { LiveSurveyLayer } from '../map/layers/LiveSurveyLayer'
 import { ObservationLayer } from '../map/layers/ObservationLayer'
 import { ObservationPlacementLayer } from '../map/layers/ObservationPlacementLayer'
 import { SurveyBoundaryPreviewLayer } from '../map/layers/SurveyBoundaryPreviewLayer'
+import { WaterControlLayer } from '../map/layers/WaterControlLayer'
+import { WaterMeasurementLayer } from '../map/layers/WaterMeasurementLayer'
+import { WaterPlacementLayer } from '../map/layers/WaterPlacementLayer'
 import './AppShell.css'
 
 interface AppShellProps {
@@ -40,6 +43,9 @@ export function AppShell({ children }: AppShellProps) {
             <ObservationLayer />
             <ObservationPlacementLayer />
             <SurveyBoundaryPreviewLayer />
+            <WaterControlLayer />
+            <WaterMeasurementLayer />
+            <WaterPlacementLayer />
           </MapWorkspace>
         </main>
         <InspectorPanel>{children}</InspectorPanel>

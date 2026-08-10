@@ -3,7 +3,7 @@ import { StatusBadge } from '../status/StatusBadge'
 import type { ServiceId } from '../../types/systemStatus'
 import './TopStatusBar.css'
 
-const ORDER: ServiceId[] = ['gnss', 'serial', 'recording', 'drone', 'camera', 'backend']
+const ORDER: ServiceId[] = ['gnss', 'serial', 'recording', 'wakeLock', 'drone', 'camera', 'backend']
 
 /**
  * Compact, persistent, always visible -- task section 7. Every badge here is

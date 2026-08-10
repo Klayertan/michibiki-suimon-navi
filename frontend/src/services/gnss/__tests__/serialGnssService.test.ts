@@ -3,10 +3,24 @@ import { SerialGnssService } from '../serialGnssService'
 
 const VALID_GGA = '$GNGGA,012345.00,3439.2705,N,13549.8410,E,2,14,0.9,45.0,M,30.0,M,,*44'
 
+// Tiny, injected reconnect delays (see SerialGnssService's constructor
+// options) so reconnect tests never wait out the real 1s/2s/4s/8s production
+// schedule -- see task section 25: "do not require real WebSerial hardware"
+// and section 6: bounded retry must be provable without wall-clock waits.
+// Staleness disabled (a huge stallTimeoutMs) for tests that aren't
+// specifically exercising Class D -- otherwise ordinary test overhead (a
+// vi.waitFor poll, several awaits) can exceed a tiny threshold and flip the
+// connection to 'stalled' mid-assertion for reasons unrelated to what the
+// test is actually proving.
+const FAST_RECONNECT = { reconnectDelaysMs: [5, 5, 5], stallTimeoutMs: 60_000, stallCheckIntervalMs: 1000 }
+const STALL_DETECTION = { reconnectDelaysMs: [5, 5, 5], stallTimeoutMs: 100, stallCheckIntervalMs: 20 }
+
 class FakePort {
   readable: ReadableStream<Uint8Array> | null = null
   controller: ReadableStreamDefaultController<Uint8Array> | null = null
+  openCount = 0
   open = vi.fn(async () => {
+    this.openCount += 1
     this.readable = new ReadableStream<Uint8Array>({
       start: (controller) => { this.controller = controller },
       cancel: () => { this.controller = null },
@@ -15,6 +29,10 @@ class FakePort {
   close = vi.fn(async () => { this.readable = null })
   getInfo = () => ({})
   send(text: string) { this.controller?.enqueue(new TextEncoder().encode(text)) }
+  /** Simulates Class B: the stream rejects (e.g. a genuine read error). */
+  errorStream(error: Error) { this.controller?.error(error) }
+  /** Simulates Class B: the stream ends without an explicit disconnect event. */
+  endStream() { this.controller?.close() }
 }
 
 function fakeSerial(port: FakePort) {
@@ -78,15 +96,171 @@ describe('SerialGnssService', () => {
     await service.disconnect()
   })
 
-  it('marks an OS device disconnect and clears the live fix', async () => {
+  it('marks an OS device disconnect, clears the live fix, and automatically reconnects to the same port', async () => {
     const port = new FakePort()
     const serial = fakeSerial(port)
-    const service = new SerialGnssService(serial as never)
+    const service = new SerialGnssService(serial as never, FAST_RECONNECT)
     await service.connect()
     port.send(`${VALID_GGA}\n`)
     await vi.waitFor(() => expect(service.getSnapshot().currentFix).not.toBeNull())
+
+    // A real physical disconnect both fires the device event and errors the
+    // in-flight stream -- reproduce both so the old read loop's pending
+    // read() actually resolves instead of dangling forever in the fake.
     serial.disconnect()
-    await vi.waitFor(() => expect(service.getSnapshot().connectionState).toBe('disconnected'))
-    expect(service.getSnapshot().currentFix).toBeNull()
+    port.errorStream(new Error('device removed'))
+    await vi.waitFor(() => expect(service.getSnapshot().connectionState).toBe('reconnecting'))
+    expect(service.getSnapshot()).toMatchObject({ currentFix: null, reconnectAttempt: 1, reconnectMaxAttempts: 3 })
+
+    // The fake port's open() always succeeds by default, so the very next
+    // bounded attempt (5ms later) reconnects without any user action.
+    await vi.waitFor(() => expect(service.getSnapshot().connectionState).toBe('connected'))
+    expect(service.getSnapshot()).toMatchObject({ reconnectAttempt: 0, reconnectMaxAttempts: 0 })
+    expect(port.openCount).toBe(2)
+
+    // Proves no duplicate reader survived: a single sentence increments
+    // lineCount by exactly one, not two.
+    const before = service.getSnapshot().lineCount
+    port.send(`${VALID_GGA}\n`)
+    await vi.waitFor(() => expect(service.getSnapshot().lineCount).toBe(before + 1))
+  })
+
+  it('a read-loop failure (stream ends without a device event) triggers the same bounded reconnect', async () => {
+    const port = new FakePort()
+    const service = new SerialGnssService(fakeSerial(port) as never, FAST_RECONNECT)
+    await service.connect()
+    port.endStream()
+    await vi.waitFor(() => expect(service.getSnapshot().connectionState).toBe('reconnecting'), { interval: 1 })
+    await vi.waitFor(() => expect(service.getSnapshot().connectionState).toBe('connected'))
+    expect(port.openCount).toBe(2)
+  })
+
+  it('reader.read() rejecting is also treated as transport loss, not a permanent unrecoverable error', async () => {
+    const port = new FakePort()
+    const service = new SerialGnssService(fakeSerial(port) as never, FAST_RECONNECT)
+    await service.connect()
+    port.errorStream(new Error('USB bus reset'))
+    await vi.waitFor(() => expect(service.getSnapshot().connectionState).toBe('reconnecting'), { interval: 1 })
+    await vi.waitFor(() => expect(service.getSnapshot().connectionState).toBe('connected'))
+  })
+
+  it('malformed NMEA never triggers a reconnect -- Class C is parser-level, not transport-level', async () => {
+    const port = new FakePort()
+    const service = new SerialGnssService(fakeSerial(port) as never, FAST_RECONNECT)
+    await service.connect()
+    port.send('$GNGGA,bad\r\n')
+    await vi.waitFor(() => expect(service.getSnapshot().malformedLineCount).toBe(1))
+    expect(service.getSnapshot().connectionState).toBe('connected')
+  })
+
+  it('exhausts bounded automatic attempts into reconnect_required, then a manual Reconnect still succeeds', async () => {
+    const port = new FakePort()
+    const serial = fakeSerial(port)
+    const service = new SerialGnssService(serial as never, FAST_RECONNECT)
+    await service.connect()
+    expect(port.openCount).toBe(1)
+
+    port.open.mockRejectedValueOnce(new Error('still unplugged'))
+    port.open.mockRejectedValueOnce(new Error('still unplugged'))
+    port.open.mockRejectedValueOnce(new Error('still unplugged'))
+    serial.disconnect()
+    port.errorStream(new Error('device removed'))
+
+    await vi.waitFor(() => expect(service.getSnapshot().connectionState).toBe('reconnect_required'), { timeout: 2000 })
+    expect(service.getSnapshot()).toMatchObject({ message: 'Automatic reconnect unsuccessful.', reconnectAttempt: 3, reconnectMaxAttempts: 3 })
+    // Never flips back to "reconnecting…" forever -- task section 22.
+    await new Promise((resolve) => setTimeout(resolve, 30))
+    expect(service.getSnapshot().connectionState).toBe('reconnect_required')
+
+    // The explicit escape hatch (task section 7) always remains available.
+    await service.connect()
+    expect(service.getSnapshot().connectionState).toBe('connected')
+  })
+
+  it('a manual disconnect while reconnecting cancels the pending attempt instead of racing it', async () => {
+    const port = new FakePort()
+    const serial = fakeSerial(port)
+    const service = new SerialGnssService(serial as never, FAST_RECONNECT)
+    await service.connect()
+    port.open.mockRejectedValueOnce(new Error('still unplugged'))
+    serial.disconnect()
+    port.errorStream(new Error('device removed'))
+    await vi.waitFor(() => expect(service.getSnapshot().connectionState).toBe('reconnecting'))
+
+    await service.disconnect()
+    expect(service.getSnapshot().connectionState).toBe('disconnected')
+
+    // Long enough that every configured attempt would have fired if the
+    // pending timer had not actually been cancelled.
+    await new Promise((resolve) => setTimeout(resolve, 40))
+    expect(service.getSnapshot().connectionState).toBe('disconnected')
+  })
+
+  it('a manual connect while reconnecting supersedes the pending automatic attempt without double-opening', async () => {
+    const port = new FakePort()
+    const serial = fakeSerial(port)
+    const service = new SerialGnssService(serial as never, FAST_RECONNECT)
+    await service.connect()
+    serial.disconnect()
+    port.errorStream(new Error('device removed'))
+    await vi.waitFor(() => expect(service.getSnapshot().connectionState).toBe('reconnecting'))
+
+    // Manual connect immediately, before the 5ms automatic attempt fires.
+    await service.connect()
+    expect(service.getSnapshot().connectionState).toBe('connected')
+
+    // Give the stale scheduled attempt's timer window time to elapse; it
+    // must not have opened the port a second time or flipped the state.
+    await new Promise((resolve) => setTimeout(resolve, 30))
+    expect(service.getSnapshot().connectionState).toBe('connected')
+    expect(port.openCount).toBe(2) // initial connect + the manual reconnect only
+  })
+
+  it('survives multiple disconnect/reconnect cycles without ever duplicating the reader', async () => {
+    const port = new FakePort()
+    const serial = fakeSerial(port)
+    const service = new SerialGnssService(serial as never, FAST_RECONNECT)
+    await service.connect()
+
+    for (let cycle = 0; cycle < 3; cycle += 1) {
+      serial.disconnect()
+      port.errorStream(new Error(`cycle ${cycle} removed`))
+      await vi.waitFor(() => expect(service.getSnapshot().connectionState).toBe('reconnecting'))
+      await vi.waitFor(() => expect(service.getSnapshot().connectionState).toBe('connected'))
+    }
+
+    const before = service.getSnapshot().lineCount
+    port.send(`${VALID_GGA}\n`)
+    await vi.waitFor(() => expect(service.getSnapshot().lineCount).toBe(before + 1))
+    expect(port.openCount).toBe(4) // 1 initial + 3 successful reconnects
+  })
+
+  it('flags a stalled connection when data stops arriving, and clears it once data resumes', async () => {
+    const port = new FakePort()
+    const service = new SerialGnssService(fakeSerial(port) as never, STALL_DETECTION)
+    await service.connect()
+    port.send(`${VALID_GGA}\n`)
+    await vi.waitFor(() => expect(service.getSnapshot().lineCount).toBe(1))
+
+    // No further bytes at all -- Class D, not a transport failure. The port
+    // is never closed or reopened for this: connectionState must never
+    // become 'reconnecting' or 'reconnect_required' from staleness alone.
+    await vi.waitFor(() => expect(service.getSnapshot().connectionState).toBe('stalled'), { timeout: 2000 })
+    expect(port.open).toHaveBeenCalledTimes(1)
+    expect(port.close).not.toHaveBeenCalled()
+
+    port.send(`${VALID_GGA}\n`)
+    await vi.waitFor(() => expect(service.getSnapshot().connectionState).toBe('connected'))
+  })
+
+  it('an explicit user disconnect never schedules an automatic reconnect', async () => {
+    const port = new FakePort()
+    const service = new SerialGnssService(fakeSerial(port) as never, FAST_RECONNECT)
+    await service.connect()
+    await service.disconnect()
+    expect(service.getSnapshot().connectionState).toBe('disconnected')
+    await new Promise((resolve) => setTimeout(resolve, 30))
+    expect(service.getSnapshot().connectionState).toBe('disconnected')
+    expect(port.open).toHaveBeenCalledOnce()
   })
 })

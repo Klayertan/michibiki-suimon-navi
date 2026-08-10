@@ -16,6 +16,7 @@ from __future__ import annotations
 import threading
 import time
 from collections import Counter, deque
+from collections.abc import Iterable
 from enum import Enum
 from typing import Any
 
@@ -58,11 +59,20 @@ class TelemetryState:
 
         self._vehicle: dict[str, Any] = {}
         self._battery: dict[str, Any] = {}
+        self._rc_channels: dict[str, Any] = {}
+        #: Monotonic receipt time for RC_CHANNELS specifically, so its own
+        #: freshness can be reported (see snapshot()'s "rc" section) the same
+        #: NTP-safe way as the link's own message/heartbeat ages.
+        self._rc_channels_mono: float | None = None
         self._gps: dict[str, Any] = {}
         self._attitude: dict[str, Any] = {}
         self._hud: dict[str, Any] = {}
         self._position: dict[str, Any] = {}
         self._version: dict[str, Any] | None = None
+        # Session-scoped, read-only cache populated from PARAM_VALUE replies.
+        # Clearing it on disconnect prevents one airframe's calibration from
+        # being reused accidentally after a different vehicle connects.
+        self._parameters: dict[str, float] = {}
 
         self._statustexts: deque[dict[str, Any]] = deque(maxlen=max_statustext)
         self._message_counts: Counter[str] = Counter()
@@ -128,10 +138,21 @@ class TelemetryState:
                 self._hud.update(values)
             elif msg_type == "GLOBAL_POSITION_INT":
                 self._position.update(values)
+            elif msg_type == "RC_CHANNELS":
+                # Replace, not merge: a channel absent from this frame is
+                # genuinely absent right now, not "still whatever it was
+                # several messages ago".
+                self._rc_channels = {**values, "receivedAt": now_wall}
+                self._rc_channels_mono = now_mono
             elif msg_type == "STATUSTEXT":
                 self._statustexts.append({**values, "receivedAt": now_wall})
             elif msg_type == "AUTOPILOT_VERSION":
                 self._version = {**values, "receivedAt": now_wall}
+            elif msg_type == "PARAM_VALUE":
+                param_id = values.get("paramId")
+                value = values.get("value")
+                if param_id is not None and value is not None:
+                    self._parameters[str(param_id)] = float(value)
             # COMMAND_ACK is consumed by the command service via the link's ack
             # queue; nothing to fold into displayed state here.
             return msg_type
@@ -197,11 +218,14 @@ class TelemetryState:
         with self._lock:
             self._vehicle.clear()
             self._battery.clear()
+            self._rc_channels.clear()
+            self._rc_channels_mono = None
             self._gps.clear()
             self._attitude.clear()
             self._hud.clear()
             self._position.clear()
             self._version = None
+            self._parameters.clear()
             self._statustexts.clear()
             self._message_counts.clear()
             self._last_message_mono = None
@@ -241,12 +265,14 @@ class TelemetryState:
             heartbeat_age = self._age(self._last_heartbeat_mono, now)
             message_age = self._age(self._last_message_mono, now)
 
-            if heartbeat_age is None and message_age is None:
-                return current
-
-            if heartbeat_age is not None and heartbeat_age > self._link_lost_timeout:
+            if heartbeat_age is not None and heartbeat_age >= self._link_lost_timeout:
                 self._connection_state = ConnectionState.LINK_LOST
-            elif message_age is not None and message_age > self._stale_timeout:
+            elif (
+                heartbeat_age is None
+                or message_age is None
+                or heartbeat_age >= self._stale_timeout
+                or message_age >= self._stale_timeout
+            ):
                 self._connection_state = ConnectionState.TELEMETRY_STALE
             else:
                 self._connection_state = ConnectionState.CONNECTED
@@ -255,8 +281,14 @@ class TelemetryState:
     def is_stale(self, now_mono: float | None = None) -> bool:
         now = time.monotonic() if now_mono is None else now_mono
         with self._lock:
-            age = self._age(self._last_message_mono, now)
-            return age is None or age > self._stale_timeout
+            message_age = self._age(self._last_message_mono, now)
+            heartbeat_age = self._age(self._last_heartbeat_mono, now)
+            return (
+                message_age is None
+                or heartbeat_age is None
+                or message_age >= self._stale_timeout
+                or heartbeat_age >= self._stale_timeout
+            )
 
     def is_armed(self) -> bool | None:
         """``True``/``False`` when known, ``None`` when no heartbeat was seen.
@@ -270,9 +302,33 @@ class TelemetryState:
         with self._lock:
             return self._vehicle.get("flightMode")
 
+    def get_parameters(self, names: Iterable[str] | None = None) -> dict[str, float]:
+        """Return a copy of parameters received during the current session.
+
+        Supplying ``names`` filters the result without inventing defaults.
+        Identifiers use the same uppercase normalization as incoming
+        ``PARAM_VALUE.param_id`` fields.
+        """
+        with self._lock:
+            if names is None:
+                return dict(self._parameters)
+            wanted = {str(name).strip().upper() for name in names}
+            return {name: value for name, value in self._parameters.items() if name in wanted}
+
     def target_component(self, fallback: int) -> int:
         with self._lock:
             return self._observed_component if self._observed_component is not None else fallback
+
+    def observed_component(self) -> int | None:
+        """Return the autopilot component discovered from its HEARTBEAT.
+
+        ``None`` means component discovery has not completed yet.  Keeping
+        that distinct from the configured fallback lets the link manager
+        admit the first target-system autopilot heartbeat without admitting
+        later traffic from another component.
+        """
+        with self._lock:
+            return self._observed_component
 
     #: GPS_RAW_INT.fix_type below this is NO_GPS (0) or NO_FIX (1) -- neither
     #: tells you where the vehicle is. 2 is 2D_FIX, the minimum fix quality
@@ -334,6 +390,7 @@ class TelemetryState:
             heartbeat_age = self._age(self._last_heartbeat_mono, now_mono)
             stale = message_age is None or message_age > self._stale_timeout
             position_available = self._is_position_available()
+            rc_channels_age = self._age(self._rc_channels_mono, now_mono)
 
             return {
                 "connectionState": state.value,
@@ -380,6 +437,22 @@ class TelemetryState:
                     "remaining": self._battery.get("remaining"),
                     "sensorsOk": self._battery.get("sensorsOk"),
                 },
+                # PASS/FAIL/UNKNOWN only, matching the same overall verdict
+                # ArduPilot uses to decide whether it will accept ARM -- never
+                # which of the individual underlying checks failed.
+                "prearmCheck": self._battery.get("prearmCheck"),
+                "rc": {
+                    # The vehicle's own reported RC input (RC_CHANNELS),
+                    # independent of source. This is what "RC INPUT SEEN BY
+                    # PIXHAWK" in Manual Control shows -- never merely what the
+                    # browser most recently intended to send.
+                    "channels": self._rc_channels.get("channels"),
+                    "channelCount": self._rc_channels.get("channelCount"),
+                    "rssi": self._rc_channels.get("rssi"),
+                    "receiverHealthy": self._battery.get("rcReceiverHealthy"),
+                    "ageSeconds": rc_channels_age,
+                    "receivedAt": self._rc_channels.get("receivedAt"),
+                },
                 "gps": {
                     "fixType": self._gps.get("fixType"),
                     "fixTypeName": self._gps.get("fixTypeName"),
@@ -419,5 +492,6 @@ class TelemetryState:
                     "available": position_available,
                 },
                 "version": dict(self._version) if self._version else None,
+                "parameters": dict(self._parameters),
                 "statusTexts": [dict(entry) for entry in self._statustexts],
             }

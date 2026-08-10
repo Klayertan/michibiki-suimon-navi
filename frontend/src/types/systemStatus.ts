@@ -10,7 +10,7 @@
  */
 export type StatusValue = 'connected' | 'disconnected' | 'unknown' | 'warning' | 'not_integrated'
 
-export type ServiceId = 'gnss' | 'serial' | 'recording' | 'drone' | 'camera' | 'backend'
+export type ServiceId = 'gnss' | 'serial' | 'recording' | 'wakeLock' | 'drone' | 'camera' | 'backend'
 
 export interface ServiceStatus {
   value: StatusValue

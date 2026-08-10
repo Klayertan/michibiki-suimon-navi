@@ -1,7 +1,8 @@
 import { useFields } from '../../services/fields/useFields'
 import { useActiveFieldStore } from '../../store/useActiveFieldStore'
 import { useSelectedEntityStore } from '../../store/useSelectedEntityStore'
-import { sortFieldsByName } from '../../domain/fields/selectors'
+import { fieldAreaSquareMeters, sortFieldsByName } from '../../domain/fields/selectors'
+import { formatAreaHa } from '../../domain/fields/area'
 
 /**
  * A compact dropdown, not a permanent card list (task section 19) -- this app
@@ -42,7 +43,7 @@ export function FieldSelector() {
       <option value="">{sorted.length === 0 ? 'No fields registered' : 'Select a field…'}</option>
       {sorted.map((field) => (
         <option key={field.id} value={field.id}>
-          {field.name || field.id}
+          {field.name || field.id} · {formatAreaHa(fieldAreaSquareMeters(field))}
         </option>
       ))}
     </select>

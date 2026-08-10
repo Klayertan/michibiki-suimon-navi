@@ -54,15 +54,18 @@ class MavlinkLink(abc.ABC):
     """A bidirectional MAVLink transport restricted to safe operations.
 
     There is intentionally no ``send_raw`` / ``send_packet`` method. This
-    interface can produce exactly three kinds of outbound frame:
+    interface can produce only the reviewed outbound frames below:
 
     1. a GCS heartbeat;
     2. a ``COMMAND_LONG`` carrying a command id that
        :mod:`app.mavlink.command_service` has already validated against its
        allowlist;
     3. a ``SET_POSITION_TARGET_LOCAL_NED`` velocity setpoint produced solely by
-       :mod:`app.mavlink.pilot_service`, whose limits live in
-       :mod:`app.mavlink.pilot_limits`.
+       the separately retained GUIDED-mode velocity feature;
+    4. an ``RC_CHANNELS_OVERRIDE`` for channels 1--8 produced by the manual
+       pilot service; and
+    5. a read-only ``PARAM_REQUEST_READ`` used to discover the vehicle's RC
+       mapping, calibration, and override-failsafe configuration.
 
     A caller cannot use this interface to transmit an arbitrary MAVLink
     message even if it wanted to.
@@ -73,11 +76,8 @@ class MavlinkLink(abc.ABC):
     unacknowledged, so a failure would be invisible.)
 
     Still deliberately absent, and not to be added without a separate reviewed
-    change: ``MANUAL_CONTROL``, ``RC_CHANNELS_OVERRIDE``,
-    ``SET_ATTITUDE_TARGET``, ``MAV_CMD_DO_SET_SERVO`` and anything that
-    commands motors directly. Velocity setpoints are used precisely *because*
-    they go through ArduPilot's stabilisation and position controller rather
-    than around them.
+    change: ``MANUAL_CONTROL``, ``PARAM_SET``, ``SET_ATTITUDE_TARGET``,
+    ``MAV_CMD_DO_SET_SERVO`` and anything that commands motors directly.
     """
 
     @property
@@ -147,6 +147,37 @@ class MavlinkLink(abc.ABC):
         Implementations must not re-scale or re-interpret these values; the
         limit boundary is :mod:`app.mavlink.pilot_limits`, and duplicating it
         here would create a second place for the aircraft's top speed to live.
+        """
+
+    @abc.abstractmethod
+    def send_rc_channels_override(
+        self,
+        *,
+        target_system: int,
+        target_component: int,
+        channels: tuple[int, int, int, int, int, int, int, int],
+    ) -> None:
+        """Transmit one ``RC_CHANNELS_OVERRIDE`` for channels 1--8.
+
+        Values use MAVLink's first-eight-channel semantics: ``0`` releases a
+        channel to the normal receiver, ``65535`` leaves its existing input
+        unchanged, and any other unsigned 16-bit value is the requested PWM.
+        Channels 9--18 are deliberately outside this contract and therefore
+        remain ignored.
+        """
+
+    @abc.abstractmethod
+    def send_parameter_request(
+        self,
+        *,
+        target_system: int,
+        target_component: int,
+        name: str,
+    ) -> None:
+        """Request one parameter by name with ``PARAM_REQUEST_READ``.
+
+        This is intentionally a read-only operation. No parameter-write method
+        exists on the transport contract.
         """
 
     @abc.abstractmethod

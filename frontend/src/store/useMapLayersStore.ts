@@ -11,6 +11,7 @@ export type MapLayerId =
   | 'survey-track'
   | 'gnss-position'
   | 'water-points'
+  | 'water-measurements'
   | 'observations'
   | 'drone-position'
   | 'mission-grid'
@@ -20,6 +21,7 @@ export const MAP_LAYER_IDS: MapLayerId[] = [
   'survey-track',
   'gnss-position',
   'water-points',
+  'water-measurements',
   'observations',
   'drone-position',
   'mission-grid',
@@ -36,6 +38,7 @@ const DEFAULT_VISIBILITY: Record<MapLayerId, boolean> = {
   'survey-track': true,
   'gnss-position': true,
   'water-points': true,
+  'water-measurements': true,
   observations: true,
   'drone-position': true,
   'mission-grid': false,
