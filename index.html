@@ -947,6 +947,9 @@
       align-items: center;
       background: var(--panel);
       border: 1px solid var(--line);
+      /* Reserved at all times (transparent when inactive) so the active
+         underline never shifts row height or causes layout jump. */
+      border-bottom: 3px solid transparent;
       border-radius: 12px;
       color: var(--text);
       cursor: pointer;
@@ -972,8 +975,10 @@
     }
 
     .mode-tab.active {
+      /* Bottom-underline indicator only -- no full outline. Top/left/right
+         stay the same neutral --line color as an inactive tab. */
       background: #eaf3ec;
-      border-color: var(--green);
+      border-bottom-color: var(--green);
       color: var(--green);
     }
 
@@ -1062,6 +1067,7 @@
 
     .app-header {
       background: rgba(251, 250, 245, 0.97);
+      border-bottom: 1px solid var(--line);
       box-shadow: 0 4px 18px rgba(35, 56, 45, 0.07);
       padding: 12px clamp(16px, 3vw, 32px) 0;
     }
