@@ -184,6 +184,15 @@ class PilotService:
         self._last_rejected_sequence: int | None = None
 
         self._last_override = RELEASE_RC_OVERRIDE
+        # The legacy ``override`` field above is retained for compatibility,
+        # but it does not say whether that frame was movement, bench safe-idle,
+        # or a release.  These fields describe the last frame that actually
+        # completed ``send_rc_channels_override`` -- never browser intent.
+        self._last_outgoing_state = "NOT_SENT"
+        self._last_outgoing_reason: str | None = None
+        self._last_outgoing_safe_idle = False
+        self._last_outgoing_target_system: int | None = None
+        self._last_outgoing_target_component: int | None = None
         self._last_reason: str | None = BlockReason.NOT_ENABLED
         self._last_release_reason: str | None = None
         self._last_sent_at: float | None = None
@@ -491,17 +500,18 @@ class PilotService:
                     failsafe=self._override_owned or self._transmitting,
                 )
 
-            # ARM confirmation deliberately does not unlock held controls.
-            # A post-confirmation dead-man release/neutral frame consumes its
-            # own sequence and opens the gate; only a later sequence with the
-            # dead-man re-pressed may activate output.
+            # Every frame observed before ARM confirmation is discarded by
+            # finish_arming_input_barrier().  Once confirmation has completed,
+            # the first strictly newer, accepted frame may open the barrier.
+            # A fresh dead-man-held movement is therefore usable immediately;
+            # an ambiguous/unconfirmed ARM transaction remains latched.
             barrier_cleared = False
             if (
                 not provider_rejected
                 and
                 self._arming_input_barrier
                 and self._arming_barrier_confirmed
-                and (command.neutral or not command.deadman)
+                and (command.neutral or not command.deadman or not command.is_zero)
             ):
                 self._arming_input_barrier = False
                 self._arming_barrier_confirmed = False
@@ -511,10 +521,9 @@ class PilotService:
             # the worker sends the zero-release frame on its next iteration.
             if not provider_rejected and (command.neutral or not command.deadman or command.is_zero):
                 if command.neutral:
-                    # A neutral/dead-man-up frame is the explicit release
-                    # edge that consumes the post-arm inhibit. Report the
-                    # ordinary no-input state once that edge has opened the
-                    # gate; plain neutral commands retain their diagnostic.
+                    # A neutral frame may consume the post-arm fresh-input
+                    # barrier too. Report the ordinary no-input state in that
+                    # case; plain neutral commands retain their diagnostic.
                     reason = BlockReason.NO_INPUT if barrier_cleared else BlockReason.NEUTRAL_COMMANDED
                     self._forced_block_reason = None
                     self._failsafe_latched = False
@@ -598,8 +607,8 @@ class PilotService:
             self._input = None
             # ACK/HEARTBEAT timeouts are ambiguous: the aircraft can be armed
             # even though this request reports failure, so the inhibit stays
-            # latched. A verified ARM moves it to "release required" rather
-            # than opening it: held controls must be released/re-pressed.
+            # latched. A verified ARM allows only a strictly newer frame to
+            # open it; all input received during verification was discarded.
             self._arming_barrier_confirmed = confirmed_armed
             self._command_arm_transaction = False
             self._last_observed_armed = self._state.is_armed()
@@ -770,7 +779,7 @@ class PilotService:
             if now < self._next_send:
                 return False
 
-            override, reason, _configuration, _is_safe_idle = self._evaluate(now)
+            override, reason, _configuration, is_safe_idle = self._evaluate(now)
             was_active = self._override_owned or self._transmitting
             if override is None:
                 if was_active:
@@ -786,9 +795,11 @@ class PilotService:
                     return False
                 outbound = RELEASE_RC_OVERRIDE
                 releasing = True
+                outgoing_reason = self._last_release_reason or reason
             else:
                 outbound = override
                 releasing = False
+                outgoing_reason = reason if is_safe_idle else "deadman_held_fresh_input"
                 self._release_until = 0.0
                 self._last_reason = None
             self._next_send = now + MANUAL_OVERRIDE_INTERVAL
@@ -806,7 +817,7 @@ class PilotService:
 
                 # Telemetry can close a gate without mutating PilotService.
                 # Re-evaluate at the last safe point before starting a write.
-                refreshed, refreshed_reason, _configuration, _refreshed_is_safe_idle = self._evaluate(self._clock())
+                refreshed, refreshed_reason, _configuration, refreshed_is_safe_idle = self._evaluate(self._clock())
                 if not releasing and refreshed is None:
                     self._schedule_release(
                         refreshed_reason or BlockReason.NEUTRAL_COMMANDED,
@@ -814,8 +825,13 @@ class PilotService:
                     )
                     outbound = RELEASE_RC_OVERRIDE
                     releasing = True
+                    outgoing_reason = self._last_release_reason or refreshed_reason
                 elif not releasing and refreshed is not None:
                     outbound = refreshed
+                    is_safe_idle = refreshed_is_safe_idle
+                    outgoing_reason = (
+                        refreshed_reason if refreshed_is_safe_idle else "deadman_held_fresh_input"
+                    )
 
             try:
                 self._send_override(
@@ -840,7 +856,14 @@ class PilotService:
                 with self._lock:
                     changed_during_send = generation != self._generation
                     self._last_override = outbound
-                    self._last_sent_at = now
+                    self._last_sent_at = self._clock()
+                    self._last_outgoing_state = (
+                        "RELEASED" if releasing else "SAFE_IDLE" if is_safe_idle else "TRANSMITTING"
+                    )
+                    self._last_outgoing_reason = outgoing_reason
+                    self._last_outgoing_safe_idle = bool(is_safe_idle and not releasing)
+                    self._last_outgoing_target_system = target_system
+                    self._last_outgoing_target_component = target_component
                     self._messages_sent += 1
                     self._last_error = None
                     if releasing:
@@ -858,8 +881,8 @@ class PilotService:
                         self._output_active = False
                     else:
                         self._override_owned = True
-                        self._transmitting = True
-                        self._output_active = True
+                        self._transmitting = not is_safe_idle
+                        self._output_active = not is_safe_idle
                         self._failsafe_latched = False
 
         if error is not None:
@@ -906,6 +929,11 @@ class PilotService:
                     with self._lock:
                         self._last_override = RELEASE_RC_OVERRIDE
                         self._last_sent_at = self._clock()
+                        self._last_outgoing_state = "RELEASED"
+                        self._last_outgoing_reason = reason
+                        self._last_outgoing_safe_idle = False
+                        self._last_outgoing_target_system = target_system
+                        self._last_outgoing_target_component = target_component
                         self._messages_sent += 1
                         self._release_messages_sent += 1
         with self._lock:
@@ -1012,7 +1040,10 @@ class PilotService:
                 "failsafe": failsafe,
                 "readyToArm": ready_to_arm,
                 "armingInputBarrier": self._arming_input_barrier,
-                "armingReleaseRequired": (
+                # Deprecated compatibility field: confirmed ARM now requires
+                # a fresh post-confirmation frame, not a dead-man release edge.
+                "armingReleaseRequired": False,
+                "armingFreshInputRequired": (
                     self._arming_input_barrier and self._arming_barrier_confirmed
                 ),
                 "blockedReason": reason,
@@ -1037,6 +1068,19 @@ class PilotService:
                 "overrideRateHz": pilot_limits.MANUAL_OVERRIDE_RATE_HZ,
                 "setpointRateHz": pilot_limits.SETPOINT_RATE_HZ,
                 "override": self._last_override.to_dict(),
+                "lastOutgoingOverride": {
+                    **self._last_override.to_dict(),
+                    "sent": self._last_sent_at is not None,
+                    "state": self._last_outgoing_state,
+                    "reason": self._last_outgoing_reason,
+                    "safeIdle": self._last_outgoing_safe_idle,
+                    "sentAt": self._last_sent_at,
+                    "ageSeconds": (
+                        None if self._last_sent_at is None else max(0.0, now - self._last_sent_at)
+                    ),
+                    "targetSystem": self._last_outgoing_target_system,
+                    "targetComponent": self._last_outgoing_target_component,
+                },
                 "overrideOwned": self._override_owned,
                 "releaseActive": now < self._release_until,
                 "lastReleaseReason": self._last_release_reason,

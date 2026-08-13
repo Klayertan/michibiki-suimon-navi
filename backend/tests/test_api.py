@@ -437,21 +437,6 @@ def test_mock_bench_arm_manual_release_disarm_acceptance(
         assert arm_frame["params"][:2] == (1.0, 0.0)
 
         next_sequence = client.get("/api/drone/status").json()["pilot"]["nextSequence"]
-        barrier_release = client.post(
-            "/api/drone/pilot/input",
-            json={
-                "pitch": 0,
-                "roll": 0,
-                "throttle": 0,
-                "yaw": 0,
-                "deadman": False,
-                "neutral": False,
-                "source": "keyboard",
-                "sequence": next_sequence,
-            },
-        )
-        assert barrier_release.status_code == 200
-        assert barrier_release.json()["detail"]["pilot"]["armingInputBarrier"] is False
         active = client.post(
             "/api/drone/pilot/input",
             json={
@@ -461,10 +446,15 @@ def test_mock_bench_arm_manual_release_disarm_acceptance(
                 "yaw": 0,
                 "deadman": True,
                 "source": "keyboard",
-                "sequence": next_sequence + 1,
+                "sequence": next_sequence,
             },
         )
         assert active.status_code == 200
+        parsed = active.json()["detail"]["pilot"]
+        assert parsed["axes"] == {"pitch": 0.0, "roll": 0.0, "throttle": 0.1, "yaw": 0.0}
+        assert parsed["deadman"] is True
+        assert parsed["provider"] == "keyboard"
+        assert parsed["armingInputBarrier"] is False
         assert wait_until(
             lambda: client.get("/api/drone/status").json()["pilot"]["transmitting"] is True
         )
@@ -480,7 +470,7 @@ def test_mock_bench_arm_manual_release_disarm_acceptance(
                 "deadman": False,
                 "neutral": False,
                 "source": "keyboard",
-                "sequence": next_sequence + 2,
+                "sequence": next_sequence + 1,
             },
         )
         assert released.status_code == 200

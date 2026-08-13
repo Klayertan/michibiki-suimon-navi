@@ -4,9 +4,9 @@ Updated: 2026-08-09 (Asia/Tokyo)
 
 ## 1. Current migration stage
 
-**Stage 5B (transient GNSS serial disconnect/reconnect reliability) is complete.** A temporary WebSerial interruption — a USB cable wiggle, a read-loop rejection, a receiver that stops producing fixes — no longer requires the operator to restart anything. `SerialGnssService` now runs a bounded automatic reconnect against the exact port that was already granted (never a different device, never a fresh permission prompt), and an active recording survives the interruption unmodified: same session, no fabricated or duplicated points, monotonic sequence numbers across the gap. Stop here. Stage 5C (Wake Lock / screen-sleep prevention) has not started.
+**Stage 5C (field-session resilience / Screen Wake Lock) is complete.** An active GNSS recording now holds a standard Screen Wake Lock for as long as it is genuinely recording — not merely because Survey is open, GNSS is connected, or an unresolved recovery is showing — and releases it the instant recording stops. A temporary loss of the lock (tab hidden, or the browser taking it away on its own) never pauses or fails the recording; reacquisition happens only when the tab becomes visible again and recording is still active, with no polling and no uncontrolled retry loop. An unsupported browser or a rejected request degrades to a compact, non-blocking status — recording is never gated on it. Stop here. No Stage 6 has been scoped yet; see §2.16 for an analysis of Data/Reports as the likely next candidate.
 
-Stage 5A (recording crash recovery — Resume/Finish & Save/Discard for an unfinished session after a reload or crash) remains complete and untouched by this stage. Stage 4B (water decision/recommendation) and Stage 4A (water foundation) remain complete and untouched. Stages 0–3C remain as previously recorded; all checkpoints are preserved further down this document.
+Stage 5B (bounded, single-port automatic WebSerial reconnect) and Stage 5A (recording crash recovery — Resume/Finish & Save/Discard for an unfinished session after a reload or crash) remain complete and untouched by this stage. Stage 4B (water decision/recommendation) and Stage 4A (water foundation) remain complete and untouched. Stages 0–3C remain as previously recorded; all checkpoints are preserved further down this document.
 
 The legacy static app remains intact. The default legacy (`localhost:4173`) and React (`localhost:5173`) dev servers use different browser storage partitions. For a real same-data check, stop the legacy server and run `npm run dev:new-ui:shared-storage`; React then runs sequentially on the exact legacy `http://localhost:4173` origin and reads the same localStorage. A simultaneous `/new/` mount is still unresolved.
 
@@ -23,9 +23,165 @@ This checkpoint is independent of the React Water migration recorded below. No W
 - **Normal ARM/DISARM only:** `/api/drone/arm` and `/api/drone/disarm` require `{confirmed:true}`, safe commands, a fresh link, MAVLink command 400 with `param2=0`, accepted ACK, and matching HEARTBEAT state. ARM additionally requires the Pilot channel, valid RC configuration/manual mode, known DISARMED state, and stored props acknowledgement in Bench Mode. DISARM remains available after Pilot disable. The force value `21196`, pre-arm bypass, failsafe weakening, and automatic parameter changes are absent.
 - **Validation boundary:** the automated operator flow uses the mock backend and simulated PS5 only. No COM10, real Pixhawk, physical DualSense, motor, propeller, hover, or flight validation is claimed. The first real step is the exact 15-step propellers-removed procedure in `docs/PILOT_CONTROL_GUIDE.md`; a rejected pre-arm check must never be bypassed.
 
-## 2. Stage 5B completion checkpoint
+## 2. Stage 5C completion checkpoint
 
-### 2.1 Disconnect taxonomy — audited, not assumed
+### 2.1 Architecture — a narrow service, not calls scattered through components
+
+`WakeLockService` (`frontend/src/services/wakeLock/wakeLockService.ts`) wraps `navigator.wakeLock.request("screen")` behind exactly four members: `request()`, `release()`, `getSnapshot()`, `isWanted()`. It knows nothing about recording, GNSS, or recovery — the same separation Stage 3B/5A/5B already established between `SerialGnssService` and `RecordingService`. All orchestration — *when* to call `request()`/`release()` — lives in one small hook, `useWakeLockRuntime` (`frontend/src/services/wakeLock/useWakeLockRuntime.ts`), mounted once at the app root beside `useGnssRuntime()`.
+
+```
+useWakeLockRuntime (app root, mounted once)
+   ├─ subscribes to RecordingService.subscribe()
+   │     state edge-transitions into 'recording'  → wakeLockService.request()
+   │     state edge-transitions out of 'recording' → wakeLockService.release()
+   ├─ subscribes to WakeLockService.subscribe()  → publishes the "Screen" status badge
+   └─ one document.visibilitychange listener
+         visible AND still recording AND isWanted() → wakeLockService.request()
+```
+
+Legacy already has an equivalent (`recording-controller.js`'s `requestWakeLock()`/`releaseWakeLock()`/`handleVisibilityChange()`, using `wakeLockSupported = "wakeLock" in navigator` and a `#recWakeLockStatus` display of 非対応/有効/無効); this stage is a fresh TypeScript implementation of the same lifecycle, not a port, since the legacy version is inline inside `recording-controller.js`'s monolithic class rather than an exported pure function.
+
+### 2.2 Acquisition — recording-lifecycle only, nothing else
+
+A lock is requested **only** on a genuine `RecordingState` transition into `'recording'` — captured as an edge (`wasRecording` false → true), not a level, so repeated snapshot notifications while already recording (every ingested point re-notifies subscribers) never re-request. Both paths that reach `'recording'` — a fresh `start()` and a successful `resumeRecovery()` — trigger it identically, since both simply set the same state; no special-casing per method was needed.
+
+Explicitly does **not** acquire merely because:
+- the Survey workspace is open,
+- GNSS is connected,
+- an unfinished session exists,
+- `recovery_available` (Recovery Required) is showing.
+
+Each of these is pinned by a dedicated test in `useWakeLockRuntime.test.tsx`.
+
+### 2.3 Release — the instant recording leaves the active state
+
+Symmetric with acquisition: release fires on the edge transition *out of* `'recording'` — Stop, Finish & Save of the active session, Discard of the active session, or an error transition all leave `'recording'`, and all are covered by the same one check rather than one handler per action. Release happens as soon as `stop()` sets state to `'stopping'` (immediately, not after the flush completes) — data-safety never depends on the lock (§2.8), so there is no reason to hold it through the drain.
+
+### 2.4 Visibility handling — event-driven, not polled
+
+The Screen Wake Lock spec allows (and Chromium does) release a lock automatically when the document becomes hidden. `useWakeLockRuntime` installs exactly one `document.visibilitychange` listener for the lifetime of the app. On `visible`, it re-requests **only if** `recordingService.getSnapshot().state === 'recording'` **and** `wakeLockService.isWanted()` — the latter distinguishes "the operator still wants this held" (recording never stopped) from "the operator released it on purpose" (recording stopped while hidden, so `isWanted()` is already `false` and nothing reacquires on return). No interval, no repeated polling of the sentinel's state anywhere in the implementation — task section 18's explicit constraint.
+
+### 2.5 The sentinel `release` event — status only, never a retry trigger
+
+`WakeLockService`'s own listener on the sentinel's `release` event does exactly one thing: transition its internal state to `'released'` and notify subscribers. It never calls `request()` itself. This is deliberate and tested (`wakeLockService.test.ts`): the *only* code path that ever re-requests after an unsolicited release is `useWakeLockRuntime`'s `visibilitychange` handler, which only fires on an actual visibility change — so a burst of spurious `release` events (were the browser to produce one) can never trigger a retry storm.
+
+### 2.6 Unsupported browsers and request failures — both non-fatal, both compact
+
+If `navigator.wakeLock` doesn't exist, `WakeLockService`'s constructor sets state to `'unsupported'` permanently; `request()` becomes a safe no-op that still records the caller's intent (`isWanted()` still flips true) but never throws. If `navigator.wakeLock.request()` itself rejects (browser policy, permissions, battery/system restriction, or an implementation-specific error), state becomes `'error'` with the message preserved — again, never thrown up to the caller. Neither condition disables **Start Recording**, and neither is rendered as an `alert`/blocking dialog: both show as a single `role="status"` line in the Survey inspector —
+
+> Screen keep-awake unavailable. Recording will continue; prevent the device from sleeping manually.
+
+or
+
+> Keep-awake request failed. Recording is still active.
+
+### 2.7 Recording remains authoritative — proven, not assumed
+
+`RecordingService` has zero import of, or reference to, `wakeLockService` anywhere in its source — the coupling is structurally one-directional (`useWakeLockRuntime` reads `RecordingService`, never the reverse), so "wake lock state cannot affect recording correctness" is true by construction. A dedicated test still drives the point home directly: it forces `WakeLockService` into an `'error'` state while a recording is active and asserts `RecordingService.stop()` is never called and the recording's own state never changes as a result (task section 14's exact example: "Recording = active, Wake Lock = error, and data continues to persist normally").
+
+### 2.8 Interaction with Stage 5B and Stage 5A — independent axes, verified independently
+
+- **Stage 5B (GNSS reconnect):** the wake lock is tied to the *recording* lifecycle, not the *serial connection* lifecycle. A test starts a recording, drives `RecordingService.setConnectionMeta()` through a reconnect-interruption warning exactly as Stage 5B's own UI would, and asserts `wakeLockService.release()` is never called — `recording active / GNSS reconnecting / wake lock active` is a valid, expected combination, not a bug.
+- **Stage 5A (recovery):** `checkForRecovery()` and an unresolved `recovery_available` state never acquire a lock — proven directly, not just by absence of a call site. Only after the operator explicitly clicks **Resume**, landing on the same `'recording'` state a fresh Start reaches, does the lock get requested — exactly the same edge-transition rule as §2.2, applied uniformly rather than special-cased for the recovery path.
+
+### 2.9 Status bar and Survey workspace UX
+
+A new `wakeLock` `ServiceId` drives a compact "Screen" badge in the existing top status bar (`TopStatusBar.tsx`'s `ORDER` array, right after `recording`) — no new panel. Values: `connected`/"Awake" while active and recording, `warning`/"Reconnecting-style" text while `released` or `error`, `warning`/"Keep-awake unsupported" when the browser lacks the API (shown regardless of recording state, since it's worth knowing proactively), and `disconnected` whenever not recording.
+
+Inside the Survey inspector, one new row was added to the *existing* `survey-recording` metrics list — `Keep screen awake: ● Active` / `Unavailable` / `Reacquiring…` / `Failed` / `—` — no new section, no enlarged control area (viewport-tested).
+
+### 2.10 What the Screen Wake Lock API does *not* do — stated precisely, nothing invented
+
+Screen Wake Lock can request that the display stay on. Nothing in this stage claims it can guarantee Windows/macOS won't sleep, that a laptop lid close is ignored, that OS suspend is disabled, that battery depletion cannot occur, or that the browser process cannot be killed. No `powercfg`, `caffeinate`, or other platform shell command was added anywhere — Stage 5C is browser-API-level only, exactly as scoped.
+
+### 2.11 Exact Stage 5C changed files
+
+New:
+```text
+frontend/src/services/wakeLock/wakeLockService.ts
+frontend/src/services/wakeLock/useWakeLockRuntime.ts
+frontend/src/services/wakeLock/__tests__/wakeLockService.test.ts
+frontend/src/services/wakeLock/__tests__/useWakeLockRuntime.test.tsx
+frontend/tests/browser/wakelock.spec.ts
+```
+
+Modified:
+```text
+docs/HANDOFF.md
+docs/FRONTEND_ARCHITECTURE.md
+docs/UI_REDESIGN.md
+frontend/src/app/App.tsx                                          (mounts useWakeLockRuntime)
+frontend/src/types/systemStatus.ts                                (+'wakeLock' ServiceId)
+frontend/src/store/useSystemStatusStore.ts                        (+wakeLock initial status)
+frontend/src/store/__tests__/useSystemStatusStore.test.ts         (+1 assertion)
+frontend/src/components/layout/TopStatusBar.tsx                   (+wakeLock in ORDER)
+frontend/src/features/survey/SurveyInspector.tsx                  ("Keep screen awake" row + notices)
+frontend/src/features/survey/__tests__/SurveyInspector.test.tsx   (+5 tests)
+```
+
+No legacy `js/` file, no backend file, no pilot/MAVLink file, and no IndexedDB schema definition was modified. No changes to Stage 5A or Stage 5B semantics.
+
+### 2.12 Stage 5C verification results
+
+| Check | Result |
+|---|---|
+| `npm test` in `frontend/` | **44 files, 296/296 passed** (Stage 5B end: 41 files, 249) |
+| `npm test` at repository root | **219/219 passed** (Stage 5B end: 216 — the +3 delta is concurrent pilot work; Stage 5C added no root-level test) |
+| Legacy recording browser, `npx playwright test tests/browser/recording.spec.js` | **13/14 passed** — the same isolated failure reported at the end of Stage 5B (`an interrupted session survives reload...`, a timing assertion against the legacy static app's `index.html`, which Stage 5C did not touch either). Unchanged in nature, not newly introduced. |
+| React acceptance, `npx playwright test` in `frontend/` | **18/18 passed** (14 pre-existing + 4 new Stage 5C) |
+| `npx tsc -b` | passed |
+| `npx vite build` | passed |
+| `npm run lint` | passed with the one pre-existing `routes.tsx` warning; Stage 5C adds none |
+| `git diff --check` | clean |
+| Backend pytest | **Not run.** Stage 5C changed no backend/API/MAVLink/command file. |
+
+Failure classification: **no Stage 5C regression** in any suite covering code this stage touched. The one legacy-suite failure is the same pre-existing issue already isolated and described at the end of Stage 5B, in a file this stage did not modify.
+
+Viewport acceptance, asserted with an active recording (and therefore an active wake lock) at **1366×768, 1920×1080, and 1024×768**: no document-level scrolling, and the recording control area's height stays within a generous bound that would catch an accidental new panel while tolerating normal layout variance — the "Keep screen awake" row is one line inside the existing metrics list, not a new section.
+
+### 2.13 Test coverage map
+
+| Requirement | Where proven |
+|---|---|
+| Unsupported browser still records normally | `wakeLockService.test.ts`; `wakelock.spec.ts` |
+| Request on record-start, released on stop, no redundant re-request | `wakeLockService.test.ts`; `useWakeLockRuntime.test.tsx` |
+| Hidden tab: no unsafe repeated requests; visible-again reacquire only if still recording | `useWakeLockRuntime.test.tsx`; `wakelock.spec.ts` |
+| Stopped-while-hidden: no reacquire on return | `useWakeLockRuntime.test.tsx`; `wakelock.spec.ts` |
+| Sentinel unexpectedly releases: status updates, no self-triggered retry | `wakeLockService.test.ts` |
+| Request rejection is non-fatal | `wakeLockService.test.ts`; `SurveyInspector.test.tsx` |
+| Repeated start/stop cycles: no leaked sentinels/listeners, exact call counts | `wakeLockService.test.ts`; `useWakeLockRuntime.test.tsx` |
+| Recording remains authoritative over wake lock state | `useWakeLockRuntime.test.tsx` (task section 14, direct proof) |
+| Independent of Stage 5B GNSS reconnect | `useWakeLockRuntime.test.tsx` |
+| Independent of Stage 5A recovery-required; requested after Resume | `useWakeLockRuntime.test.tsx` |
+| Status bar and Survey workspace rendering, all states | `useWakeLockRuntime.test.tsx` (`publishWakeLockStatus`); `SurveyInspector.test.tsx` |
+| Real-browser: full lifecycle, hidden/stopped-no-reacquire, unsupported path, viewports | `wakelock.spec.ts` (4 tests) |
+
+### 2.14 Bundle size
+
+| | Raw | Gzip |
+|---|---|---|
+| End of Stage 5B | 553.35 kB | 164.75 kB |
+| End of Stage 5C | 558.37 kB | 166.04 kB |
+| Delta | +5.02 kB | +1.29 kB |
+
+### 2.15 Dirty files belonging to other work — do not touch
+
+Concurrent pilot/manual-control/MAVLink work continued throughout this stage, and separately, an in-progress Stage-2B-adjacent field-boundary-area feature landed in `frontend/src/features/survey/__tests__/Stage3CWorkflow.test.tsx`/`SurveyInspector.css` mid-session from a different concurrent source — neither was authored, reviewed, or touched as part of Stage 5C. Everything under `backend/`, `js/pilot/`, `css/pilot.css`, `js/gamepad/`, `tests/unit/pilot-*.test.js`, `tests/unit/gamepad-*.test.js`, `tests/browser/manual-control-helpers.js`, `mock-manual-acceptance.html`, and the pilot/gamepad/MAVLink operator guides in `docs/` continues to belong to that separate work.
+
+### 2.16 Recommended next step — analysis, not a decision
+
+With Stage 5A, 5B, and 5C complete, the reliability layer the Stage 4B recommendation originally flagged (unrecoverable interrupted session; silent reconnect failure; screen sleep during a field survey) is now closed end to end. The app has Field + Survey/GNSS + Observations + Water + Decision + a complete reliability layer, and the next natural candidate is a coherent output layer over all of it:
+
+- **Data + Reports** (the default candidate): `js/reports/field-report.js` already renders water control points and would be a natural next consumer of the now-typed `GateDecision` output (Stage 4B, §5.7 in this document's numbering) — read-heavy, low risk, and the first stage where the value of everything built so far (recordings, observations, water points, decisions) becomes visible to the farmer as one coherent output rather than four separate workspaces.
+- **Paddy Intelligence**: the largest remaining legacy surface (1,929 lines, never modularized), but demo-only geometry today, not real field data — migrating it does not depend on anything built in Stages 4–5.
+- **Stage 2B (boundary editing)**: a real gap (fields can only be created from a walked/uploaded track today, never hand-drawn or edited after the fact), but orthogonal to the reliability work just completed.
+- **Observation photo/media support**: `markedObservations`' `imageRef` plumbing already exists in the legacy schema and recording store; React has never surfaced it.
+
+No single option is blocked by another. Data + Reports has the strongest case: it is the first stage that makes the reliability investment of 5A–5C *visible* to the person actually using this app in a field, rather than adding another independent capability. This is analysis for the next authorization, not a decision — do not start any of it automatically.
+
+## 3. Stage 5B completion checkpoint
+
+### 3.1 Disconnect taxonomy — audited, not assumed
 
 Stage 3B's `SerialGnssService` already had a "granted-port reconnect" path (`connect()` silently retries every port `navigator.serial.getPorts()` already knows about before ever calling `requestPort()`), but nothing triggered it automatically — any interruption, of any kind, landed on a bare `disconnected` and stayed there until the operator clicked Connect again. The audit found the class was declared but never wired: `GnssConnectionState` already listed `'stalled'` in Stage 3B, yet no code path ever set it.
 
@@ -33,12 +189,12 @@ Four classes, from the task brief, each handled differently on purpose:
 
 | Class | Trigger | Stage 5B behavior |
 |---|---|---|
-| **A — physical/device disconnect** | The browser's native `serial` `'disconnect'` event fires for the currently-open port. | Automatic bounded reconnect (§2.3). |
+| **A — physical/device disconnect** | The browser's native `serial` `'disconnect'` event fires for the currently-open port. | Automatic bounded reconnect (§3.3). |
 | **B — read-loop failure** | `reader.read()` rejects, or the stream ends (`done: true`) without a device event. | Same automatic bounded reconnect — indistinguishable from A for retry purposes; only the surfaced message differs ("device disconnected" vs. "stream ended"). |
 | **C — malformed NMEA** | One sentence fails to parse. | **Never triggers reconnect.** This is `handleLine()`'s existing per-sentence `malformed` counter, unchanged since Stage 3B — a bad sentence is a data-quality event, not a transport event. |
 | **D — stalled input** | The port is open and the read loop is healthy, but no byte has arrived for `DEFAULT_STALL_TIMEOUT_MS` (8000ms, reused verbatim from `js/recording/recording-core.js`'s `DEFAULT_DIAGNOSTIC_THRESHOLDS_MS.byteStallMs` — not a new number). | **Never triggers reconnect either.** The transport itself is fine; closing and reopening a healthy port would not make a receiver produce fixes it doesn't have (e.g. no satellite lock indoors). Surfaced as its own `'stalled'` connection state; manual Reconnect remains available if the operator wants to force a cycle anyway. |
 
-### 2.2 Reconnect state machine — one authoritative state, no parallel booleans
+### 3.2 Reconnect state machine — one authoritative state, no parallel booleans
 
 `GnssConnectionState` gained exactly two new values: `'reconnecting'` and `'reconnect_required'`. No `isConnected`/`isReconnecting`/`connectionLost` booleans were added anywhere — every consumer (the status bar, the Survey UI, `RecordingService.setConnectionMeta()`) branches on this one field.
 
@@ -56,7 +212,7 @@ Four classes, from the task brief, each handled differently on purpose:
 
 `disconnect()` (the explicit, user-initiated action) always lands on plain `disconnected` and clears the retry target (`lastPort = null`), so a stray later event has nothing to act on — it can never be confused with an interruption the operator didn't ask for.
 
-### 2.3 Retry policy — bounded, capped-exponential, against one specific port
+### 3.3 Retry policy — bounded, capped-exponential, against one specific port
 
 Reconnect delays are `[1000, 2000, 4000, 8000]` ms (`DEFAULT_RECONNECT_DELAYS_MS`, `frontend/src/services/gnss/serialGnssService.ts`) — four attempts, worst case ~15s before giving up. This was not picked arbitrarily: it doubles each time (conservative enough not to hammer the device on a genuinely dead link) while still recovering a brief cable wiggle within a couple of seconds, and it is injectable via the constructor's `reconnectDelaysMs` option specifically so unit tests never wait out real wall-clock delays (they use `[5, 5, 5]`ms).
 
@@ -65,11 +221,11 @@ Automatic reconnect retries **only `lastPort`** — the exact `SerialPortLike` o
 - **No arbitrary device selection with multiple granted ports** (task section 18): since the automatic path doesn't enumerate ports at all, there is no list to arbitrarily pick from — it either reopens the one specific port that was lost, or it doesn't reconnect automatically at all.
 - A **generation counter** (`currentGeneration`) guards against a manual `connect()`/`disconnect()` racing a pending automatic attempt: every manual action and every new loss episode increments it, and a scheduled attempt checks its captured generation before acting (after its delay, and again after its own `await port.open()`) — a stale attempt that lost the race closes whatever it just opened rather than leaving two ports live.
 
-### 2.4 Manual reconnect always wins
+### 3.4 Manual reconnect always wins
 
 The existing "Connect GNSS" button is the same escape hatch during `reconnecting`/`reconnect_required` — it isn't blocked by the automatic retry (task section 7), and its label changes to **"Reconnect GNSS"** in those two states so the operator knows what it will do. Clicking it (or the reconnect banner's own **Reconnect now** button, which calls the identical `serialGnssService.connect()`) cancels any pending automatic timer immediately and proceeds through the normal granted-port-then-picker flow.
 
-### 2.5 Recording continuity — mostly free, one real bug found
+### 3.5 Recording continuity — mostly free, one real bug found
 
 Ingest only ever happens through `serialGnssService.subscribeLines()` → `recordingService.ingest()` (wired once, at the app root, in `useGnssRuntime.ts`). While no read loop is active, nothing calls `ingest()` — so a disconnect **cannot** fabricate, duplicate, or lose a point by construction, and `RecordingService.seq` (the in-memory monotonic counter) is simply never touched during the gap. This is not new code; it was already true in Stage 3B/5A, and Stage 5B adds a unit test (`reconnectRecordingIntegration.test.ts`) and three Playwright cases that prove it end-to-end against a repeated disconnect/reconnect cycle, not just assert it by inspection.
 
@@ -77,34 +233,34 @@ What *did* need a code change: `RecordingService.setConnectionMeta()` previously
 
 **`Stop Recording` was already unconditional on connection state** (`stop()` only checks `RecordingService`'s own state, never `serialGnssService`'s) — confirmed by a dedicated test and by the Playwright case that stops mid-`reconnecting` and gets a normal, non-hanging finalize with no fabricated final fix.
 
-### 2.6 Sequence guarantees, restated precisely
+### 3.6 Sequence guarantees, restated precisely
 
 `rawNmeaLines` and `structuredFixes` share one monotonic per-session `seq`. Across any number of disconnect/reconnect cycles in the same page session (no reload):
 - No reset to zero — the counter is a field on the live `RecordingService` instance, untouched by connection-state transitions.
 - No duplicate `seq` — nothing appends while disconnected, so there is nothing to collide with on resume.
 - No reuse — the same guarantee Stage 5A established for a crash+reload also composes with a disconnect that happens *before or after* a Resume: the recovery-plus-reconnect Playwright test proves the seeded pre-crash line, the Resume-time continuation, and the post-reconnect continuation all coexist exactly once.
 
-### 2.7 Stale-fix behavior — a real gap this stage closed
+### 3.7 Stale-fix behavior — a real gap this stage closed
 
 The audit found `ObservationComposer` and `WaterControlComposer`'s "Use Current GNSS" buttons only ever checked `!currentFix` — never staleness. Legacy already has the authoritative gate for exactly this ("現在地を記録" / `js/recording/recording-core.js`'s `validateObservationCreation()` + `isFixStale()`, `DEFAULT_FIX_STALE_MS = 10000`), and both components now call it directly instead of re-deriving a rule. This matters specifically because of `'stalled'`: `currentFix` is deliberately **preserved** (not cleared) while stalled, so a null-check alone would have let an operator record a position from a fix that hasn't updated in minutes. Both composers now disable the button and show the legacy reason text (e.g. "最新の測位が古すぎます（15秒前）。/ Latest fix is stale.") whenever `isFixStale` says so, and both re-render on `connectionState` changes (not just `currentFix` changes) so the transition into `'stalled'` is caught even though the fix object itself doesn't change.
 
 The map's current-fix layer is unaffected: `currentFix` still renders as "last known position" while stalled/reconnecting, exactly as task section 11 asks ("map may still display last known point but must not imply freshness") — freshness is enforced at the point of *creating new data*, not at the point of display.
 
-### 2.8 Recovery interaction — no invalid state combinations
+### 3.8 Recovery interaction — no invalid state combinations
 
 `recovery_available` and the Stage 5B connection states are unrelated axes and never combine: `resumeRecovery()` still touches no serial state at all (Stage 5A's own guarantee, re-verified unchanged), and `checkForRecovery()` runs once at app-root mount before any serial action is possible — there is no `connect()`/reconnect call anywhere in the mount sequence, so a legacy-inherited or reload-inherited unfinished session can never start receiving live data before the operator explicitly clicks **Resume**. A dedicated Playwright test seeds an unfinished session, resumes it, connects, disconnects, and reconnects, and confirms the final session contains the original point plus everything ingested after Resume and after the reconnect, exactly once.
 
-### 2.9 A real bug this stage's tests caught
+### 3.9 A real bug this stage's tests caught
 
 The exhausted-retry Playwright test failed on first write for a genuine reason, not a test mistake: `RecordingService.stop()`'s existing implementation was correct, but the *first* draft of `interruptionWarning()`'s reconnect-required message and the reconnect banner's own "Automatic reconnect unsuccessful." text collided in a Playwright `getByText()` strict-mode check, because both are legitimately visible at once (the Live GNSS section's own status line and the new banner both surface the same underlying `serialGnssService` message, deliberately, from two different UI contexts). Resolved by scoping the test's locator to the banner (`getByLabel('GNSS reconnect status')`), not by removing either message — both are correct to show.
 
 Separately, a genuine timing bug surfaced while writing the reconnect-continuity test: the Playwright fake serial port kept streaming NMEA sentences between the "pending count reached zero" check and the simulated crash, occasionally landing a sentence in the gap and shifting the expected point count by one. Fixed by adding a `stopStream()`/`__fakeSerialStop`-style hook to freeze the fake before snapshotting "before" state — the same pattern the pre-existing legacy Playwright spec already uses for the identical reason.
 
-### 2.10 Explicit non-goals — not started, not stubbed
+### 3.10 Explicit non-goals — not started, not stubbed
 
-Wake Lock API, screen/OS sleep prevention, Reports, Data workspace redesign, Paddy Intelligence, AI, RealSense, pilot/manual flight, MAVLink, field boundary editing, observation photos, water-level recording creation, any IndexedDB schema change or v2, automatic session *resume* (as opposed to automatic *transport* reconnect — these remain deliberately separate concepts, §2.8), and automatic permission prompts. None of these were touched.
+Wake Lock API, screen/OS sleep prevention, Reports, Data workspace redesign, Paddy Intelligence, AI, RealSense, pilot/manual flight, MAVLink, field boundary editing, observation photos, water-level recording creation, any IndexedDB schema change or v2, automatic session *resume* (as opposed to automatic *transport* reconnect — these remain deliberately separate concepts, §3.8), and automatic permission prompts. None of these were touched.
 
-### 2.11 Exact Stage 5B changed files
+### 3.11 Exact Stage 5B changed files
 
 New:
 ```text
@@ -138,7 +294,7 @@ frontend/tests/browser/recovery.spec.ts                             (viewport te
 
 No legacy `js/` file, no backend file, no pilot/MAVLink file, and no IndexedDB schema definition was modified.
 
-### 2.12 Stage 5B verification results
+### 3.12 Stage 5B verification results
 
 Counts are fresh, not carried over — concurrent pilot work moved several of them again since Stage 5A.
 
@@ -158,7 +314,7 @@ Failure classification: **no Stage 5B regression** in any suite covering code th
 
 Viewport acceptance, asserted with the reconnect banner visible and a recording open at **1366×768, 1920×1080, and 1024×768**: no document-level scrolling, the map keeps more than 40% of the viewport area, and both **Reconnect now** and **Stop recording** stay reachable at every size.
 
-### 2.13 Test coverage map
+### 3.13 Test coverage map
 
 | Requirement | Where proven |
 |---|---|
@@ -174,7 +330,7 @@ Viewport acceptance, asserted with the reconnect banner visible and a recording 
 | Stale-fix refusal for both "current position" actions | `Stage3CWorkflow.test.tsx`, `WaterWorkspace.test.tsx` |
 | Real-browser: full lifecycle, exhaustion+manual, repeated cycles, recovery+reconnect, viewports | `reconnect.spec.ts` (5 tests) |
 
-### 2.14 Bundle size
+### 3.14 Bundle size
 
 | | Raw | Gzip |
 |---|---|---|
@@ -182,33 +338,33 @@ Viewport acceptance, asserted with the reconnect banner visible and a recording 
 | End of Stage 5B | 553.35 kB | 164.75 kB |
 | Delta | +5.69 kB | +1.43 kB |
 
-### 2.15 Dirty files belonging to other work — do not touch
+### 3.15 Dirty files belonging to other work — do not touch
 
-Concurrent pilot/manual-control/MAVLink work continued throughout this stage — `index.html` itself gained further changes (see §2.12). Everything under `backend/`, `js/pilot/`, `css/pilot.css`, `js/gamepad/`, `tests/unit/pilot-*.test.js`, `tests/unit/gamepad-*.test.js`, `tests/browser/manual-control-helpers.js`, `tests/browser/desktop.spec.js`, `tests/browser/gamepad.spec.js`, `mock-manual-acceptance.html`, `scripts/dev.ps1`, `scripts/run-backend.mjs`, and the pilot/gamepad/MAVLink operator guides in `docs/` belongs to that work. **None of it was modified, reverted, formatted, staged, or debugged as part of Stage 5B.**
+Concurrent pilot/manual-control/MAVLink work continued throughout this stage — `index.html` itself gained further changes (see §3.12). Everything under `backend/`, `js/pilot/`, `css/pilot.css`, `js/gamepad/`, `tests/unit/pilot-*.test.js`, `tests/unit/gamepad-*.test.js`, `tests/browser/manual-control-helpers.js`, `tests/browser/desktop.spec.js`, `tests/browser/gamepad.spec.js`, `mock-manual-acceptance.html`, `scripts/dev.ps1`, `scripts/run-backend.mjs`, and the pilot/gamepad/MAVLink operator guides in `docs/` belongs to that work. **None of it was modified, reverted, formatted, staged, or debugged as part of Stage 5B.**
 
-### 2.16 Recommended next step — analysis, not a decision
+### 3.16 Recommended next step — analysis, not a decision
 
 **Stage 5C — Wake Lock / field-session display-sleep prevention**, exactly as the task brief scoped it, is the natural next reliability item and is **deliberately not implemented** here:
 
-- **Wake Lock acquisition and release timing** needs to be tied to the recording lifecycle (acquire on Start, release on Stop/Discard/Finish) without acquiring one merely because the recovery panel is showing an unresolved session — the same "don't conflate adjacent concerns" principle §2.8 applied to recovery vs. reconnect.
+- **Wake Lock acquisition and release timing** needs to be tied to the recording lifecycle (acquire on Start, release on Stop/Discard/Finish) without acquiring one merely because the recovery panel is showing an unresolved session — the same "don't conflate adjacent concerns" principle §3.8 applied to recovery vs. reconnect.
 - **Visibility-state behavior** (`document.visibilitychange`) needs a policy for re-acquiring a lock after a tab is backgrounded and returns, which the current Wake Lock API makes annoyingly manual, and interacts with whatever this stage's `reconnecting` state is doing if the tab was hidden during a disconnect.
 - **Feature detection and graceful degradation** on a Wake Lock–unsupported browser needs to not present as an error — the legacy app already has a precedent for this exact pattern (`#recWakeLockStatus` "非対応") that should be ported rather than reinvented.
 
 A smaller, narrower alternative worth weighing first: nothing — Stage 5A and 5B together have now closed both reliability gaps the Stage 4B recommendation flagged (unrecoverable interrupted session; silent reconnect failure). Wake Lock is a genuine but different concern (device power management, not data safety), so unlike Stages 5A→5B it is not blocking anything else in this migration's sequence. This is analysis for the next authorization, not a decision — do not start it automatically.
 
-## 3. Stage 5A completion checkpoint
+## 4. Stage 5A completion checkpoint
 
-### 3.1 What "unfinished" means — derived, not invented
+### 4.1 What "unfinished" means — derived, not invented
 
 The definition is taken verbatim from the existing store, not authored for this stage. `RecordingStore.listUnfinishedSessions()` (`js/recording/recording-store.js:131`) returns sessions whose `status` is `"recording"` or `"paused"`. React only ever writes `"recording"` and `"stopped"` (it has no pause control), but the query is used unmodified, so a **legacy-created paused session is detected too**.
 
 There is no separate "crashed" flag, no heartbeat, and no timestamp heuristic — a session is unfinished precisely because nothing ever wrote `status: "stopped"` to it. That is the whole signal, and it is exactly the one legacy already relies on.
 
-### 3.2 No schema change — verified, not assumed
+### 4.2 No schema change — verified, not assumed
 
 `suimon-navi-recording` v1 is untouched: same DB name, same version, same five object stores (`sessions` keyPath `sessionId`; `rawNmeaLines`/`structuredFixes` autoIncrement `id` + `by_sessionId` index; `markedObservations`/`imageBlobs` keyPath `id` + `by_sessionId` index), same record keys, same field names. Recovery reads only fields the legacy controller already writes. The Playwright compatibility test seeds a session shaped exactly as `recording-controller.js`'s `startRecording()` + `sessionCounterPatch()` would have written it and proves React detects and finalizes it; the 14 legacy recording browser tests then still pass unchanged against the same database.
 
-### 3.3 Architecture — one state machine, extended
+### 4.3 Architecture — one state machine, extended
 
 Stage 3B's `RecordingService` singleton (`frontend/src/services/recording/recordingService.ts`) gained the recovery methods; no new service, store, or global was introduced. Its `RecordingState` union gained `'recovery_available'`, which is **not a new concept** — `js/recording/recording-core.js` already defines it in `RECORDING_STATES` with transitions `recovery_available → {resume, finish, delete}`. React now uses the same vocabulary.
 
@@ -221,47 +377,47 @@ Stage 3B's `RecordingService` singleton (`frontend/src/services/recording/record
 
 Two state facts worth knowing: `recoveryInProgress` is checked **synchronously before any `await`**, so a double-click cannot race two resumes against one session (legacy has the identical guard). And `recovery_available` is entered only from `idle` and released back to `idle` only when the last candidate is resolved — a recording in progress or an error state is never overwritten by a background scan, and the two states are never combined.
 
-### 3.4 Sequence integrity — the core correctness property
+### 4.4 Sequence integrity — the core correctness property
 
 `rawNmeaLines` and `structuredFixes` share **one** monotonic per-session `seq` counter. Resume sets `this.seq = await store.getMaxSeq(sessionId)` — the max across both stores — and never resets to zero. If the pre-crash session ended at seq 7, the first post-resume record is 8.
 
 Deliberately *not* recomputed: `pointCount`/`lineCount` are restored from the session record's own `validFixCount`/`totalReceivedLines` counters rather than by counting stored rows. This mirrors legacy's `resumeSession()` exactly, including its staleness tradeoff (a counter can lag an unflushed batch). Choosing a "more correct" recount here would have made React and legacy disagree about the same session — worse than matching a known, shared imprecision. The recovery *card*, separately, shows a live `countRawLines()` query, because that is what legacy's own `recoveryLineCounts` mechanism displays.
 
-### 3.5 Resume and GNSS are separate concerns
+### 4.5 Resume and GNSS are separate concerns
 
 `resumeRecovery()` touches no serial state: no port open, no permission prompt, no reconnect, no wake lock. Resuming restores the recording session; connecting GNSS remains an explicit, separate operator action. Both a Playwright assertion and a unit test pin this — after Resume, the button still reads "Connect GNSS". This matches legacy's own comment that resuming "never touches the serial connection subsystem."
 
-### 3.6 Discard was implemented, not deferred — because cascade safety was proven
+### 4.6 Discard was implemented, not deferred — because cascade safety was proven
 
 Stage 2 deferred destructive field deletion under a fail-closed policy. Discard did **not** need the same treatment: `RecordingStore.deleteSession()` (`recording-store.js:136`) opens one transaction across all five object stores and cascades via `deleteByIndexCursor` on `by_sessionId` for raw lines, structured fixes, marked observations, and image blobs. Nothing can be orphaned. That was read and verified in source before the UI exposed the action — not inferred from the method name.
 
 The UI requires a two-step inline confirmation ("Discard" → "Discard this recording permanently?" → "Confirm Discard"), chosen over a native `window.confirm()` because the panel can list several sessions and a modal gives no indication of *which* one it is about to delete.
 
-### 3.7 Corrupt and partial candidates
+### 4.7 Corrupt and partial candidates
 
 `adaptRecoverableSession()` is a pure, exported, never-throwing adapter. A candidate is dropped **only** when it has no usable `sessionId` — without one, no action any UI could offer would be safe to target. Everything else degrades to a safe default rather than vanishing: malformed timestamps become `null`, a non-numeric `validFixCount` becomes `0`, a `lastValidFix` with non-finite coordinates becomes `null`. Dropped candidates are counted and reported ("N unfinished recording(s) could not be read and were not shown"), so a hidden record is never silently hidden. Detection never writes during this process.
 
 Field links follow the same principle: if `fieldId` is set but the field no longer exists, the card shows `Linked field no longer exists (<fieldId>)` — the original identifier is preserved and displayed, never cleared.
 
-### 3.8 UI placement and status
+### 4.8 UI placement and status
 
 `RecoveryPanel` renders inside the existing Survey inspector, above the recording controls — a compact card list, not a new full-page workflow, and Survey stays map-first. It is deliberately presentational (props in, callbacks out; the only store it reads is `useFields()` to resolve a field name), which is why its rendering and interaction logic is unit-testable in jsdom with no IndexedDB at all. `SurveyInspector` wires the callbacks to the real singleton.
 
 The status bar reuses the existing `recording` slot with a `warning` tone and the message **`RECOVERY REQUIRED`** rather than inventing a new subsystem category — an unresolved recovery is a recording condition needing attention. Critically, the badge does **not** report the recording as actively running merely because an unfinished record exists.
 
-### 3.9 A real bug this stage's tests caught
+### 4.9 A real bug this stage's tests caught
 
 The Playwright compatibility test failed on first run, and the failure was a genuine product defect, not a test error: after Finish & Save resolved the *only* unfinished session, `Start Recording` stayed permanently disabled. `checkForRecovery()` had an `idle → recovery_available` transition but no inverse, and `finalizeRecovery()`'s own state patch only fires when the finalized session is the *active* one — which it never is for a session inherited from a previous page load or from legacy. The app was stuck refusing all new recordings.
 
 Fixed by making the transition symmetric (`recovery_available → idle` when zero candidates remain) and pinned by both the Playwright case and a new unit test. This is exactly the class of bug that only a real-IndexedDB, real-reload test surfaces.
 
-### 3.10 Explicit non-goals — not started, not stubbed
+### 4.10 Explicit non-goals — not started, not stubbed
 
 Automatic serial reconnect, retry loops, WebSerial auto-connect after disconnect, wake locks, Visibility API behavior beyond what recovery needs, Reports, Paddy Intelligence, observation photo support, water-level creation, Stage 2B field editing, gate actuation, pilot/manual-flight changes, MAVLink changes, backend changes, schema convergence, and bundle optimization. None of these were touched.
 
 One nuance worth recording: `recordedSurveyRepository.refresh()` calls `store.listSessions()` with **no status filter**, so unfinished sessions already appeared in the Survey selector before this stage and still do. Stage 5A did not change that behavior; it only added a way to resolve them.
 
-### 3.11 Exact Stage 5A changed files
+### 4.11 Exact Stage 5A changed files
 
 New:
 ```text
@@ -285,7 +441,7 @@ frontend/src/components/map/layers/__tests__/LiveGnssLayers.test.tsx  (+1 resume
 
 No legacy `js/` file, no backend file, no pilot/MAVLink file, and no IndexedDB schema definition was modified.
 
-### 3.12 Stage 5A verification results
+### 4.12 Stage 5A verification results
 
 Counts are **fresh**, not carried over — concurrent pilot work moved several of them since Stage 4B.
 
@@ -302,11 +458,11 @@ Counts are **fresh**, not carried over — concurrent pilot work moved several o
 | `git diff --check` | clean |
 | Backend pytest | **Not run.** Stage 5A changed no backend/API/MAVLink/command file. |
 
-Failure classification: **one genuine product defect found and fixed** (§3.9), **one test-authoring flake found and fixed** (the fake serial stream kept emitting between the pre-crash snapshot and the reload, racing a point count by one — fixed by freezing the stream via a `__fakeSerialStop` hook, the same pattern the legacy spec already uses, not by loosening the assertion). No pre-existing failure and no unrelated failure in any suite.
+Failure classification: **one genuine product defect found and fixed** (§4.9), **one test-authoring flake found and fixed** (the fake serial stream kept emitting between the pre-crash snapshot and the reload, racing a point count by one — fixed by freezing the stream via a `__fakeSerialStop` hook, the same pattern the legacy spec already uses, not by loosening the assertion). No pre-existing failure and no unrelated failure in any suite.
 
 Viewport acceptance, asserted with **two** unfinished sessions listed at **1366×768, 1920×1080, and 1024×768**: `scrollWidth === clientWidth` and `scrollHeight === clientHeight` at every size (no document-level scrolling), the recovery panel and inspector both stay within viewport bounds, the map keeps more than 40% of the viewport area (Survey stays map-first), and Resume / Finish & Save / Discard are all visible at every size.
 
-### 3.13 Test coverage map
+### 4.13 Test coverage map
 
 | Requirement | Where proven |
 |---|---|
@@ -323,7 +479,7 @@ Viewport acceptance, asserted with **two** unfinished sessions listed at **1366�
 
 **Compatibility claim, stated precisely:** legacy-created unfinished session → detected, resumable, and finalizable by React — **tested**. React-finalized session → still readable by the legacy recording readers, and the full legacy recording suite passes against the shared database — **tested**. Bidirectional compatibility beyond these two directions was not exercised and is not claimed.
 
-### 3.14 Bundle size
+### 4.14 Bundle size
 
 | | Raw | Gzip |
 |---|---|---|
@@ -333,11 +489,11 @@ Viewport acceptance, asserted with **two** unfinished sessions listed at **1366�
 
 The pre-existing >500 kB advisory is unchanged in kind; bundle optimization is an explicit non-goal.
 
-### 3.15 Dirty files belonging to other work — do not touch
+### 4.15 Dirty files belonging to other work — do not touch
 
 Concurrent pilot/manual-control/MAVLink work continued throughout this stage. Everything under `backend/`, `js/pilot/`, `css/pilot.css`, `tests/unit/pilot-*.test.js`, `tests/unit/gamepad-*.test.js`, `tests/browser/manual-control-helpers.js`, `mock-manual-acceptance.html`, and the pilot/gamepad/MAVLink operator guides in `docs/` belongs to that work. **None of it was modified, reverted, formatted, staged, or debugged as part of Stage 5A.** The root unit count moving 206 → 208 is entirely attributable to it.
 
-### 3.16 Recommended next step — analysis, not a decision
+### 4.16 Recommended next step — analysis, not a decision
 
 **Stage 5B — automatic reconnect for a transient WebSerial disconnect** is the natural successor and was scoped during this stage's audit, but is **deliberately not implemented**. Stage 5A closed the "data is unrecoverable after a crash" gap; the remaining Stage 3B reliability gap is that a serial cable knocked loose mid-recording requires a fully manual reconnect, with the session staying open but silently receiving nothing.
 
@@ -345,11 +501,11 @@ What makes it genuinely non-trivial, and why it should not be started automatica
 
 - WebSerial permission is origin-and-gesture scoped. `navigator.serial.getPorts()` can return a previously granted port without a prompt, but whether a *reopen* succeeds without a user gesture is the crux and needs real-device verification — precisely the hardware validation Stage 5A was forbidden from doing.
 - A reconnect loop must be bounded and observable. Silent infinite retry is worse than a visible failure for a farmer in a field, and it interacts with the same fail-closed rules Stage 5A follows.
-- It must not re-enter recording state. Reconnecting the transport is not resuming a session; conflating them would undo the separation §3.5 just established.
+- It must not re-enter recording state. Reconnecting the transport is not resuming a session; conflating them would undo the separation §4.5 just established.
 
 A smaller alternative worth weighing: surface a **visible stalled-stream warning** during recording (legacy already classifies byte-level vs fix-level stalls in `classifySerialDiagnostics()`) without any automatic reconnect at all. That is read-only, needs no hardware, and delivers most of the operational value. This is analysis for the next authorization, not a decision — do not start either automatically.
 
-## 4. Historical Stage 4B completion checkpoint
+## 5. Historical Stage 4B completion checkpoint
 
 ### 2.1 What was migrated
 
@@ -507,7 +663,7 @@ Four candidates were weighed against dependency structure and the actual user wo
 
 No single option is obviously blocked by another. Given the actual workflow this app serves (a single farmer checking one recommendation before manually operating one physical gate), **Option D** has a credible case for priority: Stage 4B's recommendation is only as trustworthy as the GNSS/recording pipeline feeding the rest of the app, and reliability gaps there (silent reconnect failures, an unrecoverable interrupted session) directly undermine confidence in a tool meant to reduce a farmer's guesswork. Option A is the next-best case since it is genuinely small and directly extends what Stage 4B just built. This is an analysis for the next authorization, not a decision — do not start any of these automatically.
 
-## 5. Historical Stage 4A completion checkpoint
+## 6. Historical Stage 4A completion checkpoint
 
 ### 2.1 The finding that shapes everything else
 
@@ -679,7 +835,7 @@ Preserve all pre-existing changes under `backend/`, `js/gamepad/`, `js/pilot/`, 
 - Paddy Intelligence, Reports, AI/camera, drone missions, manual flight, MAVLink changes.
 - Schema convergence across the four export formats; concurrent same-origin `/new/` mounting.
 
-## 6. Historical Stage 3C completion checkpoint
+## 7. Historical Stage 3C completion checkpoint
 
 Stage 3C is complete at the smallest safe boundary: a saved annotation boundary track or valid recorded GNSS fixes can be previewed and registered through the existing `FieldRepository`; the supported survey/session `fieldId` link is updated; manual note/weed/insect/disease observations can be previewed from current GNSS or an explicit map click, saved into the existing annotation schema, rendered on the persistent map, and inspected.
 
@@ -753,7 +909,7 @@ frontend/src/store/useSurveyBoundaryPreviewStore.ts
 - `npm.cmd run lint`: passed with the one pre-existing warning.
 - **1366×768, 1920×1080, and 1024×768**: no document scrolling; the inspector scrolls internally.
 
-## 7. Historical Stage 3B completion checkpoint
+## 8. Historical Stage 3B completion checkpoint
 
 - `SerialGnssService` is the sole React owner of `navigator.serial`. It requests ports without USB filters (preserving USB and Bluetooth SPP support), reuses a previously granted port when available, opens at 4800/9600/38400/115200 baud (115200 default), frames CR/LF-delimited input with an 8192-character guard, and delegates parsing to the unchanged `js/gnss/nmea-parser.js`.
 - Connection state is explicit: unsupported, disconnected, requesting, opening, connected, stalled, disconnecting, or error. A valid current fix is cleared on disconnect; stale state is visible after 10 seconds without input. Clean disconnect closes the reader and port. Reconnect is an explicit operator action; the legacy page's bounded automatic reopen attempts are not copied into React.
@@ -770,7 +926,7 @@ frontend/src/store/useSurveyBoundaryPreviewStore.ts
 - `frontend/` **27 files, 93/93 passed**; root **194/194**; focused node tests **49/49**; React Playwright **1/1**; legacy browser cases **4/4**; `tsc -b` and `vite build` passed (101 modules; JS 497.66 kB / 152.82 kB gzip); lint passed with the one pre-existing warning.
 - Automated checks at **1366×768, 1920×1080, 1024×768**: no document-level scroll.
 
-## 8. Historical Stage 3A completion checkpoint
+## 9. Historical Stage 3A completion checkpoint
 
 - Persistence authority remains `localStorage["suimonNaviFieldAnnotationsV2"]`, schema version `3`. Stage 3A reads only `surveySessions` and `boundaryTracks`; no writes, no schema change.
 - `surveySessions[].rawPoints` persist positions as named `{ lat, lon }`. `boundaryTracks[].coordinates` persist tuples as **`[lat, lon]`**. `SurveyLayer` converts only at its Leaflet view boundary.
@@ -784,7 +940,7 @@ frontend/src/store/useSurveyBoundaryPreviewStore.ts
 - `frontend/` **22 files, 79/79**; root **194/194**; focused node tests **40/40**; one legacy browser case **1/1**; `tsc -b` and `vite build` passed (91 modules; JS 469.62 kB / 144.66 kB gzip); lint exit 0 with the one pre-existing warning.
 - **1366×768, 1920×1080, 1024×768**: no document-level scrolling.
 
-## 9. Historical Stage 2 checkpoint
+## 10. Historical Stage 2 checkpoint
 
 - A typed `FieldRepository` adapter over `localStorage["suimonNaviFieldAnnotationsV2"]`, schema v3.
 - The persisted flat `field.coordinates` annotation record is authoritative. The assurance-only in-memory `FieldRegistry` is not used as storage.

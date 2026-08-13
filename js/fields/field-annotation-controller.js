@@ -105,7 +105,10 @@ const ELEMENT_IDS = [
   "selFeatureObsTypeRow", "selFeatureObsTypeSelect", "selFeatureSeverityRow", "selFeatureSeveritySelect",
   // Legend / summary.
   "fieldAnnotationLegend", "fieldAnnotationSummaryFields", "fieldAnnotationSummaryTracks",
-  "fieldAnnotationSummaryPoints", "fieldAnnotationSummaryObservations"
+  "fieldAnnotationSummaryPoints", "fieldAnnotationSummaryObservations",
+  // Basic-mode single "current field" control (index.html mode shell) — reuses
+  // this same populate function, never a second one.
+  "basicActiveFieldSelect"
 ];
 
 export class FieldAnnotationController {
@@ -121,6 +124,10 @@ export class FieldAnnotationController {
     // observation placement mode starts — see requirement that observation
     // placement must not conflict with unrelated map-click modes elsewhere.
     this.onEnterPlacementMode = options.onEnterPlacementMode || (() => {});
+    // Basic-mode field summary (index.html mode shell) has no render loop of
+    // its own -- it reads this.fields/basicActiveFieldSelect after every
+    // renderAll(), the same point every other target-field select refreshes.
+    this.onFieldsChanged = options.onFieldsChanged || (() => {});
 
     this.fields = [];
     this.boundaryTracks = [];
@@ -1346,10 +1353,12 @@ export class FieldAnnotationController {
     this.updateWaterPointButtonStates();
     this.renderQuickToolbar();
     this.renderFieldTargetOptions(this.elements.obsTargetFieldSelect);
+    this.renderFieldTargetOptions(this.elements.basicActiveFieldSelect);
     this.updateObservationButtonStates();
     this.renderSelectedFeature();
     this.renderWorkflowPanel();
     this.updateMapCursor();
+    this.onFieldsChanged();
   }
 
   renderMapLayers() {

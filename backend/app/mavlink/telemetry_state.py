@@ -23,6 +23,15 @@ from typing import Any
 from .normalizers import NORMALIZERS
 
 
+# ArduPilot SERVOn_FUNCTION values for Copter motor outputs. Motor 9-12 use
+# the non-contiguous IDs documented by ArduPilot; never infer motor identity
+# from the physical output number itself.
+_COPTER_MOTOR_FUNCTIONS = {
+    **{function_id: function_id - 32 for function_id in range(33, 41)},
+    **{function_id: function_id - 73 for function_id in range(82, 86)},
+}
+
+
 class ConnectionState(str, Enum):
     """Link lifecycle states surfaced to the operator.
 
@@ -64,6 +73,8 @@ class TelemetryState:
         #: freshness can be reported (see snapshot()'s "rc" section) the same
         #: NTP-safe way as the link's own message/heartbeat ages.
         self._rc_channels_mono: float | None = None
+        self._servo_outputs: dict[str, Any] = {}
+        self._servo_outputs_mono: float | None = None
         self._gps: dict[str, Any] = {}
         self._attitude: dict[str, Any] = {}
         self._hud: dict[str, Any] = {}
@@ -144,6 +155,12 @@ class TelemetryState:
                 # several messages ago".
                 self._rc_channels = {**values, "receivedAt": now_wall}
                 self._rc_channels_mono = now_mono
+            elif msg_type == "SERVO_OUTPUT_RAW":
+                # This is vehicle-reported, read-only PWM evidence. Replace
+                # the whole frame so absent extension fields cannot retain
+                # values from an older packet.
+                self._servo_outputs = {**values, "receivedAt": now_wall}
+                self._servo_outputs_mono = now_mono
             elif msg_type == "STATUSTEXT":
                 self._statustexts.append({**values, "receivedAt": now_wall})
             elif msg_type == "AUTOPILOT_VERSION":
@@ -220,6 +237,8 @@ class TelemetryState:
             self._battery.clear()
             self._rc_channels.clear()
             self._rc_channels_mono = None
+            self._servo_outputs.clear()
+            self._servo_outputs_mono = None
             self._gps.clear()
             self._attitude.clear()
             self._hud.clear()
@@ -391,6 +410,35 @@ class TelemetryState:
             stale = message_age is None or message_age > self._stale_timeout
             position_available = self._is_position_available()
             rc_channels_age = self._age(self._rc_channels_mono, now_mono)
+            servo_outputs_age = self._age(self._servo_outputs_mono, now_mono)
+            servo_channels = self._servo_outputs.get("channels")
+            motor_outputs: list[dict[str, Any]] = []
+            loaded_function_count = 0
+            for output_channel in range(1, 17):
+                parameter = f"SERVO{output_channel}_FUNCTION"
+                raw_function = self._parameters.get(parameter)
+                if raw_function is None or not float(raw_function).is_integer():
+                    continue
+                loaded_function_count += 1
+                function_id = int(raw_function)
+                motor_number = _COPTER_MOTOR_FUNCTIONS.get(function_id)
+                if motor_number is None:
+                    continue
+                pwm = (
+                    servo_channels[output_channel - 1]
+                    if isinstance(servo_channels, list)
+                    and output_channel <= len(servo_channels)
+                    else None
+                )
+                motor_outputs.append(
+                    {
+                        "motorNumber": motor_number,
+                        "outputChannel": output_channel,
+                        "function": function_id,
+                        "functionName": f"Motor {motor_number}",
+                        "pwm": pwm,
+                    }
+                )
 
             return {
                 "connectionState": state.value,
@@ -452,6 +500,20 @@ class TelemetryState:
                     "receiverHealthy": self._battery.get("rcReceiverHealthy"),
                     "ageSeconds": rc_channels_age,
                     "receivedAt": self._rc_channels.get("receivedAt"),
+                },
+                "servoOutputs": {
+                    "channels": servo_channels,
+                    "port": self._servo_outputs.get("port"),
+                    "timeUsec": self._servo_outputs.get("timeUsec"),
+                    "ageSeconds": servo_outputs_age,
+                    "receivedAt": self._servo_outputs.get("receivedAt"),
+                },
+                "motorOutputs": {
+                    "outputs": motor_outputs,
+                    "functionParametersLoaded": loaded_function_count,
+                    "mappingComplete": loaded_function_count == 16,
+                    "ageSeconds": servo_outputs_age,
+                    "receivedAt": self._servo_outputs.get("receivedAt"),
                 },
                 "gps": {
                     "fixType": self._gps.get("fixType"),

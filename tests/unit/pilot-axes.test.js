@@ -102,7 +102,11 @@ test("keyboard directions are conservative quarter-stick semantic intentions", (
     ["KeyA", "yaw", -0.25]
   ]) {
     press(code);
-    assert.equal(pilotAxes(provider)[axis], expected, `${code} -> ${axis}`);
+    assert.deepEqual(
+      pilotAxes(provider),
+      { pitch: 0, roll: 0, throttle: 0, yaw: 0, [axis]: expected },
+      `${code} changes only ${axis}`
+    );
     release(code);
     assert.ok(axesAreNeutral(pilotAxes(provider)), `${code} release -> neutral`);
   }

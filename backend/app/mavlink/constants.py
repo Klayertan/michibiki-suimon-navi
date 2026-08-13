@@ -197,6 +197,11 @@ MSG_ID_RC_CHANNELS_OVERRIDE: Final = 70
 #: same thing as the override frame this backend last sent.
 MSG_ID_RC_CHANNELS: Final = 65
 
+#: MAVLINK_MSG_ID_SERVO_OUTPUT_RAW -- read-only autopilot actuator PWM
+#: telemetry. It is intentionally used only for diagnostics; the transport
+#: exposes no servo/motor command method.
+MSG_ID_SERVO_OUTPUT_RAW: Final = 36
+
 #: SYS_STATUS.onboard_control_sensors_* bit for MAV_SYS_STATUS_PREARM_CHECK.
 #: Verified against the installed pymavlink dialect, not memory. Exposed only
 #: as an overall PASS/FAIL/UNKNOWN -- this backend does not enumerate which of
@@ -254,6 +259,11 @@ RC_DIAGNOSTIC_PARAMETERS: Final = (
     "FS_THR_ENABLE",
     "FS_THR_VALUE",
 )
+#: Read-only output-function mapping. These are optional diagnostics and are
+#: requested once per vehicle session; missing values never block pilot input.
+SERVO_FUNCTION_PARAMETERS: Final = tuple(
+    f"SERVO{channel}_FUNCTION" for channel in range(1, 17)
+)
 RC_OVERRIDE_SOURCE_PARAMETERS: Final = (
     "SYSID_MYGCS",
     "MAV_GCS_SYSID",
@@ -269,6 +279,7 @@ MANUAL_CONTROL_PARAMETERS: Final = (
     *RC_MAPPING_PARAMETERS,
     *RC_CALIBRATION_PARAMETERS,
     *RC_DIAGNOSTIC_PARAMETERS,
+    *SERVO_FUNCTION_PARAMETERS,
 )
 
 MAV_RESULT_NAMES: Final[dict[int, str]] = {
@@ -345,4 +356,8 @@ ESSENTIAL_TELEMETRY_STREAMS: Final[tuple[tuple[str, int, int], ...]] = (
     # table so "RC INPUT SEEN BY PIXHAWK" in Manual Control reflects the
     # vehicle's own view, not merely what the browser intended to send.
     ("RC_CHANNELS", 65, 200_000),  # 5 Hz
+    # Read-only PWM output evidence. SERVOx_FUNCTION parameters decide which
+    # of these channels are labelled as motors; output numbers are never
+    # assumed to equal motor numbers.
+    ("SERVO_OUTPUT_RAW", MSG_ID_SERVO_OUTPUT_RAW, 200_000),  # 5 Hz
 )

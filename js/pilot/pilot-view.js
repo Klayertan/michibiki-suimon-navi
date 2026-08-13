@@ -31,7 +31,7 @@ const REASON_TEXT = {
   rc_override_timeout_invalid: "RC_OVERRIDE_TIME is outside the accepted finite safety range",
   rc_overrides_ignored: "Vehicle RC_OPTIONS is configured to ignore MAVLink overrides",
   rc_gcs_sysid_mismatch: "Vehicle MAVLink GCS system-ID configuration rejects this override source",
-  arming_input_barrier: "ARM verification in progress — release the dead-man before fresh input",
+  arming_input_barrier: "ARM verification in progress — waiting for a fresh post-confirmation input frame",
   mock_provider_forbidden: "Simulated controller input is forbidden against a real vehicle backend",
   input_disconnected: "Selected input disconnected",
   "input-disconnected": "Selected input disconnected",
@@ -168,6 +168,12 @@ function pwmText(value) {
   return typeof value === "number" && Number.isFinite(value) ? `${Math.round(value)} µs` : EMPTY;
 }
 
+function overridePwmText(value) {
+  if (value === 0) return "0 (RELEASE)";
+  if (value === 0xFFFF) return "65535 (IGNORE)";
+  return pwmText(value);
+}
+
 function triState(value, { yes = "PASS", no = "FAIL", unknown = "UNKNOWN" } = {}) {
   if (value === true) return yes;
   if (value === false) return no;
@@ -181,6 +187,48 @@ function triState(value, { yes = "PASS", no = "FAIL", unknown = "UNKNOWN" } = {}
  * intended to send" -- this is what ArduPilot itself currently sees,
  * independent of source, which is what its own arming checks evaluate.
  */
+function renderOutgoingOverrideSection(view) {
+  const outgoing = view.pilot?.lastOutgoingOverride || null;
+  const channels = outgoing?.channels;
+  const rows = Array.from({ length: 8 }, (_, index) => `
+    <div><span>CH${index + 1}</span><strong>${overridePwmText(Array.isArray(channels) ? channels[index] : null)}</strong></div>`
+  ).join("");
+  const age = typeof outgoing?.ageSeconds === "number" ? `${fmt(outgoing.ageSeconds, 1)} s` : EMPTY;
+  return `
+    <section class="pilot-section pilot-outgoing-override-section">
+      <h3 class="drone-section-title">Last outgoing RC override <span class="en">Backend → MAVLink</span></h3>
+      <div class="pilot-diagnostic-grid">
+        ${rows}
+        <div><span>Frame state</span><strong id="pilotOutgoingState">${escapeHtml(outgoing?.state || "NOT_SENT")}</strong></div>
+        <div><span>Reason</span><strong id="pilotOutgoingReason">${escapeHtml(outgoing?.reason || EMPTY)}</strong></div>
+        <div><span>Sent age</span><strong id="pilotOutgoingAge">${age}</strong></div>
+      </div>
+      <p class="meta">Exact first-eight-channel frame last handed to the MAVLink transport. This is backend output evidence, not browser intent and not proof that Pixhawk accepted it.</p>
+    </section>`;
+}
+
+function renderMotorOutputSection(view) {
+  const diagnostics = view.telemetry?.motorOutputs || {};
+  const outputs = Array.isArray(diagnostics.outputs) ? diagnostics.outputs : [];
+  const rows = outputs.length
+    ? outputs.map((output) => `
+      <div>
+        <span>${escapeHtml(output.functionName || `Motor ${output.motorNumber}`)} (OUT${output.outputChannel}, function ${output.function})</span>
+        <strong>${pwmText(output.pwm)}</strong>
+      </div>`).join("")
+    : `<div><span>Motor mapping</span><strong>${diagnostics.mappingComplete ? "No Copter motor functions configured" : "Waiting for SERVOx_FUNCTION"}</strong></div>`;
+  const age = typeof diagnostics.ageSeconds === "number" ? `${fmt(diagnostics.ageSeconds, 1)} s` : EMPTY;
+  return `
+    <section class="pilot-section pilot-motor-output-section">
+      <h3 class="drone-section-title">Motor output reported by Pixhawk <span class="en">Read-only</span></h3>
+      <div class="pilot-diagnostic-grid">
+        ${rows}
+        <div><span>Output telemetry age</span><strong id="pilotMotorOutputAge">${age}</strong></div>
+      </div>
+      <p class="meta">Read-only SERVO_OUTPUT_RAW telemetry, labelled only where the matching SERVOx_FUNCTION identifies a Copter motor. This application does not command motors.</p>
+    </section>`;
+}
+
 function renderRcInputSection(view) {
   const { pilot, telemetry } = view;
   const rc = telemetry?.rc || {};
@@ -202,7 +250,8 @@ function renderRcInputSection(view) {
     rc.receiverHealthy === null || rc.receiverHealthy === undefined ? null : !rc.receiverHealthy,
     { yes: "YES", no: "NO", unknown: "UNKNOWN" }
   );
-  const overrideActive = Boolean(pilot?.override && pilot.override.released === false);
+  const outputActive = Boolean(pilot?.outputActive || pilot?.transmitting);
+  const overrideOwned = Boolean(pilot?.overrideOwned);
   const prearmText = triState(telemetry?.prearmCheck);
   const rcReady = Boolean(pilot?.rcConfiguration && !pilot?.rcConfigurationError);
 
@@ -212,8 +261,9 @@ function renderRcInputSection(view) {
       <div class="pilot-diagnostic-grid">
         ${rowsHtml}
         <div><span>RC failsafe</span><strong id="pilotRcFailsafe" class="drone-chip" data-tone="${failsafeText === "YES" ? "danger" : failsafeText === "NO" ? "ok" : "idle"}">${failsafeText}</strong></div>
-        <div><span>Override active</span><strong id="pilotOverrideActive">${overrideActive ? "YES" : "NO"}</strong></div>
-        <div><span>Override age</span><strong id="pilotRcAge">${typeof rc.ageSeconds === "number" ? `${fmt(rc.ageSeconds, 1)} s` : EMPTY}</strong></div>
+        <div><span>Backend output active</span><strong id="pilotOverrideActive">${outputActive ? "YES" : "NO"}</strong></div>
+        <div><span>Backend owns RC override</span><strong id="pilotOverrideOwned">${overrideOwned ? "YES" : "NO"}</strong></div>
+        <div><span>Pixhawk RC telemetry age</span><strong id="pilotRcAge">${typeof rc.ageSeconds === "number" ? `${fmt(rc.ageSeconds, 1)} s` : EMPTY}</strong></div>
         <div><span>RC calibration ready</span><strong>${rcReady ? "Yes" : "No"}</strong></div>
         <div><span>Pre-arm check health</span><strong id="pilotPrearmHealth" class="drone-chip" data-tone="${prearmText === "PASS" ? "ok" : prearmText === "FAIL" ? "danger" : "idle"}">${prearmText}</strong></div>
       </div>
@@ -423,7 +473,11 @@ export class PilotView {
         </section>
       </div>
 
+      ${renderOutgoingOverrideSection(view)}
+
       ${renderRcInputSection(view)}
+
+      ${renderMotorOutputSection(view)}
 
       <section class="pilot-section pilot-bench-section">
         <h3 class="drone-section-title">Bench test <span class="en">Propellers removed</span></h3>

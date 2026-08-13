@@ -58,6 +58,10 @@ DEFAULT_MOCK_PARAMETERS: dict[str, float] = {
     # MAV_GCS_SYSID / MAV_GCS_SYSID_HI.
     "SYSID_MYGCS": 255.0,
     "MAV_OPTIONS": 0.0,
+    **{
+        f"SERVO{channel}_FUNCTION": float(32 + channel if channel <= 4 else 0)
+        for channel in range(1, 17)
+    },
 }
 
 
@@ -128,6 +132,8 @@ class _StreamSchedule:
             "ATTITUDE": 0.25,
             "VFR_HUD": 0.5,
             "GLOBAL_POSITION_INT": 0.5,
+            "RC_CHANNELS": 0.2,
+            "SERVO_OUTPUT_RAW": 0.2,
         }
     )
     next_due: dict[str, float] = field(default_factory=dict)
@@ -170,6 +176,7 @@ class MockMavlinkLink(MavlinkLink):
         self._boot_ms = 0
         self._mode = self._scenario.mode
         self._armed = self._scenario.armed
+        self._rc_inputs = [1500, 1500, 1100, 1500, 1500, 1500, 1500, 1500]
         self._parameters = dict(DEFAULT_MOCK_PARAMETERS)
         for raw_name, value in self._scenario.parameters.items():
             name = str(raw_name).strip().upper()
@@ -313,6 +320,8 @@ class MockMavlinkLink(MavlinkLink):
             "ATTITUDE": self._attitude,
             "VFR_HUD": self._vfr_hud,
             "GLOBAL_POSITION_INT": self._global_position_int,
+            "RC_CHANNELS": self._rc_channels,
+            "SERVO_OUTPUT_RAW": self._servo_output_raw,
         }[msg_type]
         return self._wrap(builder(self._elapsed(now)))
 
@@ -406,6 +415,29 @@ class MockMavlinkLink(MavlinkLink):
             vz=0,
             hdg=int(((137.0 + 2.0 * math.sin(elapsed * 0.15)) % 360.0) * 100),
             time_boot_ms=int(elapsed * 1000),
+        )
+
+    def _rc_channels(self, elapsed: float) -> MockMessage:
+        return MockMessage(
+            "RC_CHANNELS",
+            time_boot_ms=int(elapsed * 1000),
+            chancount=8,
+            rssi=100,
+            **{f"chan{index}_raw": value for index, value in enumerate(self._rc_inputs, 1)},
+        )
+
+    def _servo_output_raw(self, elapsed: float) -> MockMessage:
+        # Simulated telemetry only. Motor identity still comes exclusively
+        # from the read-only SERVOx_FUNCTION values above.
+        motor_pwm = max(1100, self._rc_inputs[2]) if self._armed else 1000
+        return MockMessage(
+            "SERVO_OUTPUT_RAW",
+            time_usec=int(elapsed * 1_000_000),
+            port=0,
+            **{
+                f"servo{index}_raw": motor_pwm if index <= 4 else 0
+                for index in range(1, 17)
+            },
         )
 
     def _drift(self, base: float, elapsed: float, amplitude: float) -> float:
@@ -537,6 +569,11 @@ class MockMavlinkLink(MavlinkLink):
                 "at": time.monotonic(),
             }
         )
+        base_inputs = (1500, 1500, 1100, 1500, 1500, 1500, 1500, 1500)
+        for index, value in enumerate(channel_values):
+            if value == constants.RC_CHANNEL_IGNORE:
+                continue
+            self._rc_inputs[index] = base_inputs[index] if value == constants.RC_CHANNEL_RELEASE else value
 
     def send_parameter_request(
         self,

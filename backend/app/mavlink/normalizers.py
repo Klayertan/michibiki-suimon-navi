@@ -238,6 +238,29 @@ def normalize_rc_channels(message: Any) -> dict[str, Any]:
     }
 
 
+def normalize_servo_output_raw(message: Any) -> dict[str, Any]:
+    """SERVO_OUTPUT_RAW -> read-only output PWM values for outputs 1-16.
+
+    MAVLink does not define an unavailable sentinel for these fields. Missing,
+    non-finite, or out-of-range values become ``None``; a literal zero is kept
+    because ArduPilot uses it to represent an output with no PWM pulse.
+    """
+
+    channels: list[int | None] = []
+    for index in range(1, 17):
+        value = _finite(_field(message, f"servo{index}_raw"))
+        channels.append(
+            int(value) if value is not None and 0 <= value <= UINT16_MAX else None
+        )
+    port = _finite(_field(message, "port"))
+    time_usec = _finite(_field(message, "time_usec"))
+    return {
+        "channels": channels,
+        "port": None if port is None else int(port),
+        "timeUsec": None if time_usec is None else int(time_usec),
+    }
+
+
 def normalize_statustext(message: Any) -> dict[str, Any]:
     """STATUSTEXT -> severity name and cleaned text."""
     severity = _finite(_field(message, "severity"))
@@ -333,6 +356,7 @@ NORMALIZERS = {
     "VFR_HUD": normalize_vfr_hud,
     "GLOBAL_POSITION_INT": normalize_global_position_int,
     "RC_CHANNELS": normalize_rc_channels,
+    "SERVO_OUTPUT_RAW": normalize_servo_output_raw,
     "STATUSTEXT": normalize_statustext,
     "AUTOPILOT_VERSION": normalize_autopilot_version,
     "COMMAND_ACK": normalize_command_ack,

@@ -319,6 +319,22 @@ def test_stabilize_bench_throttle_rises_no_more_than_ten_percent_from_low() -> N
         mode="STABILIZE",
     )
     assert result.channels[2] == 1180
+    assert result.channels == (1500, 1500, 1180, 1500, 65535, 65535, 65535, 65535)
+
+
+def test_throttle_only_changes_the_vehicle_mapped_throttle_channel() -> None:
+    values = dict(DEFAULT_MOCK_PARAMETERS)
+    values.update({"RCMAP_ROLL": 5, "RCMAP_PITCH": 6, "RCMAP_THROTTLE": 7, "RCMAP_YAW": 8})
+    result = normalized_to_rc_override(
+        pitch=0,
+        roll=0,
+        throttle=0.25,
+        yaw=0,
+        configuration=configuration(values),
+        limits=pilot_limits.BENCH_RC_LIMITS,
+        mode="STABILIZE",
+    )
+    assert result.channels == (65535, 65535, 65535, 65535, 1500, 1500, 1180, 1500)
 
 
 def test_stabilize_reversed_throttle_uses_max_as_safe_low_endpoint() -> None:
@@ -836,8 +852,8 @@ def test_sequence_high_water_mark_survives_disable_and_enable() -> None:
     assert service.snapshot()["nextSequence"] == 51
 
 
-def test_arm_barrier_discards_prearm_and_held_through_arm_input_until_release_repress() -> None:
-    service, state, clock, link = ready_service()
+def test_first_fresh_throttle_frame_after_confirmed_arm_exits_safe_idle_and_transmits() -> None:
+    service, state, clock, link = ready_service(bench=True)
     set_vehicle(state, armed=False)
     send_active(service, 10)
     assert service.snapshot()["sequence"] == 10
@@ -846,34 +862,28 @@ def test_arm_barrier_discards_prearm_and_held_through_arm_input_until_release_re
     send_active(service, 11)  # arrives while command 400 verification is pending
     set_vehicle(state, armed=True)
     tick(service, link, clock)
-    assert link.overrides[-1]["channels"] == RELEASE_RC_OVERRIDE.channels
+    assert link.overrides[-1]["channels"] == expected_safe_idle_channels()
 
     service.finish_arming_input_barrier(confirmed_armed=True)
     barrier = service.snapshot()
     assert barrier["armingInputBarrier"] is True
-    assert barrier["armingReleaseRequired"] is True
+    assert barrier["armingReleaseRequired"] is False
+    assert barrier["armingFreshInputRequired"] is True
     assert barrier["axes"] == {"pitch": 0.0, "roll": 0.0, "throttle": 0.0, "yaw": 0.0}
     assert barrier["nextSequence"] == 12
 
-    send_active(service, 12)  # browser is still holding dead-man + movement
-    tick(service, link, clock)
-    assert link.overrides[-1]["channels"] == RELEASE_RC_OVERRIDE.channels
-    assert service.snapshot()["blockedReason"] == BlockReason.ARMING_INPUT_BARRIER
-
-    service.submit(
-        pitch=0,
-        roll=0,
-        throttle=0,
-        yaw=0,
-        deadman=False,
-        neutral=False,
-        source="keyboard",
-        sequence=13,
-    )
+    send_active(service, 12, source="keyboard", pitch=0, throttle=0.25)
     assert service.snapshot()["armingInputBarrier"] is False
-    send_active(service, 14)
     tick(service, link, clock)
-    assert link.overrides[-1]["channels"] != RELEASE_RC_OVERRIDE.channels
+    expected = (1500, 1500, 1180, 1500, 65535, 65535, 65535, 65535)
+    assert link.overrides[-1]["channels"] == expected
+    snapshot = service.snapshot()
+    assert snapshot["transmitting"] is True
+    assert snapshot["outputActive"] is True
+    assert snapshot["blockedReason"] is None
+    assert snapshot["lastOutgoingOverride"]["channels"] == list(expected)
+    assert snapshot["lastOutgoingOverride"]["state"] == "TRANSMITTING"
+    assert snapshot["lastOutgoingOverride"]["reason"] == "deadman_held_fresh_input"
 
 
 def test_snapshot_uses_only_canonical_axis_names_and_source() -> None:

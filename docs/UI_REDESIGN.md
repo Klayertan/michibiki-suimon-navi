@@ -248,7 +248,7 @@ Full detail lives in [`docs/FRONTEND_ARCHITECTURE.md`](./FRONTEND_ARCHITECTURE.m
 
 ## 27. Stage 4B — what was actually built
 
-Full detail lives in [`docs/FRONTEND_ARCHITECTURE.md`](./FRONTEND_ARCHITECTURE.md)'s "Stage 4B — gate decision" section and [`docs/HANDOFF.md`](./HANDOFF.md) §2.
+Full detail lives in [`docs/FRONTEND_ARCHITECTURE.md`](./FRONTEND_ARCHITECTURE.md)'s "Stage 4B — gate decision" section and [`docs/HANDOFF.md`](./HANDOFF.md) §5.
 
 - **`evaluateGate()` had no export boundary to import through** — it lives inline in `index.html`'s monolithic `<script>`, unlike every other domain wrapper so far in this migration. Stage 4B hand-transcribes it verbatim into `frontend/src/domain/water/decision.ts` and pins the transcription with tests reproducing the legacy source's exact branches, `>=` comparisons, and Japanese strings, since no legacy test of this function existed to cross-check against.
 - **Algorithm unchanged.** Same two inputs (weather values, four `data/gate_rules.json` thresholds), same fixed priority order (heavy rain → light rain → forecast → dry spell → generic hold), same inclusive `>=` at every boundary, same exact output strings. Every threshold has a dedicated `threshold − ε / threshold / threshold + ε` test.
@@ -261,7 +261,7 @@ Full detail lives in [`docs/FRONTEND_ARCHITECTURE.md`](./FRONTEND_ARCHITECTURE.m
 
 ## 28. Stage 5A — what was actually built
 
-Full detail lives in [`docs/FRONTEND_ARCHITECTURE.md`](./FRONTEND_ARCHITECTURE.md)'s "Stage 5A — recording crash recovery" section and [`docs/HANDOFF.md`](./HANDOFF.md) §3.
+Full detail lives in [`docs/FRONTEND_ARCHITECTURE.md`](./FRONTEND_ARCHITECTURE.md)'s "Stage 5A — recording crash recovery" section and [`docs/HANDOFF.md`](./HANDOFF.md) §4.
 
 - **This closes the gap Stage 3B explicitly left open.** Stage 3B blocked a new recording when an unfinished session existed but gave the operator no way to resolve it. Stage 5A adds the three explicit choices — **Resume**, **Finish & Save**, **Discard** — with no automatic resume, no silent discard, and no hidden condition.
 - **"Unfinished" was derived, not invented.** It is exactly what `RecordingStore.listUnfinishedSessions()` already returns: `status === "recording" || status === "paused"`. No heartbeat, no crash flag, no timestamp heuristic. Because the unmodified query is used, a legacy-created *paused* session is detected too, even though React never writes that status.
@@ -277,7 +277,7 @@ Full detail lives in [`docs/FRONTEND_ARCHITECTURE.md`](./FRONTEND_ARCHITECTURE.m
 
 ## 29. Stage 5B — what was actually built
 
-Full detail lives in [`docs/FRONTEND_ARCHITECTURE.md`](./FRONTEND_ARCHITECTURE.md)'s "Stage 5B — GNSS reconnect reliability" section and [`docs/HANDOFF.md`](./HANDOFF.md) §2.
+Full detail lives in [`docs/FRONTEND_ARCHITECTURE.md`](./FRONTEND_ARCHITECTURE.md)'s "Stage 5B — GNSS reconnect reliability" section and [`docs/HANDOFF.md`](./HANDOFF.md) §3.
 
 - **Closes the reliability gap Stage 5A's own recommendation flagged.** A transient WebSerial interruption (cable wiggle, read-loop rejection, a stalled receiver) previously required a full manual reconnect with no automatic recovery at all — Stage 3B's `'stalled'` connection state was declared but never wired to anything.
 - **Four disconnect classes, audited and handled differently on purpose.** Physical disconnect and read-loop failure both trigger a bounded automatic reconnect; malformed NMEA (already a parser-level concern) and a stalled-but-otherwise-healthy port do not — reopening a fine port cannot make a receiver produce fixes it doesn't have.
@@ -286,9 +286,23 @@ Full detail lives in [`docs/FRONTEND_ARCHITECTURE.md`](./FRONTEND_ARCHITECTURE.m
 - **Recording continuity was mostly already guaranteed by the existing architecture** — `ingest()` only fires while a read loop is delivering lines, so a disconnect cannot fabricate, duplicate, or reset a sequence number by construction. Stage 5B's job here was proving it (a unit-level service integration test plus three Playwright cases covering single-cycle, repeated-cycle, and Resume-then-reconnect scenarios) and fixing the one place that needed a real change: interruption messaging, which previously said "GNSS disconnected" for every non-connected state and now distinguishes reconnecting/reconnect_required/stalled/disconnected.
 - **A real, pre-existing gap was found and closed in Stage 3C/4A code.** `ObservationComposer` and `WaterControlComposer`'s "Use Current GNSS" buttons checked only `!currentFix`, never staleness — meaning a `'stalled'` link's deliberately-preserved-but-aging fix could have been used to record a "current" position that was actually minutes old. Both now call the exact legacy staleness gate (`validateObservationCreation()`, `js/recording/recording-core.js`) instead of a re-derived rule.
 - **No IndexedDB schema change, no automatic session resume, no automatic permission prompt.** Recovery (Stage 5A) and reconnect (Stage 5B) remain deliberately separate concerns — resuming an unfinished session still never touches the serial transport, and a legacy-inherited unfinished session still cannot receive live data before the operator explicitly clicks Resume.
-- **Deferred / explicitly not started:** Stage 5C Wake Lock / display-sleep prevention (scoped as a recommendation in `docs/HANDOFF.md` §2.16, deliberately not implemented), Reports, Data workspace redesign, Paddy Intelligence, AI, RealSense, pilot/manual flight, MAVLink, field boundary editing, observation photos, water-level recording creation, schema convergence.
+- **Deferred / explicitly not started:** Stage 5C Wake Lock / display-sleep prevention (scoped as a recommendation in `docs/HANDOFF.md` §3.16 at the time, since implemented — see §30 below), Reports, Data workspace redesign, Paddy Intelligence, AI, RealSense, pilot/manual flight, MAVLink, field boundary editing, observation photos, water-level recording creation, schema convergence.
 
-## 30. Historical Stage 2 — what was actually built
+## 30. Stage 5C — what was actually built
+
+Full detail lives in [`docs/FRONTEND_ARCHITECTURE.md`](./FRONTEND_ARCHITECTURE.md)'s "Stage 5C — Wake Lock / field-session resilience" section and [`docs/HANDOFF.md`](./HANDOFF.md) §2.
+
+- **Closes the remaining reliability item Stage 5B's own recommendation flagged.** Screen sleep during an active field survey no longer requires the operator to touch the device — a Screen Wake Lock is held for the duration of a genuinely active recording and nothing else.
+- **A narrow, testable service, not calls scattered through components.** `WakeLockService` (`frontend/src/services/wakeLock/wakeLockService.ts`) wraps `navigator.wakeLock.request("screen")` behind `request()`/`release()`/`getSnapshot()`/`isWanted()` and knows nothing about recording, GNSS, or recovery — the same separation-of-concerns pattern as `SerialGnssService`/`RecordingService`.
+- **Acquisition and release are derived exclusively from the recording lifecycle**, via a single small hook (`useWakeLockRuntime`) mounted once at the app root. A lock is requested only on a genuine `state === 'recording'` edge-transition — from Start *or* from a resumed recovery, both land on the same state — and released the instant that state is left. Survey being open, GNSS being connected, an unfinished session existing, or Recovery Required showing never acquire one.
+- **No uncontrolled retry loop and no polling.** The sentinel's own unsolicited `release` event only updates status; it never re-requests itself. Reacquisition after a hidden-tab release happens exclusively through the `visibilitychange` event, gated on whether recording is still active at that moment — not a timer, not an interval.
+- **Precise about what the browser API can and cannot guarantee.** Nothing here claims to prevent OS sleep, a lid close, battery depletion, or the browser process being killed, and no platform power-management command was added.
+- **Non-fatal by construction, and proven so.** An unsupported browser, a rejected permission request, or a sentinel that disappears mid-recording are all surfaced as a compact, informational status — never a blocking error, never a reason to pause or stop the recording. A dedicated test drives `RecordingService` through a full session while `WakeLockService` is simultaneously forced into an error state and confirms `RecordingService.stop()` is never called and the recording state never changes as a result (task section 14).
+- **Independent of Stage 5B's reconnect state**, deliberately: a GNSS disconnect/reconnect cycle during an active recording never touches the wake lock, and a test proves it directly rather than by omission.
+- **Independent of Stage 5A's recovery state**, deliberately: `checkForRecovery()` and an unresolved Recovery Required panel never acquire a lock; only an explicit operator Resume, which lands on the same `'recording'` state a fresh Start does, does.
+- **Deferred / explicitly not started:** Windows `powercfg`, macOS `caffeinate`, Electron/native power APIs, lid-close handling, OS suspend prevention, battery-monitoring redesign, any change to Stage 5A/5B's own semantics, Reports, Paddy Intelligence, Manual Control, MAVLink, RealSense, AI, schema migration.
+
+## 31. Historical Stage 2 — what was actually built
 
 Full detail lives in [`docs/FRONTEND_ARCHITECTURE.md`](./FRONTEND_ARCHITECTURE.md)'s "Stage 2 — Field management" section. Summary for anyone reading this plan document in isolation.
 

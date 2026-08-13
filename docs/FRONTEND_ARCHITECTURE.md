@@ -1,6 +1,52 @@
-# Frontend Architecture — `frontend/` (through Stage 5B)
+# Frontend Architecture — `frontend/` (through Stage 5C)
 
-This documents the new React/TypeScript/Vite frontend, living at `frontend/` beside the existing static app (`index.html`, `css/`, `js/`, `data/` at the repository root). Stage 1 established the shell, Stage 2 added Field management, Stage 3A added read-only saved surveys, Stage 3B added live WebSerial/recording, Stage 3C bridged saved surveys into fields and field-aware observations, Stage 4A added the water foundation, Stage 4B added the gate decision/recommendation, Stage 5A added recording crash recovery, and Stage 5B added transient GNSS serial disconnect/reconnect reliability. See [`docs/UI_REDESIGN.md`](./UI_REDESIGN.md) for the Stage 0 audit and migration plan.
+This documents the new React/TypeScript/Vite frontend, living at `frontend/` beside the existing static app (`index.html`, `css/`, `js/`, `data/` at the repository root). Stage 1 established the shell, Stage 2 added Field management, Stage 3A added read-only saved surveys, Stage 3B added live WebSerial/recording, Stage 3C bridged saved surveys into fields and field-aware observations, Stage 4A added the water foundation, Stage 4B added the gate decision/recommendation, Stage 5A added recording crash recovery, Stage 5B added transient GNSS serial disconnect/reconnect reliability, and Stage 5C added Screen Wake Lock / field-session resilience. See [`docs/UI_REDESIGN.md`](./UI_REDESIGN.md) for the Stage 0 audit and migration plan.
+
+## Stage 5C — Wake Lock / field-session resilience
+
+A narrow service (`WakeLockService`) wraps the standard Screen Wake Lock API; a single hook (`useWakeLockRuntime`), mounted once at the app root, owns the entire acquire/release/reacquire lifecycle by watching `RecordingService`'s own state. Neither the service nor the hook is aware of GNSS or recovery — the wake lock is tied exclusively to whether a recording is genuinely active.
+
+### Acquire/release rule — one edge-triggered predicate
+
+```
+RecordingState transitions into 'recording'  (from Start OR from a resumed recovery) → request()
+RecordingState transitions out of 'recording' (Stop, Finish & Save, Discard, error)   → release()
+```
+
+Nothing else acquires it: not an open Survey workspace, not a connected GNSS, not an unfinished session, not an unresolved `recovery_available`. This is an edge check (`wasRecording` flipping), not a level check, so the frequent re-notifications `RecordingService` emits while actively ingesting points never cause a redundant `request()` call.
+
+### Visibility — the only reacquisition path, and it is not polling
+
+```
+recording active, tab hidden → browser may release the sentinel on its own
+tab visible again → reacquire ONLY IF recordingService.state === 'recording' AND wakeLockService.isWanted()
+```
+
+`isWanted()` is the service's own record of the caller's intent, set by `request()` and cleared by `release()` — it is what lets the `visibilitychange` handler distinguish "recording is still active, please reacquire" from "the operator stopped while the tab was hidden, don't." The sentinel's own `release` event, separately, only updates status — it is never itself a trigger to re-request, which is what keeps this from becoming an uncontrolled retry loop.
+
+### Failure modes are all non-fatal
+
+| Condition | State | Effect on recording |
+|---|---|---|
+| `navigator.wakeLock` absent | `unsupported` (permanent) | None — `request()` is a safe no-op |
+| `request()` rejects | `error`, message preserved | None |
+| Sentinel fires `release` unexpectedly | `released` | None — status only |
+
+`RecordingService` has no import of `wakeLockService` anywhere, so this independence is structural, not just tested — though it is also tested directly: a wake lock forced into `error` mid-recording is asserted to never call `RecordingService.stop()` or change its state.
+
+### Interaction with Stage 5A and Stage 5B
+
+Both are separate axes from wake lock, verified independently:
+- **Stage 5B (reconnect):** `recording active / GNSS reconnecting / wake lock active` is valid and expected — the lock tracks the recording, not the serial link, and a disconnect/reconnect cycle never calls `release()`.
+- **Stage 5A (recovery):** `recovery_available` never acquires a lock; only an explicit Resume, landing on the same `'recording'` state a fresh Start reaches, does.
+
+### UI
+
+One new `wakeLock` status-bar badge (reusing the existing `ORDER` array in `TopStatusBar.tsx`, no new panel) and one new row in the Survey inspector's existing recording metrics list — `Keep screen awake: ● Active / Unavailable / Reacquiring… / Failed / —`. Two short `role="status"` notices cover the unsupported and error cases; neither blocks or disables Start Recording.
+
+### Stage 5C safety boundary
+
+No OS/platform power-management command of any kind, no claim of preventing OS sleep/lid-close/battery depletion, no polling, no change to Stage 5A or Stage 5B semantics, no legacy `js/` file touched, no backend file touched.
 
 ## Stage 5B — GNSS reconnect reliability
 

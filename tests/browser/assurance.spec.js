@@ -34,7 +34,7 @@ async function registerFieldInSurveyTab(page) {
 }
 
 test("bundled QZ1 proof flows into the 測量チェック workspace", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/#decision");
   await page.locator("#decisionFieldSelect").selectOption("__sample__");
   await page.getByRole("button", { name: "選択中データの測位点を表示" }).first().click();
   await expect(page.locator("#proofTotal")).toHaveText("206点");
@@ -157,7 +157,7 @@ test("測量チェックを実行 updates the summary cards, and 詳細設定/�
 });
 
 test("なぜこの判定？ panel shows farmer-friendly 判定/理由/おすすめ text for a selected cell", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/#decision");
   await page.locator("#decisionFieldSelect").selectOption("__sample__");
   await page.getByRole("button", { name: "選択中データの測位点を表示" }).first().click();
   await expect(page.locator("#proofTotal")).toHaveText("206点");

@@ -40,6 +40,51 @@ def test_heartbeat_populates_vehicle_identity(state: TelemetryState) -> None:
     assert vehicle["componentId"] == 1
 
 
+def test_motor_output_diagnostics_follow_servo_function_mapping_without_assuming_outputs(
+    state: TelemetryState,
+) -> None:
+    for parameter, value in (
+        ("SERVO1_FUNCTION", 0),
+        ("SERVO3_FUNCTION", 36),  # physical output 3 is Motor 4
+        ("SERVO7_FUNCTION", 33),  # physical output 7 is Motor 1
+    ):
+        state.apply_message(
+            MockMessage("PARAM_VALUE", param_id=parameter, param_value=value),
+            system_id=1,
+            component_id=1,
+        )
+    state.apply_message(
+        MockMessage(
+            "SERVO_OUTPUT_RAW",
+            port=0,
+            time_usec=55,
+            **{f"servo{index}_raw": 1000 + index * 10 for index in range(1, 17)},
+        ),
+        system_id=1,
+        component_id=1,
+    )
+
+    diagnostics = state.snapshot()["motorOutputs"]
+    assert diagnostics["outputs"] == [
+        {
+            "motorNumber": 4,
+            "outputChannel": 3,
+            "function": 36,
+            "functionName": "Motor 4",
+            "pwm": 1030,
+        },
+        {
+            "motorNumber": 1,
+            "outputChannel": 7,
+            "function": 33,
+            "functionName": "Motor 1",
+            "pwm": 1070,
+        },
+    ]
+    assert diagnostics["mappingComplete"] is False
+    assert diagnostics["ageSeconds"] is not None
+
+
 def test_target_component_prefers_the_observed_autopilot_component(state: TelemetryState) -> None:
     state.apply_message(heartbeat(), system_id=1, component_id=1)
     assert state.target_component(fallback=99) == 1

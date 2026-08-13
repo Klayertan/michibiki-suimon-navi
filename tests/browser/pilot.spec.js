@@ -306,6 +306,45 @@ test("RC input seen by Pixhawk shows the vehicle's own reported channel values, 
   await expect(page.locator("#pilotRcAge")).toContainText("0.3 s");
 });
 
+test("backend outgoing override and Pixhawk motor telemetry remain distinct diagnostics", async ({ page }) => {
+  const status = telemetryStatus({
+    pilot: pilotSnapshot({
+      outputActive: true,
+      transmitting: true,
+      overrideOwned: true,
+      blockedReason: null,
+      lastOutgoingOverride: {
+        channels: [1500, 1500, 1180, 1500, 65535, 65535, 65535, 65535],
+        released: false,
+        sent: true,
+        state: "TRANSMITTING",
+        reason: "deadman_held_fresh_input",
+        ageSeconds: 0.1
+      }
+    }),
+    rc: { channels: [1500, 1500, 1180, 1500, null, null, null, null], channelCount: 4, rssi: 200, receiverHealthy: true, ageSeconds: 0.2 }
+  });
+  status.motorOutputs = {
+    outputs: [
+      { motorNumber: 4, outputChannel: 3, function: 36, functionName: "Motor 4", pwm: 1120 },
+      { motorNumber: 1, outputChannel: 7, function: 33, functionName: "Motor 1", pwm: 1130 }
+    ],
+    functionParametersLoaded: 16,
+    mappingComplete: true,
+    ageSeconds: 0.2
+  };
+  await openManualPanel(page, { initial: status });
+
+  await expect(page.locator("#pilotOutgoingState")).toHaveText("TRANSMITTING");
+  await expect(page.locator("#pilotOutgoingReason")).toHaveText("deadman_held_fresh_input");
+  await expect(page.locator(".pilot-outgoing-override-section")).toContainText("CH3");
+  await expect(page.locator(".pilot-outgoing-override-section")).toContainText("1180");
+  await expect(page.locator("#pilotOverrideActive")).toHaveText("YES");
+  await expect(page.locator("#pilotOverrideOwned")).toHaveText("YES");
+  await expect(page.locator(".pilot-motor-output-section")).toContainText("Motor 4 (OUT3, function 36)");
+  await expect(page.locator(".pilot-motor-output-section")).toContainText("Motor 1 (OUT7, function 33)");
+});
+
 test("RC input seen by Pixhawk shows UNKNOWN, not a false PASS, when the vehicle has not reported it", async ({ page }) => {
   await openManualPanel(page); // default telemetryStatus(): rc channels all null, prearmCheck null
 

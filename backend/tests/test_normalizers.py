@@ -48,6 +48,24 @@ def test_heartbeat_without_fields_reports_unknown_not_disarmed() -> None:
     assert values["flightMode"] is None
 
 
+def test_servo_output_raw_preserves_read_only_pwm_and_missing_extensions() -> None:
+    values = normalizers.normalize_servo_output_raw(
+        MockMessage(
+            "SERVO_OUTPUT_RAW",
+            port=0,
+            time_usec=123456,
+            servo1_raw=1100,
+            servo2_raw=1200,
+            servo3_raw=0,
+            servo4_raw=1900,
+        )
+    )
+    assert values["channels"][:4] == [1100, 1200, 0, 1900]
+    assert values["channels"][4:] == [None] * 12
+    assert values["port"] == 0
+    assert values["timeUsec"] == 123456
+
+
 def test_sys_status_scales_battery_units() -> None:
     values = normalizers.normalize_sys_status(
         MockMessage(

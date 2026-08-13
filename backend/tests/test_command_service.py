@@ -247,7 +247,7 @@ def test_vehicle_rejection_is_reported_never_swallowed(connected) -> None:
 
 def test_missing_acknowledgement_times_out_rather_than_hanging(connected) -> None:
     _, service, link = connected
-    # Connection bootstrap emits six command-511 stream requests.  Wait for
+    # Connection bootstrap emits the fixed command-511 stream request set. Wait for
     # that burst before assigning the mock's one-shot dropped ACK, otherwise
     # a stream request can nondeterministically consume the fault injection.
     assert wait_until(
@@ -328,7 +328,7 @@ def test_normal_arm_and_disarm_use_param2_zero_and_confirm_heartbeat(arm_capable
     assert pilot.snapshot()["failsafe"] is False
 
 
-def test_arm_requires_post_confirmation_deadman_release_and_newer_repress(arm_capable) -> None:
+def test_arm_accepts_first_fresh_post_confirmation_deadman_movement(arm_capable) -> None:
     _manager, service, link, pilot = arm_capable
     pilot.submit(
         pitch=0,
@@ -345,11 +345,12 @@ def test_arm_requires_post_confirmation_deadman_release_and_newer_repress(arm_ca
     after_arm = pilot.snapshot()
     assert after_arm["sequence"] == 10
     assert after_arm["nextSequence"] == 11
-    assert after_arm["armingReleaseRequired"] is True
+    assert after_arm["armingReleaseRequired"] is False
+    assert after_arm["armingFreshInputRequired"] is True
     assert after_arm["axes"] == {"pitch": 0.0, "roll": 0.0, "throttle": 0.0, "yaw": 0.0}
 
-    # Browser keepalive is still holding the pre-arm controls: it remains
-    # inhibited even though this is a fresh sequence after ARM.
+    # Input received during ARM verification was discarded. The first strictly
+    # newer frame after confirmed ARMED is authoritative and may move.
     pilot.submit(
         pitch=0,
         roll=0,
@@ -359,17 +360,7 @@ def test_arm_requires_post_confirmation_deadman_release_and_newer_repress(arm_ca
         source="keyboard",
         sequence=11,
     )
-    time.sleep(0.12)
-    # The held throttle=0.1 request must never reach the vehicle during the
-    # barrier -- whether the frame sent was a full release or bench mode's
-    # safe-idle resting frame is not the property under test here.
     blocked_movement = _movement_channels(throttle=0.1)
-    assert not any(entry["channels"] == blocked_movement for entry in link.rc_override_log)
-    assert pilot.snapshot()["blockedReason"] == "arming_input_barrier"
-
-    # Release consumes its own sequence; only the later re-press can move.
-    pilot.submit(deadman=False, source="keyboard", sequence=12)
-    pilot.submit(throttle=0.1, deadman=True, source="keyboard", sequence=13)
     assert wait_until(lambda: pilot.snapshot()["transmitting"] is True)
     assert any(entry["channels"] == blocked_movement for entry in link.rc_override_log)
     service.disarm(confirmed=True)
