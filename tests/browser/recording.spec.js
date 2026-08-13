@@ -129,9 +129,10 @@ test("an interrupted session survives reload and can be resumed from the recover
   await page.locator("#recStartButton").click();
   await expect.poll(async () => Number(await page.locator("#recReceivedLineCount").textContent())).toBeGreaterThan(3);
   const sessionId = await page.locator("#recSessionIdLabel").textContent();
-  // Force a flush so data is actually on disk before the "crash". The fake
-  // port keeps streaming in the background, so poll rather than assert once
-  // immediately after — a line can land between the flush and the check.
+  // Stop only the fake receiver before forcing a flush. Otherwise this test
+  // races itself by continuously adding a new line while waiting for the
+  // pending-write counter to remain at zero.
+  await page.evaluate(() => window.__fakeSerialStop?.());
   await expect.poll(async () => {
     await page.evaluate(() => window.recordingController.flushPending());
     return Number(await page.locator("#recPendingCount").textContent());
@@ -322,6 +323,7 @@ test("raw NMEA export produces exactly one complete sentence per persisted line"
   await connect(page);
   await page.locator("#recStartButton").click();
   await expect.poll(async () => Number(await page.locator("#recReceivedLineCount").textContent())).toBeGreaterThan(4);
+  await page.evaluate(() => window.__fakeSerialStop?.());
   await page.locator("#recStopButton").click();
   await expect(page.locator("#recRecordingStateLabel")).toHaveText("終了");
 
@@ -442,6 +444,7 @@ test("exactly-once ingestion and monotonic sequence values survive a reload+resu
   await page.locator("#recStartButton").click();
   await expect.poll(async () => Number(await page.locator("#recReceivedLineCount").textContent())).toBeGreaterThan(4);
   const sessionId = await page.locator("#recSessionIdLabel").textContent();
+  await page.evaluate(() => window.__fakeSerialStop?.());
   await page.evaluate(() => window.recordingController.flushPending());
   const countBeforeReload = await page.locator("#recReceivedLineCount").textContent();
 
@@ -458,6 +461,7 @@ test("exactly-once ingestion and monotonic sequence values survive a reload+resu
   await connect(page);
   await expect.poll(async () => Number(await page.locator("#recReceivedLineCount").textContent()))
     .toBeGreaterThan(Number(countBeforeReload));
+  await page.evaluate(() => window.__fakeSerialStop?.());
   await page.locator("#recStopButton").click();
   await expect(page.locator("#recRecordingStateLabel")).toHaveText("終了");
 
