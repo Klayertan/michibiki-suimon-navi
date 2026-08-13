@@ -1,5 +1,9 @@
 export const clamp = (value, min = -1, max = 1) => Math.min(max, Math.max(min, Number.isFinite(value) ? value : 0));
 
+/** Semantic Mode 2 axes exposed by the common input layer. */
+export const MODE2_AXIS_NAMES = Object.freeze(["yaw", "throttle", "roll", "pitch"]);
+export const NEUTRAL_MODE2_AXES = Object.freeze({ pitch: 0, roll: 0, throttle: 0, yaw: 0 });
+
 export function scaleAxis(value, min = -1, center = 0, max = 1) {
   const v = clamp(value, min, max);
   const span = v < center ? center - min : max - center;
@@ -30,7 +34,64 @@ export function detectNoise(samples = [], threshold = 0.025) {
   const mean = samples.reduce((a,b)=>a+b,0)/samples.length;
   return Math.sqrt(samples.reduce((a,b)=>a+(b-mean)**2,0)/samples.length) > threshold;
 }
-export function gatePreview(values, { deadman, connected, focused, visible, stale, calibrated }) {
-  const reason = !connected ? "controller-disconnected" : !focused ? "focus-lost" : !visible ? "tab-hidden" : stale ? "stale-input" : !calibrated ? "calibration-incomplete" : !deadman ? "deadman-released" : null;
+/**
+ * Convert the four canonical provider axes into named Mode 2 intentions.
+ *
+ * `axisAssignments` is in semantic order `[yaw, throttle, roll, pitch]` and
+ * contains raw Gamepad API axis indexes. Calibration arrays (including
+ * inversion) remain indexed by raw axis, so a remapped axis keeps all of its
+ * measured characteristics. Positive semantic values mean yaw-right, climb,
+ * roll-right and pitch-forward respectively.
+ */
+export function normalizeMode2Axes(sample, calibration, { scale = 1, clampRadial = true } = {}) {
+  const rawAxes = Array.isArray(sample?.axes) ? sample.axes : [];
+  const assignments = calibration?.axisAssignments || [0, 1, 2, 3];
+
+  const semantic = MODE2_AXIS_NAMES.map((_, semanticIndex) => {
+    const rawIndex = assignments[semanticIndex] ?? semanticIndex;
+    const rawValue = Number(rawAxes[rawIndex] ?? 0);
+    const scaled = scaleAxis(
+      rawValue,
+      calibration?.axisMinimums?.[rawIndex] ?? -1,
+      calibration?.axisCenters?.[rawIndex] ?? 0,
+      calibration?.axisMaximums?.[rawIndex] ?? 1
+    );
+    const inverted = invertAxis(scaled, calibration?.axisInversions?.[rawIndex] ?? false);
+    const deadzoned = axialDeadzone(inverted, calibration?.deadzones?.[rawIndex] ?? 0);
+    return applyExpo(deadzoned, calibration?.expoValues?.[rawIndex] ?? 0);
+  });
+
+  // Clamp diagonal stick input to a unit circle without adding another
+  // deadzone; each calibrated raw axis already applied its own deadzone.
+  const left = clampRadial
+    ? radialDeadzone(semantic[0], semantic[1], 0)
+    : { x: semantic[0], y: semantic[1] };
+  const right = clampRadial
+    ? radialDeadzone(semantic[2], semantic[3], 0)
+    : { x: semantic[2], y: semantic[3] };
+  return {
+    yaw: clamp(left.x * scale),
+    throttle: clamp(-left.y * scale),
+    roll: clamp(right.x * scale),
+    pitch: clamp(-right.y * scale)
+  };
+}
+
+export function gatePreview(values, { deadman, connected, focused, visible, stale, calibrated, captureActive = true }) {
+  const reason = !connected
+    ? "controller-disconnected"
+    : !focused
+      ? "focus-lost"
+      : !visible
+        ? "tab-hidden"
+        : stale
+          ? "stale-input"
+          : !calibrated
+            ? "calibration-incomplete"
+            : !captureActive
+              ? "capture-inactive"
+              : !deadman
+                ? "deadman-released"
+                : null;
   return { active: !reason, reason, values: Object.fromEntries(Object.entries(values).map(([k,v]) => [k, reason ? 0 : v])) };
 }

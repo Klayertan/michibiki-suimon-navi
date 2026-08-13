@@ -40,6 +40,51 @@ def test_heartbeat_populates_vehicle_identity(state: TelemetryState) -> None:
     assert vehicle["componentId"] == 1
 
 
+def test_motor_output_diagnostics_follow_servo_function_mapping_without_assuming_outputs(
+    state: TelemetryState,
+) -> None:
+    for parameter, value in (
+        ("SERVO1_FUNCTION", 0),
+        ("SERVO3_FUNCTION", 36),  # physical output 3 is Motor 4
+        ("SERVO7_FUNCTION", 33),  # physical output 7 is Motor 1
+    ):
+        state.apply_message(
+            MockMessage("PARAM_VALUE", param_id=parameter, param_value=value),
+            system_id=1,
+            component_id=1,
+        )
+    state.apply_message(
+        MockMessage(
+            "SERVO_OUTPUT_RAW",
+            port=0,
+            time_usec=55,
+            **{f"servo{index}_raw": 1000 + index * 10 for index in range(1, 17)},
+        ),
+        system_id=1,
+        component_id=1,
+    )
+
+    diagnostics = state.snapshot()["motorOutputs"]
+    assert diagnostics["outputs"] == [
+        {
+            "motorNumber": 4,
+            "outputChannel": 3,
+            "function": 36,
+            "functionName": "Motor 4",
+            "pwm": 1030,
+        },
+        {
+            "motorNumber": 1,
+            "outputChannel": 7,
+            "function": 33,
+            "functionName": "Motor 1",
+            "pwm": 1070,
+        },
+    ]
+    assert diagnostics["mappingComplete"] is False
+    assert diagnostics["ageSeconds"] is not None
+
+
 def test_target_component_prefers_the_observed_autopilot_component(state: TelemetryState) -> None:
     state.apply_message(heartbeat(), system_id=1, component_id=1)
     assert state.target_component(fallback=99) == 1
@@ -83,6 +128,20 @@ def test_freshness_recovers_when_messages_resume(state: TelemetryState) -> None:
 
     state.apply_message(heartbeat(), system_id=1, component_id=1)
     assert state.evaluate_freshness() is ConnectionState.CONNECTED
+
+
+def test_fresh_nonheartbeat_telemetry_cannot_mask_stale_vehicle_heartbeat(
+    state: TelemetryState,
+) -> None:
+    state.apply_message(heartbeat(armed=False, custom_mode=0), system_id=1, component_id=1)
+    state.apply_message(MockMessage("SYS_STATUS", voltage_battery=16000))
+    state.set_connection_state(ConnectionState.CONNECTED)
+    with state._lock:
+        state._last_heartbeat_mono = 100.0
+        state._last_message_mono = 101.5
+
+    assert state.evaluate_freshness(101.5) is ConnectionState.TELEMETRY_STALE
+    assert state.is_stale(101.5) is True
 
 
 def test_freshness_never_overwrites_a_deliberate_state(state: TelemetryState) -> None:
@@ -140,6 +199,35 @@ def test_reset_clears_vehicle_data_so_stale_values_cannot_look_live(state: Telem
     assert snapshot["battery"]["voltage"] is None
     assert snapshot["vehicle"]["armed"] is None
     assert snapshot["statusTexts"] == []
+
+
+def test_parameter_cache_is_normalized_filterable_and_session_scoped(state: TelemetryState) -> None:
+    state.apply_message(
+        MockMessage(
+            "PARAM_VALUE",
+            param_id=b"rcmap_roll\x00",
+            param_value=1.0,
+            param_type=9,
+            param_count=2,
+            param_index=0,
+        )
+    )
+    state.apply_message(
+        MockMessage(
+            "PARAM_VALUE",
+            param_id=b"RC_OVERRIDE_TIME",
+            param_value=3.0,
+            param_type=9,
+            param_count=2,
+            param_index=1,
+        )
+    )
+    assert state.get_parameters(["RCMAP_ROLL"]) == {"RCMAP_ROLL": 1.0}
+    assert state.snapshot()["parameters"]["RC_OVERRIDE_TIME"] == 3.0
+
+    state.reset_vehicle_data()
+    assert state.get_parameters() == {}
+    assert state.snapshot()["parameters"] == {}
 
 
 def test_errors_are_recorded_not_swallowed(state: TelemetryState) -> None:

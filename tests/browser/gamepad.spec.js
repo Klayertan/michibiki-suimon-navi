@@ -1,10 +1,110 @@
-import {test,expect} from "@playwright/test";
-async function mockPads(page,pads=[]){await page.addInitScript(initial=>{let current=initial;Object.defineProperty(navigator,"getGamepads",{value:()=>current});window.__setPads=p=>current=p;},pads)}
-async function open(page,url="/?gamepadMock=1#survey"){await page.goto(url);await expect(page.locator("#gamepadPanel")).toBeAttached();await page.waitForFunction(()=>Boolean(window.gamepadController));await page.evaluate(()=>{gamepadPanel.hidden=false;gamepadPanel.open=true})}
-async function openSimulator(page){await page.evaluate(()=>{const el=document.querySelector("#gpSimulator");if(el)el.open=true})}
-async function activate(page,selector){await page.evaluate(s=>document.querySelector(s)?.click(),selector)}
-test("no controller is safe and exposes no aircraft controls",async({page})=>{await mockPads(page);await open(page);await expect(page.locator("#gpContent")).toContainText("Not detected");await expect(page.locator("#gamepadPanel")).toContainText("No aircraft commands are being transmitted");await expect(page.locator("#gamepadPanel button",{hasText:/Arm|Takeoff/})).toHaveCount(0)});
-test("generic browser controller and likely DualSense are detected",async({page})=>{const pad={index:0,id:"Generic standard controller",mapping:"standard",axes:[.4,0,0,0],buttons:Array.from({length:18},()=>({pressed:false,touched:false,value:0})),timestamp:performance.now()};await mockPads(page,[pad]);await open(page,"/#survey");await expect(page.locator("#gpContent")).toContainText("Generic standard controller");await expect(page.locator("#gpContent")).not.toContainText("DualSense候補")});
-test("simulator connects, moves, dead-man releases and disconnect zeros",async({page})=>{await mockPads(page);await open(page);await page.evaluate(()=>{window.gamepadController.switchProvider(window.gamepadController.mock);window.gamepadController.mock.connect()});await page.waitForFunction(()=>Boolean(window.gamepadController.calibration));await expect(page.locator("#gpContent")).toContainText("Simulated DualSense Controller");await page.evaluate(()=>{const c=window.gamepadController;c.calibration.validationState="valid";c.mock.setAxis(0,.8);c.mock.setButton(4,1);c.mock.setButton(4,0)});await expect(page.locator(".gp-gate")).toContainText("deadman-released");await page.evaluate(()=>window.gamepadController.mock.disconnect());await expect(page.locator(".gp-gate")).toContainText("controller-disconnected")});
-test("narrow layout has no horizontal overflow or overlapping indicators",async({page})=>{await page.setViewportSize({width:390,height:844});await mockPads(page);await open(page);await activate(page,"#gpMockConnect");const result=await page.evaluate(()=>({overflow:document.documentElement.scrollWidth-document.documentElement.clientWidth,overlap:(()=>{const a=document.querySelector('.gp-sim')?.getBoundingClientRect(),b=document.querySelector('.gp-status strong')?.getBoundingClientRect();return a&&b&&!(a.right<=b.left||b.right<=a.left||a.bottom<=b.top||b.bottom<=a.top)})()}));expect(result.overflow).toBeLessThanOrEqual(1);expect(result.overlap).toBeFalsy()});
-test("gamepad interaction makes no command API request",async({page})=>{const requests=[];page.on("request",r=>{if(/api\/.+(command|arm|takeoff|manual)/i.test(r.url()))requests.push(r.url())});await mockPads(page);await open(page);await activate(page,"#gpMockConnect");await page.evaluate(()=>gamepadController.mock.setAxis(1,1));expect(requests).toEqual([])});
+import { test, expect } from "@playwright/test";
+import { openManualPanel, pilotAxis } from "./manual-control-helpers.js";
+
+test("unified input selector exposes Keyboard and PS5 only", async ({ page }) => {
+  await openManualPanel(page);
+  await expect(page.locator("#gamepadPanel")).toHaveCount(0);
+  await expect(page.locator("#gpSource option")).toHaveCount(2);
+  expect(await page.locator("#gpSource option").allTextContents()).toEqual(["Keyboard", "PS5 Controller"]);
+  await expect(page.locator("#gpSource")).toHaveValue("keyboard");
+  await expect(page.locator(".gp-gate")).toHaveText("capture-inactive");
+});
+
+test("keyboard preview requires explicit capture and Shift, then Escape immediately zeros and stops it", async ({ page }) => {
+  const backend = await openManualPanel(page);
+  await page.locator("#gpKeyCapture").click();
+
+  await page.keyboard.down("ArrowUp");
+  await expect(page.locator(".gp-gate")).toHaveText("deadman-released");
+  await expect(pilotAxis(page, "pitch")).toHaveText("0.00");
+
+  await page.keyboard.down("ShiftLeft");
+  await expect(page.locator(".gp-gate")).toHaveText("ready");
+  await expect(pilotAxis(page, "pitch")).toHaveText("0.25");
+
+  await page.keyboard.press("Escape");
+  await expect(pilotAxis(page, "pitch")).toHaveText("0.00");
+  await expect(page.locator("#gpKeyCapture")).toContainText("Preview keyboard input");
+  await expect(page.locator(".gp-gate")).toHaveText("capture-inactive");
+  expect(backend.inputs()).toEqual([]);
+  await page.keyboard.up("ArrowUp");
+  await page.keyboard.up("ShiftLeft");
+});
+
+test("PS5 calibration and raw diagnostics remain available and configured dead-man is authoritative", async ({ page }) => {
+  await openManualPanel(page);
+  await page.locator("#gpSource").selectOption("ps5");
+  await expect(page.locator("[data-input-calibration]")).toBeAttached();
+  await expect(page.locator("[data-input-raw]")).toBeAttached();
+  await page.evaluate(() => window.gamepadController.mock.connect());
+  await page.waitForFunction(() => Boolean(window.gamepadController?.calibration));
+
+  await page.evaluate(() => {
+    const controller = window.gamepadController;
+    controller.setCalibration({
+      ...controller.calibration,
+      deadmanButtonIndex: 5,
+      validationState: "valid"
+    });
+    controller.startCapture();
+    controller.mock.setButton(4, 1);
+    controller.mock.setAxis(0, 0.5);
+  });
+  await expect(page.locator(".gp-gate")).toHaveText("deadman-released");
+  expect(await page.evaluate(() => window.gamepadController.getState().deadmanHeld)).toBe(false);
+
+  await page.evaluate(() => window.gamepadController.mock.setButton(5, 1));
+  await expect(page.locator(".gp-gate")).toHaveText("ready");
+  const state = await page.evaluate(() => window.gamepadController.getState());
+  expect(state.deadmanButtonIndex).toBe(5);
+  expect(state.axes.yaw).toBeGreaterThan(0);
+  expect(state.rawSample.axes).toHaveLength(4);
+});
+
+test("PS5 disconnect, stale input and source switch each zero the common axes", async ({ page }) => {
+  await openManualPanel(page);
+  await page.locator("#gpSource").selectOption("ps5");
+  await page.evaluate(() => window.gamepadController.mock.connect());
+  await page.waitForFunction(() => Boolean(window.gamepadController?.calibration));
+  await page.evaluate(() => {
+    const controller = window.gamepadController;
+    controller.setCalibration({ ...controller.calibration, validationState: "valid" });
+    controller.startCapture();
+    controller.mock.setButton(4, 1);
+    controller.mock.setAxis(2, 0.5);
+  });
+  await expect(page.locator(".gp-gate")).toHaveText("ready");
+  expect((await page.evaluate(() => window.gamepadController.getState())).axes.roll).toBeGreaterThan(0);
+
+  await page.evaluate(() => window.gamepadController.mock.setStale(true));
+  await expect(page.locator(".gp-gate")).toHaveText("stale-input");
+  expect(await page.evaluate(() => window.gamepadController.getState().axes)).toEqual({ pitch: 0, roll: 0, throttle: 0, yaw: 0 });
+
+  await page.evaluate(() => {
+    window.gamepadController.mock.setStale(false);
+    window.gamepadController.mock.disconnect();
+  });
+  await expect(page.locator(".gp-gate")).toHaveText("controller-disconnected");
+  expect(await page.evaluate(() => window.gamepadController.getState().axes)).toEqual({ pitch: 0, roll: 0, throttle: 0, yaw: 0 });
+
+  await page.locator("#gpSource").selectOption("keyboard");
+  await expect(page.locator("#gpSource")).toHaveValue("keyboard");
+  await expect(pilotAxis(page, "roll")).toHaveText("0.00");
+});
+
+test("preview and calibration interactions issue no pilot/ARM/DISARM request", async ({ page }) => {
+  const backend = await openManualPanel(page);
+  await page.locator("#gpKeyCapture").click();
+  await page.keyboard.down("ShiftLeft");
+  for (const key of ["KeyW", "KeyA", "ArrowUp", "ArrowRight"]) {
+    await page.keyboard.down(key);
+    await page.keyboard.up(key);
+  }
+  await page.keyboard.up("ShiftLeft");
+  await page.locator("#gpSource").selectOption("ps5");
+  await page.evaluate(() => {
+    window.gamepadController.mock.connect();
+    window.gamepadController.mock.setAxis(0, 0.4);
+  });
+  expect(backend.posts).toEqual([]);
+});

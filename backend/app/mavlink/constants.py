@@ -179,6 +179,108 @@ def severity_name(severity: int | None) -> str:
 MAV_CMD_DO_SET_MODE: Final = 176
 MAV_CMD_REQUEST_MESSAGE: Final = 512
 MAV_CMD_SET_MESSAGE_INTERVAL: Final = 511
+#: Normal, safety-checked arm/disarm command. ``param2`` must remain ``0``;
+#: the ArduPilot force-arm magic value is intentionally not defined anywhere
+#: in this backend.
+MAV_CMD_COMPONENT_ARM_DISARM: Final = 400
+
+# --------------------------------------------------------------------------
+# Manual RC input
+# --------------------------------------------------------------------------
+
+#: MAVLINK_MSG_ID_RC_CHANNELS_OVERRIDE.
+MSG_ID_RC_CHANNELS_OVERRIDE: Final = 70
+
+#: MAVLINK_MSG_ID_RC_CHANNELS -- the vehicle's own view of its RC input,
+#: independent of source (physical receiver or MAVLink override). This is
+#: what ArduPilot's arming/pre-arm RC checks actually evaluate; it is not the
+#: same thing as the override frame this backend last sent.
+MSG_ID_RC_CHANNELS: Final = 65
+
+#: MAVLINK_MSG_ID_SERVO_OUTPUT_RAW -- read-only autopilot actuator PWM
+#: telemetry. It is intentionally used only for diagnostics; the transport
+#: exposes no servo/motor command method.
+MSG_ID_SERVO_OUTPUT_RAW: Final = 36
+
+#: SYS_STATUS.onboard_control_sensors_* bit for MAV_SYS_STATUS_PREARM_CHECK.
+#: Verified against the installed pymavlink dialect, not memory. Exposed only
+#: as an overall PASS/FAIL/UNKNOWN -- this backend does not enumerate which of
+#: the ~32 individual sensor bits failed, since that would mean guessing at a
+#: cause instead of reading one the vehicle explicitly reports.
+MAV_SYS_STATUS_PREARM_CHECK: Final = 0x10000000
+
+#: SYS_STATUS.onboard_control_sensors_* bit for the RC receiver sensor. Used
+#: only to report whether the vehicle currently considers its own RC input
+#: healthy -- a direct, vehicle-reported fact, not an inference from any other
+#: telemetry field.
+MAV_SYS_STATUS_SENSOR_RC_RECEIVER: Final = 0x10000
+
+#: RC_CHANNELS_OVERRIDE semantics for channels 1-8. An ignored field leaves
+#: that channel's existing source/override untouched; zero releases it back to
+#: the normal RC input. Manual control owns/release all first eight channels so
+#: a stale primary-axis override cannot remain latched.
+RC_CHANNEL_IGNORE: Final = 0xFFFF
+RC_CHANNEL_RELEASE: Final = 0
+
+#: Manual modes supported by this application. RC-style input does not require
+#: GUIDED and the application never changes mode automatically.
+MANUAL_CONTROL_MODES: Final = ("STABILIZE", "ALT_HOLD")
+
+#: RC_OPTIONS bit 1 tells ArduPilot to ignore MAVLink RC overrides.
+RC_OPTIONS_IGNORE_OVERRIDES: Final = 1 << 1
+#: Upper bound from ArduPilot's RC_OVERRIDE_TIME parameter metadata.
+RC_OVERRIDE_TIME_MAX_SECONDS: Final = 120.0
+#: Parameters read (never written) before manual override is allowed. All
+#: eight calibrations are requested because RCMAP may put a primary control on
+#: any channel 1-8.
+RC_MAPPING_PARAMETERS: Final = (
+    "RCMAP_ROLL",
+    "RCMAP_PITCH",
+    "RCMAP_THROTTLE",
+    "RCMAP_YAW",
+)
+RC_CALIBRATION_PARAMETERS: Final = tuple(
+    f"RC{channel}_{suffix}"
+    for channel in range(1, 9)
+    for suffix in ("MIN", "TRIM", "MAX", "REVERSED")
+)
+RC_DIAGNOSTIC_PARAMETERS: Final = (
+    "RC_OVERRIDE_TIME",
+    "RC_OPTIONS",
+    "SYSID_MYGCS",
+    "MAV_GCS_SYSID",
+    "MAV_GCS_SYSID_HI",
+    "MAV_OPTIONS",
+    # Diagnostic only, never enforced or written: shown next to the actual
+    # reported throttle RC input so an operator can see whether it sits inside
+    # or outside the vehicle's own configured failsafe band. Optional -- older
+    # firmware or a vehicle with the failsafe disabled may not expose these,
+    # and that is reported as "Unknown", never assumed.
+    "FS_THR_ENABLE",
+    "FS_THR_VALUE",
+)
+#: Read-only output-function mapping. These are optional diagnostics and are
+#: requested once per vehicle session; missing values never block pilot input.
+SERVO_FUNCTION_PARAMETERS: Final = tuple(
+    f"SERVO{channel}_FUNCTION" for channel in range(1, 17)
+)
+RC_OVERRIDE_SOURCE_PARAMETERS: Final = (
+    "SYSID_MYGCS",
+    "MAV_GCS_SYSID",
+    "MAV_GCS_SYSID_HI",
+)
+REQUIRED_MANUAL_CONTROL_PARAMETERS: Final = (
+    *RC_MAPPING_PARAMETERS,
+    *RC_CALIBRATION_PARAMETERS,
+    "RC_OVERRIDE_TIME",
+    "RC_OPTIONS",
+)
+MANUAL_CONTROL_PARAMETERS: Final = (
+    *RC_MAPPING_PARAMETERS,
+    *RC_CALIBRATION_PARAMETERS,
+    *RC_DIAGNOSTIC_PARAMETERS,
+    *SERVO_FUNCTION_PARAMETERS,
+)
 
 MAV_RESULT_NAMES: Final[dict[int, str]] = {
     0: "ACCEPTED",
@@ -249,4 +351,13 @@ ESSENTIAL_TELEMETRY_STREAMS: Final[tuple[tuple[str, int, int], ...]] = (
     ("GLOBAL_POSITION_INT", 33, 200_000),  # 5 Hz
     ("VFR_HUD", 74, 500_000),  # 2 Hz
     ("BATTERY_STATUS", 147, 1_000_000),  # 1 Hz
+    # Read-only: what the vehicle itself reports seeing on its RC input,
+    # independent of source. Requested unconditionally like the rest of this
+    # table so "RC INPUT SEEN BY PIXHAWK" in Manual Control reflects the
+    # vehicle's own view, not merely what the browser intended to send.
+    ("RC_CHANNELS", 65, 200_000),  # 5 Hz
+    # Read-only PWM output evidence. SERVOx_FUNCTION parameters decide which
+    # of these channels are labelled as motors; output numbers are never
+    # assumed to equal motor numbers.
+    ("SERVO_OUTPUT_RAW", MSG_ID_SERVO_OUTPUT_RAW, 200_000),  # 5 Hz
 )

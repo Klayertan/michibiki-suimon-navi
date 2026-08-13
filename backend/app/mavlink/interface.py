@@ -54,16 +54,30 @@ class MavlinkLink(abc.ABC):
     """A bidirectional MAVLink transport restricted to safe operations.
 
     There is intentionally no ``send_raw`` / ``send_packet`` method. This
-    interface can produce exactly two kinds of outbound frame: a GCS heartbeat,
-    and a ``COMMAND_LONG`` carrying a command id that
-    :mod:`app.mavlink.command_service` has already validated against its
-    allowlist. A caller cannot use this interface to transmit an arbitrary
-    MAVLink message even if it wanted to.
+    interface can produce only the reviewed outbound frames below:
+
+    1. a GCS heartbeat;
+    2. a ``COMMAND_LONG`` carrying a command id that
+       :mod:`app.mavlink.command_service` has already validated against its
+       allowlist;
+    3. a ``SET_POSITION_TARGET_LOCAL_NED`` velocity setpoint produced solely by
+       the separately retained GUIDED-mode velocity feature;
+    4. an ``RC_CHANNELS_OVERRIDE`` for channels 1--8 produced by the manual
+       pilot service; and
+    5. a read-only ``PARAM_REQUEST_READ`` used to discover the vehicle's RC
+       mapping, calibration, and override-failsafe configuration.
+
+    A caller cannot use this interface to transmit an arbitrary MAVLink
+    message even if it wanted to.
 
     (A ``SET_MODE`` sender is deliberately absent. Mode changes go through
     ``COMMAND_LONG``/``MAV_CMD_DO_SET_MODE`` instead, because that path returns
     a ``COMMAND_ACK`` the command service can check — bare ``SET_MODE`` is
     unacknowledged, so a failure would be invisible.)
+
+    Still deliberately absent, and not to be added without a separate reviewed
+    change: ``MANUAL_CONTROL``, ``PARAM_SET``, ``SET_ATTITUDE_TARGET``,
+    ``MAV_CMD_DO_SET_SERVO`` and anything that commands motors directly.
     """
 
     @property
@@ -107,6 +121,64 @@ class MavlinkLink(abc.ABC):
         params: tuple[float, float, float, float, float, float, float],
     ) -> None:
         """Transmit COMMAND_LONG for an allowlisted command id."""
+
+    @abc.abstractmethod
+    def send_velocity_setpoint(
+        self,
+        *,
+        target_system: int,
+        target_component: int,
+        vx: float,
+        vy: float,
+        vz: float,
+        yaw_rate: float,
+    ) -> None:
+        """Transmit one ``SET_POSITION_TARGET_LOCAL_NED`` velocity setpoint.
+
+        Body frame (``MAV_FRAME_BODY_NED``), velocity + yaw-rate only. Units
+        and signs are MAVLink's, already converted and clamped by
+        :func:`app.mavlink.pilot_limits.normalized_to_velocity`:
+
+        * ``vx`` m/s, positive forward
+        * ``vy`` m/s, positive right
+        * ``vz`` m/s, positive **down** (so a climb is negative)
+        * ``yaw_rate`` rad/s, positive nose-right
+
+        Implementations must not re-scale or re-interpret these values; the
+        limit boundary is :mod:`app.mavlink.pilot_limits`, and duplicating it
+        here would create a second place for the aircraft's top speed to live.
+        """
+
+    @abc.abstractmethod
+    def send_rc_channels_override(
+        self,
+        *,
+        target_system: int,
+        target_component: int,
+        channels: tuple[int, int, int, int, int, int, int, int],
+    ) -> None:
+        """Transmit one ``RC_CHANNELS_OVERRIDE`` for channels 1--8.
+
+        Values use MAVLink's first-eight-channel semantics: ``0`` releases a
+        channel to the normal receiver, ``65535`` leaves its existing input
+        unchanged, and any other unsigned 16-bit value is the requested PWM.
+        Channels 9--18 are deliberately outside this contract and therefore
+        remain ignored.
+        """
+
+    @abc.abstractmethod
+    def send_parameter_request(
+        self,
+        *,
+        target_system: int,
+        target_component: int,
+        name: str,
+    ) -> None:
+        """Request one parameter by name with ``PARAM_REQUEST_READ``.
+
+        This is intentionally a read-only operation. No parameter-write method
+        exists on the transport contract.
+        """
 
     @abc.abstractmethod
     def describe(self) -> dict[str, Any]:

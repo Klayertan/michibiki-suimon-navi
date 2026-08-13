@@ -406,15 +406,21 @@ test("normalizeObservationType/normalizeSeverity fall back safely instead of inv
   assert.equal(fallback.properties.severity, "medium");
 });
 
-test("observationSourceLabel always reads as manual, never drone/AI/automatic, even for an unknown sourceType", () => {
+test("observationSourceLabel preserves manual and drone-AI provenance, with a safe manual fallback", () => {
   assert.equal(observationSourceLabel("manual_map_click"), "手動配置（地図クリック）");
   assert.equal(observationSourceLabel("qz1_current_position"), "手動配置（QZ1現在地）");
   assert.equal(observationSourceLabel("phone_gps"), "手動配置（スマホGPS）");
+  assert.equal(observationSourceLabel("drone_ai"), "ドローンAI検出");
+  assert.equal(observationSourceLabel("drone_ai_reviewed"), "ドローンAI検出（確認済み）");
   assert.equal(observationSourceLabel("bogus"), "手動配置");
   assert.equal(observationSourceLabel(undefined), "手動配置");
-  Object.values(OBSERVATION_SOURCE_LABELS).forEach((label) => {
-    assert.match(label, /^手動配置/);
-  });
+  assert.deepEqual(Object.keys(OBSERVATION_SOURCE_LABELS).sort(), [
+    "drone_ai",
+    "drone_ai_reviewed",
+    "manual_map_click",
+    "phone_gps",
+    "qz1_current_position"
+  ]);
 });
 
 test("isPointInsideBoundary correctly classifies points inside/outside a closed square, and never blocks an open/degenerate boundary", () => {

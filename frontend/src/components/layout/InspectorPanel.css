@@ -1,0 +1,22 @@
+.inspector-panel {
+  width: var(--inspector-width);
+  flex: none;
+  background: var(--color-surface);
+  border-left: 1px solid var(--color-border);
+  padding: var(--space-4);
+  overflow-y: auto;
+}
+
+.inspector-panel__selection code {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  background: var(--color-surface-recessed);
+  padding: 1px 4px;
+  border-radius: var(--radius-sm);
+}
+
+@media (max-width: 1440px) {
+  .inspector-panel {
+    width: 280px;
+  }
+}

@@ -48,6 +48,24 @@ def test_heartbeat_without_fields_reports_unknown_not_disarmed() -> None:
     assert values["flightMode"] is None
 
 
+def test_servo_output_raw_preserves_read_only_pwm_and_missing_extensions() -> None:
+    values = normalizers.normalize_servo_output_raw(
+        MockMessage(
+            "SERVO_OUTPUT_RAW",
+            port=0,
+            time_usec=123456,
+            servo1_raw=1100,
+            servo2_raw=1200,
+            servo3_raw=0,
+            servo4_raw=1900,
+        )
+    )
+    assert values["channels"][:4] == [1100, 1200, 0, 1900]
+    assert values["channels"][4:] == [None] * 12
+    assert values["port"] == 0
+    assert values["timeUsec"] == 123456
+
+
 def test_sys_status_scales_battery_units() -> None:
     values = normalizers.normalize_sys_status(
         MockMessage(
@@ -188,6 +206,34 @@ def test_command_ack_marks_non_zero_result_as_not_accepted() -> None:
 
     accepted = normalizers.normalize_command_ack(MockMessage("COMMAND_ACK", command=176, result=0))
     assert accepted["accepted"] is True
+
+
+def test_param_value_normalizes_identifier_value_and_metadata() -> None:
+    values = normalizers.normalize_param_value(
+        MockMessage(
+            "PARAM_VALUE",
+            param_id=b"RC_OVERRIDE_TIME\x00\x00",
+            param_value=3.0,
+            param_type=9,
+            param_count=42,
+            param_index=40,
+        )
+    )
+    assert values == {
+        "paramId": "RC_OVERRIDE_TIME",
+        "value": 3.0,
+        "type": 9,
+        "count": 42,
+        "index": 40,
+    }
+
+
+def test_param_value_rejects_nonfinite_value_from_state_layer() -> None:
+    values = normalizers.normalize_param_value(
+        MockMessage("PARAM_VALUE", param_id="RC_OPTIONS", param_value=float("nan"))
+    )
+    assert values["paramId"] == "RC_OPTIONS"
+    assert values["value"] is None
 
 
 def test_forbidden_modes_are_absent_from_the_commandable_allowlist() -> None:

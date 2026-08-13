@@ -30,12 +30,22 @@ from .mavlink.command_service import DISABLED_OPERATIONS, CommandRejected, Comma
 from .mavlink.interface import LinkError, MavlinkLink, PortBusyError, PortNotFoundError
 from .mavlink.link_manager import LinkBusyError, LinkManager
 from .mavlink.mock_connection import MockMavlinkLink
+from .mavlink.pilot_service import (
+    BlockReason,
+    PilotProviderRejected,
+    PilotSequenceRejected,
+    PilotService,
+)
 from .models import (
+    ArmDisarmRequest,
     CommandResponse,
     ConfigResponse,
     ConnectRequest,
     HealthResponse,
     ModeRequest,
+    PilotBenchEnableRequest,
+    PilotInputRequest,
+    PilotNeutralRequest,
     StreamRequest,
 )
 
@@ -102,7 +112,20 @@ def create_app(settings: Settings | None = None, link_factory: LinkFactory | Non
 
     factory = link_factory or default_link_factory(resolved)
     manager = LinkManager(resolved, factory)
-    commands = CommandService(manager, resolved)
+    # The pilot service is always constructed so the UI can report *why*
+    # control is unavailable, but it refuses to produce a setpoint unless
+    # SUISUI_MAVLINK_ALLOW_PILOT_CONTROL=1. Only then is it attached to the
+    # link worker, so an unconfigured backend has no code path from an HTTP
+    # request to an RC override frame at all.
+    pilot = PilotService(resolved, manager.state)
+    commands = CommandService(manager, resolved, pilot)
+    if pilot.available:
+        manager.attach_pilot_service(pilot)
+        logger.warning(
+            "manual RC pilot control is ENABLED (limits: %s). Dead-man, fresh telemetry, "
+            "fresh input, an armed vehicle, and STABILIZE/ALT_HOLD are still required.",
+            pilot.limits.to_dict(),
+        )
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
@@ -130,11 +153,12 @@ def create_app(settings: Settings | None = None, link_factory: LinkFactory | Non
     app = FastAPI(
         title="SuisuiNavi MAVLink backend",
         version=__version__,
-        summary="Read-mostly MAVLink telemetry bridge for SuisuiNavi. No arming, no takeoff.",
+        summary="Local MAVLink telemetry and fail-closed manual RC control for SuisuiNavi.",
         lifespan=lifespan,
     )
     app.state.manager = manager
     app.state.commands = commands
+    app.state.pilot = pilot
     app.state.settings = resolved
 
     app.add_middleware(
@@ -185,12 +209,168 @@ def create_app(settings: Settings | None = None, link_factory: LinkFactory | Non
     @app.get("/api/drone/status")
     async def drone_status() -> dict[str, Any]:
         """Complete normalized state. Works in mock and real mode, connected or not."""
-        return manager.snapshot()
+        snapshot = manager.snapshot()
+        snapshot["pilot"] = pilot.snapshot()
+        return snapshot
+
+    # ------------------------------------------------------------------
+    # Manual pilot RC control
+    # ------------------------------------------------------------------
+    #
+    # Every route here is a no-op unless SUISUI_MAVLINK_ALLOW_PILOT_CONTROL=1.
+    # Enable never arms or changes mode. Input owns only the reviewed
+    # RC_CHANNELS_OVERRIDE path and releases channels 1-8 on every closed gate.
+
+    def _pilot_unavailable() -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_403_FORBIDDEN,
+            content={
+                "ok": False,
+                "reason": "pilot_control_disabled",
+                "message": (
+                    "Manual pilot control is disabled. Start the backend with "
+                    "SUISUI_MAVLINK_ALLOW_PILOT_CONTROL=1 to enable it. This never arms the "
+                    "aircraft or changes its flight mode."
+                ),
+                "detail": {"pilot": pilot.snapshot()},
+            },
+        )
+
+    @app.post("/api/drone/pilot/enable")
+    async def pilot_enable() -> Any:
+        """Open the control channel. Does **not** arm anything."""
+        if not pilot.available:
+            return _pilot_unavailable()
+        return {
+            "ok": True,
+            "reason": "enabled",
+            "message": "Pilot control enabled. ARM remains a separate explicit action; "
+                       "manual output supports STABILIZE and ALT_HOLD.",
+            "detail": {"pilot": pilot.enable()},
+        }
+
+    @app.post("/api/drone/pilot/bench/enable")
+    async def pilot_bench_enable(body: PilotBenchEnableRequest) -> Any:
+        """Open the control channel for a PROPELLERS-REMOVED bench test.
+
+        Stricter than ``/api/drone/pilot/enable``: uses smaller bench-specific limits, requires
+        the props acknowledgement, and every
+        ``/pilot/input`` frame must carry ``deadman: true`` or the setpoint
+        releases the RC override. Still does not arm the aircraft or change its
+        mode. Mock mode simulates this flow without touching hardware.
+        """
+        if not pilot.available:
+            return _pilot_unavailable()
+        return {
+            "ok": True,
+            "reason": "bench_enabled",
+            "message": "Bench pilot enabled with reduced RC deflection. ARM separately, then "
+                       "hold the selected input provider's dead-man continuously.",
+            "detail": {"pilot": pilot.enable_bench(props_removed_ack=body.propsRemovedAck)},
+        }
+
+    @app.post("/api/drone/pilot/disable")
+    async def pilot_disable() -> Any:
+        """Close the control channel and release its RC override on the way out.
+
+        Covers bench mode too -- there is one exit for both.
+        """
+        return {
+            "ok": True,
+            "reason": "disabled",
+            "message": "Pilot control channel disabled; releasing RC override.",
+            "detail": {"pilot": pilot.disable()},
+        }
+
+    @app.post("/api/drone/pilot/neutral")
+    async def pilot_neutral(body: PilotNeutralRequest) -> Any:
+        """Stop movement now (Space, focus loss, tab hidden, page unload).
+
+        A movement command, not a motor kill: the channel stays open and the
+        operator can fly again immediately.
+        """
+        try:
+            snapshot = pilot.command_neutral(sequence=body.sequence)
+        except PilotSequenceRejected as rejection:
+            return JSONResponse(
+                status_code=status.HTTP_409_CONFLICT,
+                content={
+                    "ok": False,
+                    "reason": rejection.reason,
+                    "message": str(rejection),
+                    "detail": {
+                        "sequence": rejection.sequence,
+                        "lastClientSequence": rejection.last_sequence,
+                    },
+                },
+            )
+        return {
+            "ok": True,
+            "reason": "neutral",
+            "message": "Manual RC override released.",
+            "detail": {"pilot": snapshot},
+        }
+
+    @app.post("/api/drone/pilot/input")
+    async def pilot_input(body: PilotInputRequest) -> Any:
+        """Accept one normalized pilot command from the browser.
+
+        Called continuously (~15 Hz) while control is active. The backend
+        keeps only the latest command with a monotonic timestamp and stops
+        moving on its own if these stop arriving.
+        """
+        if not pilot.available:
+            return _pilot_unavailable()
+        try:
+            state = pilot.submit(
+                pitch=body.pitch,
+                roll=body.roll,
+                throttle=body.throttle,
+                yaw=body.yaw,
+                neutral=body.neutral,
+                deadman=body.deadman,
+                source=body.source,
+                provider=body.provider,
+                sequence=body.sequence,
+            )
+        except PilotProviderRejected as rejection:
+            return JSONResponse(
+                status_code=status.HTTP_403_FORBIDDEN,
+                content={
+                    "ok": False,
+                    "reason": rejection.reason,
+                    "message": str(rejection),
+                    "detail": {
+                        "provider": rejection.provider,
+                        "sequence": rejection.sequence,
+                        "pilot": pilot.snapshot(),
+                    },
+                },
+            )
+        except PilotSequenceRejected as rejection:
+            return JSONResponse(
+                status_code=status.HTTP_409_CONFLICT,
+                content={
+                    "ok": False,
+                    "reason": rejection.reason,
+                    "message": str(rejection),
+                    "detail": {
+                        "sequence": rejection.sequence,
+                        "lastClientSequence": rejection.last_sequence,
+                    },
+                },
+            )
+        return {"ok": True, "reason": "accepted", "message": "", "detail": {"pilot": state}}
 
     @app.get("/api/drone/config", response_model=ConfigResponse)
     async def drone_config() -> ConfigResponse:
         return ConfigResponse(
-            config=resolved.public_dict(),
+            config={
+                **resolved.public_dict(),
+                "armSupported": True,
+                "armEnabled": bool(resolved.allow_safe_commands and pilot.available),
+                "manualControlTransport": "RC_CHANNELS_OVERRIDE",
+            },
             disabledOperations=DISABLED_OPERATIONS,
         )
 
@@ -304,6 +484,24 @@ def create_app(settings: Settings | None = None, link_factory: LinkFactory | Non
             return _rejection_response(rejection, _status_for(rejection.reason))
         return result.to_dict()
 
+    @app.post("/api/drone/arm", response_model=CommandResponse)
+    async def arm(body: ArmDisarmRequest) -> Any:
+        """Normal ARM command; ACK plus HEARTBEAT confirmation are required."""
+        try:
+            result = await asyncio.to_thread(commands.arm, confirmed=body.confirmed)
+        except CommandRejected as rejection:
+            return _rejection_response(rejection, _status_for(rejection.reason))
+        return result.to_dict()
+
+    @app.post("/api/drone/disarm", response_model=CommandResponse)
+    async def disarm(body: ArmDisarmRequest) -> Any:
+        """Normal DISARM command; available even after pilot disable."""
+        try:
+            result = await asyncio.to_thread(commands.disarm, confirmed=body.confirmed)
+        except CommandRejected as rejection:
+            return _rejection_response(rejection, _status_for(rejection.reason))
+        return result.to_dict()
+
     # ------------------------------------------------------------------
     # Explicitly disabled operations
     # ------------------------------------------------------------------
@@ -312,10 +510,9 @@ def create_app(settings: Settings | None = None, link_factory: LinkFactory | Non
     async def disabled_operation(operation: str) -> Any:
         """Answer honestly for operations this backend refuses to implement.
 
-        Every one of arm, disarm, takeoff, land, RTL, mission upload, GUIDED
-        movement, RC override, MANUAL_CONTROL, motor test and parameter write
-        lands here. Nothing is transmitted; there is no code path from this
-        handler to the MAVLink transport.
+        Takeoff, land, RTL, mission upload, raw RC frames, MANUAL_CONTROL,
+        motor test and parameter writes land here. ARM/DISARM are separate,
+        tightly gated endpoints and cannot be selected through this route.
         """
         result = commands.refuse(operation)
         return JSONResponse(status_code=status.HTTP_501_NOT_IMPLEMENTED, content=result.to_dict())
@@ -347,7 +544,9 @@ def create_app(settings: Settings | None = None, link_factory: LinkFactory | Non
         close_reason = "client"
         try:
             while True:
-                await websocket.send_json({"type": "telemetry", "payload": manager.snapshot()})
+                payload = manager.snapshot()
+                payload["pilot"] = pilot.snapshot()
+                await websocket.send_json({"type": "telemetry", "payload": payload})
                 done, _pending = await asyncio.wait({reader}, timeout=resolved.ws_interval)
                 if done:
                     # The reader finished: the client disconnected (any close
@@ -370,6 +569,10 @@ def create_app(settings: Settings | None = None, link_factory: LinkFactory | Non
             logger.warning("telemetry websocket send loop ended with an unexpected error", exc_info=True)
             close_reason = "error"
         finally:
+            # A lost status socket is treated as loss of the controlling
+            # browser. The worker immediately begins the repeated CH1-8 release
+            # window; a later input must carry a newer sequence to resume.
+            pilot.command_failsafe(BlockReason.WEBSOCKET_DISCONNECTED)
             if not reader.done():
                 # The send loop exited some other way (an exception, or the
                 # process shutting down) while the client was still connected
@@ -437,6 +640,12 @@ _REASON_STATUS = {
     "link_stale": status.HTTP_409_CONFLICT,
     "armed": status.HTTP_409_CONFLICT,
     "arm_state_unknown": status.HTTP_409_CONFLICT,
+    "confirmation_required": status.HTTP_412_PRECONDITION_FAILED,
+    "pilot_control_disabled": status.HTTP_403_FORBIDDEN,
+    "pilot_not_enabled": status.HTTP_409_CONFLICT,
+    "pilot_not_ready": status.HTTP_409_CONFLICT,
+    "command_in_progress": status.HTTP_409_CONFLICT,
+    "props_not_confirmed": status.HTTP_412_PRECONDITION_FAILED,
     "mode_not_allowed": status.HTTP_400_BAD_REQUEST,
     "mode_forbidden": status.HTTP_403_FORBIDDEN,
     "stream_not_allowed": status.HTTP_400_BAD_REQUEST,

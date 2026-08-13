@@ -7,8 +7,10 @@ Design notes that matter for safety:
   never enumerates hardware, and works on a machine without pymavlink
   installed -- which is what lets the mock-mode test suite import the whole
   application.
-* The only three transmit paths are a GCS heartbeat, ``SET_MODE``, and
-  ``COMMAND_LONG`` for an allowlisted command id. There is no generic send.
+* The transmit paths are deliberately narrow: a GCS heartbeat,
+  ``COMMAND_LONG`` for an allowlisted command id, the separately retained
+  GUIDED velocity setpoint, manual ``RC_CHANNELS_OVERRIDE``, and read-only
+  ``PARAM_REQUEST_READ``. There is no generic send or parameter-write path.
 * ``OSError``/``PermissionError`` from the serial layer is translated into
   :class:`~app.mavlink.interface.PortBusyError` so the operator is told to
   close QGroundControl rather than being shown a raw errno.
@@ -19,7 +21,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Iterator
 
-from . import constants
+from . import constants, pilot_limits
 from .interface import (
     LinkClosedError,
     LinkError,
@@ -186,6 +188,86 @@ class RealMavlinkLink(MavlinkLink):
                 command,
                 0,  # confirmation
                 *params,
+            )
+        except Exception as exc:  # noqa: BLE001
+            raise classify_serial_error(exc, self._port) from exc
+
+    def send_velocity_setpoint(
+        self,
+        *,
+        target_system: int,
+        target_component: int,
+        vx: float,
+        vy: float,
+        vz: float,
+        yaw_rate: float,
+    ) -> None:
+        connection = self._require_open()
+        try:
+            connection.mav.set_position_target_local_ned_send(
+                0,  # time_boot_ms: ArduPilot ignores it on this message
+                target_system,
+                target_component,
+                pilot_limits.MAV_FRAME_BODY_NED,
+                pilot_limits.TYPE_MASK_VELOCITY_YAW_RATE,
+                0.0, 0.0, 0.0,  # x, y, z position: ignored by the type mask
+                float(vx), float(vy), float(vz),
+                0.0, 0.0, 0.0,  # afx, afy, afz: ignored by the type mask
+                0.0,  # yaw: ignored by the type mask
+                float(yaw_rate),
+            )
+        except Exception as exc:  # noqa: BLE001
+            raise classify_serial_error(exc, self._port) from exc
+
+    def send_rc_channels_override(
+        self,
+        *,
+        target_system: int,
+        target_component: int,
+        channels: tuple[int, int, int, int, int, int, int, int],
+    ) -> None:
+        connection = self._require_open()
+        if len(channels) != 8:
+            raise ValueError("RC_CHANNELS_OVERRIDE requires exactly channels 1-8")
+        if any(isinstance(value, bool) or not isinstance(value, int) for value in channels):
+            raise ValueError("RC_CHANNELS_OVERRIDE values must be integers")
+        channel_values = tuple(channels)
+        if any(value < 0 or value > constants.RC_CHANNEL_IGNORE for value in channel_values):
+            raise ValueError("RC_CHANNELS_OVERRIDE values must be unsigned 16-bit integers")
+        try:
+            # The pymavlink dialect defaults extension channels 9-18 to zero.
+            # For those extension fields zero means "ignore", while the eight
+            # fields supplied here retain the MAVLink v1 semantics documented
+            # by MavlinkLink (zero releases, UINT16_MAX ignores).
+            connection.mav.rc_channels_override_send(
+                target_system,
+                target_component,
+                *channel_values,
+            )
+        except Exception as exc:  # noqa: BLE001
+            raise classify_serial_error(exc, self._port) from exc
+
+    def send_parameter_request(
+        self,
+        *,
+        target_system: int,
+        target_component: int,
+        name: str,
+    ) -> None:
+        connection = self._require_open()
+        clean_name = name.strip()
+        if not clean_name or len(clean_name) > 16:
+            raise ValueError("MAVLink parameter names must contain 1-16 characters")
+        try:
+            encoded_name = clean_name.encode("ascii")
+        except UnicodeEncodeError as exc:
+            raise ValueError("MAVLink parameter names must be ASCII") from exc
+        try:
+            connection.mav.param_request_read_send(
+                target_system,
+                target_component,
+                encoded_name,
+                -1,  # request by param_id, never by array index
             )
         except Exception as exc:  # noqa: BLE001
             raise classify_serial_error(exc, self._port) from exc

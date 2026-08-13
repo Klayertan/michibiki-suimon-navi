@@ -33,6 +33,37 @@ DEFAULT_MOCK_LAT = 34.5400
 DEFAULT_MOCK_LON = 135.7350
 DEFAULT_MOCK_ALT_MSL = 62.0
 
+# ArduPilot-style defaults for a conventional Mode 2 transmitter. Tests may
+# override (or remove, with ``None``) individual values through MockScenario,
+# but a plain mock connection is immediately capable of answering the same
+# read-only discovery requests as a real flight controller.
+DEFAULT_MOCK_PARAMETERS: dict[str, float] = {
+    "RCMAP_ROLL": 1.0,
+    "RCMAP_PITCH": 2.0,
+    "RCMAP_THROTTLE": 3.0,
+    "RCMAP_YAW": 4.0,
+    **{
+        f"RC{channel}_{suffix}": value
+        for channel in range(1, 9)
+        for suffix, value in (
+            ("MIN", 1100.0),
+            ("TRIM", 1500.0),
+            ("MAX", 1900.0),
+            ("REVERSED", 0.0),
+        )
+    },
+    "RC_OVERRIDE_TIME": 3.0,
+    "RC_OPTIONS": 0.0,
+    # ArduCopter 4.5.x spelling. Newer-firmware tests override this with
+    # MAV_GCS_SYSID / MAV_GCS_SYSID_HI.
+    "SYSID_MYGCS": 255.0,
+    "MAV_OPTIONS": 0.0,
+    **{
+        f"SERVO{channel}_FUNCTION": float(32 + channel if channel <= 4 else 0)
+        for channel in range(1, 17)
+    },
+}
+
 
 class MockMessage:
     """Minimal stand-in for a pymavlink message object."""
@@ -78,6 +109,15 @@ class MockScenario:
     lat: float = DEFAULT_MOCK_LAT
     lon: float = DEFAULT_MOCK_LON
     seed: int = 20260804
+    #: Parameter overrides for read-only PARAM_REQUEST_READ simulation. A
+    #: value of ``None`` makes that parameter unavailable.
+    parameters: dict[str, float | None] = field(default_factory=dict)
+    #: Test-only fault injection: acknowledge normal arm/disarm but do not
+    #: change state or emit the confirming HEARTBEAT.
+    confirm_arm_state_commands: bool = True
+    #: Test-only state-flap injection: emit the requested arm state and then
+    #: immediately emit the opposite state before the command response ends.
+    flip_arm_state_after_command: bool = False
 
 
 @dataclass
@@ -92,6 +132,8 @@ class _StreamSchedule:
             "ATTITUDE": 0.25,
             "VFR_HUD": 0.5,
             "GLOBAL_POSITION_INT": 0.5,
+            "RC_CHANNELS": 0.2,
+            "SERVO_OUTPUT_RAW": 0.2,
         }
     )
     next_due: dict[str, float] = field(default_factory=dict)
@@ -134,6 +176,14 @@ class MockMavlinkLink(MavlinkLink):
         self._boot_ms = 0
         self._mode = self._scenario.mode
         self._armed = self._scenario.armed
+        self._rc_inputs = [1500, 1500, 1100, 1500, 1500, 1500, 1500, 1500]
+        self._parameters = dict(DEFAULT_MOCK_PARAMETERS)
+        for raw_name, value in self._scenario.parameters.items():
+            name = str(raw_name).strip().upper()
+            if value is None:
+                self._parameters.pop(name, None)
+            else:
+                self._parameters[name] = float(value)
         self._gcs_heartbeats = 0
         self._announced_boot = False
         #: Every send_command_long() call, in order, regardless of outcome --
@@ -142,6 +192,15 @@ class MockMavlinkLink(MavlinkLink):
         #: including across a disconnect/reconnect of the same instance, so a
         #: test can inspect the full history of a multi-session run.
         self.command_long_log: list[dict[str, Any]] = []
+        #: Every velocity setpoint transmitted, in order, with a monotonic
+        #: timestamp. Lets tests assert the exact vx/vy/vz/yaw_rate the pilot
+        #: service produced -- and the cadence it produced them at -- without
+        #: any hardware.
+        self.velocity_setpoint_log: list[dict[str, Any]] = []
+        #: Every first-eight-channel RC override sent by the pilot service.
+        self.rc_override_log: list[dict[str, Any]] = []
+        #: Every read-only parameter request, including unanswered names.
+        self.parameter_request_log: list[dict[str, Any]] = []
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -184,8 +243,7 @@ class MockMavlinkLink(MavlinkLink):
     def set_armed(self, armed: bool) -> None:
         """Make the simulated vehicle report armed/disarmed.
 
-        This only changes what the *simulation* reports. It does not and cannot
-        arm anything -- there is no arming code path in this backend.
+        This is a simulation control helper only; it cannot affect hardware.
         """
         self._armed = armed
 
@@ -262,6 +320,8 @@ class MockMavlinkLink(MavlinkLink):
             "ATTITUDE": self._attitude,
             "VFR_HUD": self._vfr_hud,
             "GLOBAL_POSITION_INT": self._global_position_int,
+            "RC_CHANNELS": self._rc_channels,
+            "SERVO_OUTPUT_RAW": self._servo_output_raw,
         }[msg_type]
         return self._wrap(builder(self._elapsed(now)))
 
@@ -269,14 +329,16 @@ class MockMavlinkLink(MavlinkLink):
         base_mode = constants.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED
         if self._armed:
             base_mode |= constants.MAV_MODE_FLAG_SAFETY_ARMED
+        custom_mode = next(
+            (number for number, name in constants.ARDUCOPTER_MODES.items() if name == self._mode),
+            constants.COMMANDABLE_DISARMED_MODES["STABILIZE"],
+        )
         return MockMessage(
             "HEARTBEAT",
             type=2,  # MAV_TYPE_QUADROTOR
             autopilot=3,  # MAV_AUTOPILOT_ARDUPILOTMEGA
             base_mode=base_mode,
-            custom_mode=constants.COMMANDABLE_DISARMED_MODES.get(
-                self._mode, constants.COMMANDABLE_DISARMED_MODES["STABILIZE"]
-            ),
+            custom_mode=custom_mode,
             system_status=3,  # MAV_STATE_STANDBY
             mavlink_version=3,
         )
@@ -355,6 +417,29 @@ class MockMavlinkLink(MavlinkLink):
             time_boot_ms=int(elapsed * 1000),
         )
 
+    def _rc_channels(self, elapsed: float) -> MockMessage:
+        return MockMessage(
+            "RC_CHANNELS",
+            time_boot_ms=int(elapsed * 1000),
+            chancount=8,
+            rssi=100,
+            **{f"chan{index}_raw": value for index, value in enumerate(self._rc_inputs, 1)},
+        )
+
+    def _servo_output_raw(self, elapsed: float) -> MockMessage:
+        # Simulated telemetry only. Motor identity still comes exclusively
+        # from the read-only SERVOx_FUNCTION values above.
+        motor_pwm = max(1100, self._rc_inputs[2]) if self._armed else 1000
+        return MockMessage(
+            "SERVO_OUTPUT_RAW",
+            time_usec=int(elapsed * 1_000_000),
+            port=0,
+            **{
+                f"servo{index}_raw": motor_pwm if index <= 4 else 0
+                for index in range(1, 17)
+            },
+        )
+
     def _drift(self, base: float, elapsed: float, amplitude: float) -> float:
         """Slow GNSS wander so the plotted point is not frozen."""
         return base + amplitude * math.sin(elapsed * 0.11)
@@ -405,12 +490,132 @@ class MockMavlinkLink(MavlinkLink):
                     self._queue_ack(command, result=2)
                 return
             self._apply_mode(int(params[1]))
+        elif command == constants.MAV_CMD_COMPONENT_ARM_DISARM:
+            arm_value = float(params[0])
+            bypass_value = float(params[1])
+            if arm_value not in (0.0, 1.0) or bypass_value != 0.0:
+                # The simulator mirrors the real safety boundary: only normal
+                # arm/disarm requests are accepted. Any non-zero param2 is a
+                # pre-arm-check bypass request and is rejected.
+                if not drop:
+                    self._queue_ack(command, result=2)  # MAV_RESULT_DENIED
+                return
+            if self._scenario.confirm_arm_state_commands:
+                self._armed = arm_value == 1.0
+                state_text = "Armed" if self._armed else "Disarmed"
+                self._pending.append(self._wrap(MockMessage("STATUSTEXT", severity=6, text=state_text)))
+                # State confirmation is intentionally independent of
+                # COMMAND_ACK: an ACK may be lost even though the vehicle
+                # applied the command.
+                self._pending.append(self._wrap(self._heartbeat(self._elapsed(time.monotonic()))))
+                if self._scenario.flip_arm_state_after_command:
+                    self._armed = not self._armed
+                    self._pending.append(
+                        self._wrap(self._heartbeat(self._elapsed(time.monotonic())))
+                    )
+                self._wake.set()
         elif command == constants.MAV_CMD_REQUEST_MESSAGE:
             if int(params[0]) == constants.MSG_ID_AUTOPILOT_VERSION:
                 self._pending.append(self._wrap(self._autopilot_version()))
 
         if not drop:
             self._queue_ack(command, result=constants.MAV_RESULT_ACCEPTED)
+
+    def send_velocity_setpoint(
+        self,
+        *,
+        target_system: int,
+        target_component: int,
+        vx: float,
+        vy: float,
+        vz: float,
+        yaw_rate: float,
+    ) -> None:
+        if not self._open:
+            raise LinkError("mock link is not open")
+        self.velocity_setpoint_log.append(
+            {
+                "target_system": target_system,
+                "target_component": target_component,
+                "vx": float(vx),
+                "vy": float(vy),
+                "vz": float(vz),
+                "yaw_rate": float(yaw_rate),
+                "at": time.monotonic(),
+            }
+        )
+
+    def send_rc_channels_override(
+        self,
+        *,
+        target_system: int,
+        target_component: int,
+        channels: tuple[int, int, int, int, int, int, int, int],
+    ) -> None:
+        if not self._open:
+            raise LinkError("mock link is not open")
+        if len(channels) != 8:
+            raise ValueError("RC_CHANNELS_OVERRIDE requires exactly channels 1-8")
+        if any(isinstance(value, bool) or not isinstance(value, int) for value in channels):
+            raise ValueError("RC_CHANNELS_OVERRIDE values must be integers")
+        channel_values = tuple(channels)
+        if any(value < 0 or value > constants.RC_CHANNEL_IGNORE for value in channel_values):
+            raise ValueError("RC_CHANNELS_OVERRIDE values must be unsigned 16-bit integers")
+        self.rc_override_log.append(
+            {
+                "target_system": target_system,
+                "target_component": target_component,
+                "channels": channel_values,
+                "at": time.monotonic(),
+            }
+        )
+        base_inputs = (1500, 1500, 1100, 1500, 1500, 1500, 1500, 1500)
+        for index, value in enumerate(channel_values):
+            if value == constants.RC_CHANNEL_IGNORE:
+                continue
+            self._rc_inputs[index] = base_inputs[index] if value == constants.RC_CHANNEL_RELEASE else value
+
+    def send_parameter_request(
+        self,
+        *,
+        target_system: int,
+        target_component: int,
+        name: str,
+    ) -> None:
+        if not self._open:
+            raise LinkError("mock link is not open")
+        clean_name = name.strip().upper()
+        if not clean_name or len(clean_name) > 16:
+            raise ValueError("MAVLink parameter names must contain 1-16 characters")
+        try:
+            encoded_name = clean_name.encode("ascii")
+        except UnicodeEncodeError as exc:
+            raise ValueError("MAVLink parameter names must be ASCII") from exc
+
+        self.parameter_request_log.append(
+            {
+                "target_system": target_system,
+                "target_component": target_component,
+                "name": clean_name,
+                "at": time.monotonic(),
+            }
+        )
+        if clean_name not in self._parameters:
+            return
+        names = tuple(self._parameters)
+        self._pending.append(
+            self._wrap(
+                MockMessage(
+                    "PARAM_VALUE",
+                    param_id=encoded_name,
+                    param_value=self._parameters[clean_name],
+                    param_type=9,  # MAV_PARAM_TYPE_REAL32
+                    param_count=len(names),
+                    param_index=names.index(clean_name),
+                )
+            )
+        )
+        self._wake.set()
 
     def _apply_mode(self, custom_mode: int) -> None:
         name = constants.mode_name(custom_mode)

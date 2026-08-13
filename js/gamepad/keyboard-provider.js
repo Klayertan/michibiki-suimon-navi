@@ -1,40 +1,70 @@
-// Keyboard input provider — PREVIEW ONLY.
+// Keyboard input provider — an input source only.
 //
-// Emits exactly the same sample shape as the browser and simulated gamepad
-// providers, so keyboard input flows through the identical normalization,
-// calibration and dead-man gating pipeline in gamepad-normalization.js.
+// Emits the same raw sample shape as the browser and simulated gamepad
+// providers. GamepadController turns that digital direction into a deliberately
+// reduced semantic deflection before it can reach the pilot layer.
 // There is deliberately no separate control path: anything the keyboard can
 // produce is subject to the same gatePreview() checks as a real stick.
 //
-// This never commands an aircraft. The backend implements no manual-control
-// endpoint of any kind -- no manual-control frame, no RC-override frame, no
-// attitude or position setpoints -- so a keypress cannot reach the vehicle
-// even if the UI were bypassed entirely.
+// This module has no transport of any kind and never speaks to the backend.
+// It reports which keys are down; that is all. Whether those keys can move an
+// aircraft is decided entirely elsewhere:
 //
-// (Those MAVLink message names are spelled descriptively rather than
-// literally on purpose: tests/unit/gamepad-safety.test.js scans this
-// directory for the exact identifiers and must keep finding none.)
+//   this module  ->  js/pilot/pilot-controller.js  (when and whether to send)
+//                ->  backend PilotService          (all limits and safety gates)
+//
+// Manual output is opt-in and off unless the backend was started with
+// SUISUI_MAVLINK_ALLOW_PILOT_CONTROL=1. This provider itself cannot ARM,
+// DISARM, take off, or transmit anything; normal ARM/DISARM is a separate,
+// explicitly confirmed PilotClient action. Keeping this file transport-free
+// is what makes that separation checkable:
+// tests/unit/gamepad-safety.test.js scans this directory for fetch, sockets
+// and MAVLink identifiers and must keep finding none.
 //
 // Axis layout matches the gamepad providers (Mode 2):
-//   axes[0] = yaw       (Arrow Left / Arrow Right)
-//   axes[1] = vertical  (Arrow Up / Arrow Down)
-//   axes[2] = roll      (A / D)
-//   axes[3] = pitch     (W / S)
+//   axes[0] = yaw       (A / D)
+//   axes[1] = vertical  (W / S)
+//   axes[2] = roll      (Arrow Left / Arrow Right)
+//   axes[3] = pitch     (Arrow Up / Arrow Down)
 //   buttons[4] = L1 = dead-man (Left Shift)
 
 import { GamepadProvider } from "./gamepad-provider.js";
 
-/** Default key → (axis, direction) mapping. */
+/**
+ * Default key → (axis, direction) mapping.
+ *
+ * Arrows translate, WASD changes altitude and heading:
+ *
+ *   ↑ forward   ↓ backward   ← left   → right
+ *   W climb     S descend    A yaw left   D yaw right
+ *   Space       neutral (all axes to zero)
+ *
+ * Axis indices and their signs follow the gamepad convention the rest of the
+ * pipeline already uses (axes[0] yaw, [1] vertical, [2] roll, [3] pitch; a
+ * stick pushed *up* reads negative), so keyboard and gamepad samples are
+ * interchangeable downstream. `js/pilot/pilot-axes.js` is the single place
+ * that turns either one into semantic forward/right/up/yaw.
+ */
 export const DEFAULT_KEY_MAP = Object.freeze({
-  KeyW: { axis: 3, value: -1 }, // pitch forward (stick up is negative, as on a gamepad)
-  KeyS: { axis: 3, value: 1 }, // pitch backward
-  KeyA: { axis: 2, value: -1 }, // roll left
-  KeyD: { axis: 2, value: 1 }, // roll right
-  ArrowLeft: { axis: 0, value: -1 }, // yaw left
-  ArrowRight: { axis: 0, value: 1 }, // yaw right
-  ArrowUp: { axis: 1, value: -1 }, // climb preview
-  ArrowDown: { axis: 1, value: 1 } // descend preview
+  ArrowUp: { axis: 3, value: -1 }, // pitch forward (stick up is negative)
+  ArrowDown: { axis: 3, value: 1 }, // pitch backward
+  ArrowLeft: { axis: 2, value: -1 }, // roll left
+  ArrowRight: { axis: 2, value: 1 }, // roll right
+  KeyW: { axis: 1, value: -1 }, // climb (stick up is negative)
+  KeyS: { axis: 1, value: 1 }, // descend
+  KeyA: { axis: 0, value: -1 }, // yaw left
+  KeyD: { axis: 0, value: 1 } // yaw right
 });
+
+/**
+ * Movement-neutral key. Zeroes every axis immediately and keeps capture
+ * active, so the operator can fly again without re-enabling anything.
+ *
+ * This is deliberately **not** an emergency motor kill and must never be
+ * described as one: the pilot layer releases manual RC override while the
+ * autopilot remains responsible for the vehicle's resulting behavior.
+ */
+export const NEUTRAL_CODE = "Space";
 
 /** Button index used as the dead-man, matching the gamepad L1 default. */
 export const DEADMAN_BUTTON_INDEX = 4;
@@ -42,6 +72,9 @@ export const DEADMAN_BUTTON_INDEX = 4;
 export const DEADMAN_CODE = "ShiftLeft";
 /** Panic key: zero everything and drop capture. */
 export const PANIC_CODE = "Escape";
+
+/** One digital key press is a conservative quarter-stick command. */
+export const KEYBOARD_DEFLECTION = 0.25;
 
 const BUTTON_COUNT = 18;
 
@@ -66,7 +99,7 @@ export function isTextEntryTarget(target) {
 }
 
 export class KeyboardProvider extends GamepadProvider {
-  constructor({ win = window, doc = document, keyMap = DEFAULT_KEY_MAP } = {}) {
+  constructor({ win = globalThis.window, doc = globalThis.document, keyMap = DEFAULT_KEY_MAP } = {}) {
     super("keyboard");
     this.win = win;
     this.doc = doc;
@@ -132,11 +165,11 @@ export class KeyboardProvider extends GamepadProvider {
   }
 
   /** Release every key and zero the dead-man, then publish the zeroed sample. */
-  reset() {
+  reset({ emit = true } = {}) {
     const changed = this.held.size > 0 || this.deadman;
     this.held.clear();
     this.deadman = false;
-    if (changed || this.capturing) this.emitSample();
+    if (emit && (changed || this.capturing)) this.emitSample();
   }
 
   onKeyDown(event) {
@@ -149,6 +182,25 @@ export class KeyboardProvider extends GamepadProvider {
     }
     if (isTextEntryTarget(event.target)) return;
 
+    // If a Shift key-up was lost but a later real keyboard event reports that
+    // Shift is no longer depressed, fail closed immediately. We never infer a
+    // held dead-man from this generic modifier flag (Right Shift must not
+    // impersonate the configured Left Shift).
+    if (event.code !== DEADMAN_CODE && this.deadman && event.shiftKey === false) {
+      this.deadman = false;
+    }
+
+    if (event.code === NEUTRAL_CODE) {
+      // Movement-neutral: drop every held key so the very next sample is
+      // zero, and tell listeners so the pilot layer can push an immediate
+      // neutral rather than waiting for its next scheduled frame.
+      this.held.clear();
+      this.emitSample();
+      this.emit("neutral", { reason: "space" });
+      event.preventDefault();
+      return;
+    }
+
     if (event.code === DEADMAN_CODE) {
       if (!this.deadman) {
         this.deadman = true;
@@ -160,8 +212,11 @@ export class KeyboardProvider extends GamepadProvider {
     if (!this.keyMap[event.code]) return;
     if (!this.held.has(event.code)) {
       this.held.add(event.code);
-      this.emitSample();
     }
+    // Key repeat is the keyboard provider's physical liveness signal. Emit
+    // every repeat so a held command remains fresh; if repeats stop, the
+    // common controller expires the cached keys and requires a new Shift.
+    this.emitSample();
     // Arrow keys would otherwise scroll the panel under the operator.
     event.preventDefault();
   }
@@ -217,6 +272,9 @@ export class KeyboardProvider extends GamepadProvider {
       mapping: "keyboard",
       axes: this.axes(),
       buttons: this.buttons(),
+      // Consumers of the common controller never need to know which synthetic
+      // button slot represents Shift.
+      deadmanHeld: this.deadman,
       timestamp: typeof performance !== "undefined" ? performance.now() : Date.now(),
       capturing: this.capturing
     };

@@ -10,9 +10,10 @@ Safety-relevant defaults are deliberately the restrictive ones:
 * ``mode`` defaults to ``mock`` -- the real radio is never used by accident.
 * ``allow_safe_commands`` defaults to false -- a real connection is read-only
   until the operator opts in.
-* ``allow_arm`` / ``allow_takeoff`` are parsed only so the running
-  configuration can be reported and a warning logged. They do not enable
-  anything: arming and takeoff are not implemented in this backend at all.
+* Legacy ``allow_arm`` / ``allow_takeoff`` flags are parsed only for backwards
+  compatibility. ``allow_arm`` is not a safety bypass: normal ARM/DISARM is
+  gated by safe commands, a fresh link, explicit confirmation and Manual
+  Control state. Takeoff remains unsupported.
 """
 
 from __future__ import annotations
@@ -109,12 +110,17 @@ class Settings:
 
     # -- Safety gates -----------------------------------------------------
     allow_safe_commands: bool = False
-    #: Parsed for reporting only. Arming is not implemented; see
-    #: :mod:`app.mavlink.command_service`.
+    #: Deprecated compatibility flag. It never bypasses the normal ARM gates
+    #: and is not consulted by the Manual Control ARM/DISARM endpoints.
     allow_arm: bool = False
     #: Parsed for reporting only. Takeoff is not implemented.
     allow_takeoff: bool = False
     require_props_removed_ack: bool = True
+    #: Permits bounded manual input (keyboard / calibrated PS5 ->
+    #: RC_CHANNELS_OVERRIDE). Off by default: a default install cannot command
+    #: movement. Enabling it never auto-arms or changes mode; normal ARM is a
+    #: separate explicit action and all ArduPilot checks remain authoritative.
+    allow_pilot_control: bool = False
 
     # -- HTTP -------------------------------------------------------------
     host: str = "127.0.0.1"
@@ -159,6 +165,7 @@ class Settings:
             "modeVerifyTimeout": self.mode_verify_timeout,
             "wsInterval": self.ws_interval,
             "allowSafeCommands": self.allow_safe_commands,
+            "allowPilotControl": self.allow_pilot_control,
             "armSupported": False,
             "takeoffSupported": False,
             "allowedModes": list(ALLOWED_DISARMED_MODES),
@@ -203,6 +210,7 @@ def load_settings() -> Settings:
         allow_arm=_env_bool("ALLOW_ARM", False),
         allow_takeoff=_env_bool("ALLOW_TAKEOFF", False),
         require_props_removed_ack=_env_bool("REQUIRE_PROPS_REMOVED_ACK", True),
+        allow_pilot_control=_env_bool("ALLOW_PILOT_CONTROL", False),
         host=_env_str("HOST", "127.0.0.1"),
         http_port=_env_int("HTTP_PORT", 8787, minimum=1, maximum=65535),
         allowed_origins=_env_csv("ALLOWED_ORIGINS", "http://localhost:4173,http://127.0.0.1:4173"),
@@ -220,8 +228,9 @@ def load_settings() -> Settings:
 
     if settings.allow_arm or settings.allow_takeoff:
         logger.warning(
-            "%sALLOW_ARM/%sALLOW_TAKEOFF are set but arming and takeoff are not implemented "
-            "in this backend. The flags have no effect; the endpoints refuse unconditionally.",
+            "%sALLOW_ARM/%sALLOW_TAKEOFF are deprecated compatibility flags and do not bypass "
+            "any safety gate. Normal ARM/DISARM requires safe commands plus enabled Manual "
+            "Control; takeoff remains unsupported.",
             ENV_PREFIX,
             ENV_PREFIX,
         )

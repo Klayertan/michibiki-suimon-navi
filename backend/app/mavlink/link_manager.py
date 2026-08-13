@@ -40,6 +40,7 @@ aircraft, and it is never gated behind ``SUISUI_MAVLINK_ALLOW_SAFE_COMMANDS``.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import threading
 import time
@@ -61,6 +62,10 @@ _RECEIVE_SLICE = 0.2
 #: How long connect() waits for the worker to reach a settled state before
 #: returning, so the HTTP response reflects reality instead of "connecting".
 _CONNECT_SETTLE_POLL = 0.05
+#: Re-request only missing manual-control parameters. PARAM_VALUE is not a
+#: reliable transport, so a single lost reply must not leave the pilot blocked
+#: until the next physical reconnect.
+_PARAMETER_RETRY_INTERVAL = 2.0
 
 
 class LinkBusyError(RuntimeError):
@@ -73,6 +78,7 @@ class _TransmitJob:
 
     run: Callable[[MavlinkLink], Any]
     future: Future
+    session_generation: int
 
 
 class AckWaiter:
@@ -112,6 +118,23 @@ class ModeWaiter:
             self._event.set()
 
     def wait(self, timeout: float) -> str | None:
+        return self._observed if self._event.wait(timeout) else None
+
+
+class ArmStateWaiter:
+    """Wait for HEARTBEAT to confirm an expected armed/disarmed state."""
+
+    def __init__(self, expected_armed: bool) -> None:
+        self.expected_armed = bool(expected_armed)
+        self._event = threading.Event()
+        self._observed: bool | None = None
+
+    def offer(self, armed: bool | None) -> None:
+        if armed is not None and bool(armed) is self.expected_armed:
+            self._observed = bool(armed)
+            self._event.set()
+
+    def wait(self, timeout: float) -> bool | None:
         return self._observed if self._event.wait(timeout) else None
 
 
@@ -188,11 +211,18 @@ class LinkManager:
         self._lock = threading.RLock()
         self._thread: threading.Thread | None = None
         self._stop = threading.Event()
+        self._worker_wake = threading.Event()
         self._transmit: SimpleQueue[_TransmitJob] = SimpleQueue()
         self._ack_waiters: list[AckWaiter] = []
         self._mode_waiters: list[ModeWaiter] = []
+        self._arm_state_waiters: list[ArmStateWaiter] = []
         self._waiter_lock = threading.Lock()
         self._link: MavlinkLink | None = None
+        # A queued transmit is valid only for the session whose target
+        # heartbeat admitted it.  Reconnects advance this generation and
+        # leave it inactive until the replacement vehicle is identified.
+        self._session_generation = 0
+        self._active_session_generation: int | None = None
         self._settled = threading.Event()
 
         # Essential-telemetry-stream bootstrap. Worker-thread-only state (see
@@ -200,6 +230,30 @@ class LinkManager:
         self._essential_stream_tracker = StreamRequestTracker()
         self._essential_stream_deadline: float | None = None
         self._essential_stream_finalized = False
+        self._next_parameter_request_at: float | None = None
+        self._manual_parameter_discovery_started = False
+
+        # Manual pilot RC control. Attached by the app factory when configured;
+        # None means the worker never requests RC configuration or transmits an
+        # override.
+        self._pilot: Any = None
+
+    def attach_pilot_service(self, pilot: Any) -> None:
+        """Give the worker a :class:`~app.mavlink.pilot_service.PilotService`.
+
+        Injected rather than constructed here so the link manager keeps no
+        dependency on pilot control, and so the existing tests that build a
+        LinkManager directly continue to exercise a link that cannot move an
+        aircraft at all.
+        """
+        self._pilot = pilot
+        setter = getattr(pilot, "set_worker_waker", None)
+        if callable(setter):
+            setter(self.wake_worker)
+
+    def wake_worker(self) -> None:
+        """Notify the receive loop that manual-control state changed."""
+        self._worker_wake.set()
 
     # ------------------------------------------------------------------
     # Public state
@@ -229,7 +283,11 @@ class LinkManager:
         }
         snapshot["mode"] = self._settings.mode
         snapshot["allowSafeCommands"] = self._settings.allow_safe_commands
-        snapshot["armSupported"] = False
+        snapshot["armSupported"] = True
+        snapshot["armEnabled"] = bool(
+            self._settings.allow_safe_commands
+            and getattr(self._settings, "allow_pilot_control", False)
+        )
         snapshot["takeoffSupported"] = False
         return snapshot
 
@@ -250,7 +308,9 @@ class LinkManager:
                     "connecting again."
                 )
             self._stop.clear()
+            self._worker_wake.clear()
             self._settled.clear()
+            self._active_session_generation = None
             self._state.clear_error()
             self._state.reset_vehicle_data()
             self._state.set_connection_state(ConnectionState.CONNECTING)
@@ -266,17 +326,44 @@ class LinkManager:
         """Stop the worker, close the transport, and clear vehicle telemetry."""
         with self._lock:
             thread = self._thread
+
+        # Preserve the single-owner transport rule by queuing the release onto
+        # the worker before asking that worker to stop. A short burst makes an
+        # intentional disconnect itself a first-class manual-control failsafe.
+        if self._pilot is not None and thread is not None and thread.is_alive():
+            target_component = self._state.target_component(self._settings.target_component)
+            future = self.submit(
+                lambda link: self._pilot.release_immediately(
+                    link,
+                    target_system=self._settings.target_system,
+                    target_component=target_component,
+                    reason="mavlink_disconnected",
+                )
+            )
+            with contextlib.suppress(Exception):
+                future.result(timeout=min(1.0, max(0.1, timeout)))
         self._stop.set()
+        self._worker_wake.set()
         if thread is not None and thread.is_alive():
             thread.join(timeout)
             if thread.is_alive():
                 logger.error(
-                    "link worker did not stop within %.1fs; closing the transport from the caller",
+                    "link worker did not stop within %.1fs; reconnect remains blocked until it exits",
                     timeout,
                 )
-                self._close_link()
+                self._state.set_error(
+                    "The MAVLink worker did not stop before the disconnect deadline.",
+                    kind="shutdown_timeout",
+                )
+                self._state.set_connection_state(ConnectionState.ERROR)
+                self._fail_pending_jobs(LinkError("The MAVLink worker is still shutting down."))
+                # Keep `_thread` and `_link` owned by that worker.  Clearing
+                # either here permits a second worker to race the old one and
+                # lets late cleanup close a replacement transport.
+                return self.snapshot()
         with self._lock:
-            self._thread = None
+            if self._thread is thread and (thread is None or not thread.is_alive()):
+                self._thread = None
         self._state.set_connection_state(ConnectionState.DISCONNECTED)
         self._state.reset_vehicle_data()
         self._fail_pending_jobs(LinkError("The MAVLink link was disconnected."))
@@ -301,10 +388,17 @@ class LinkManager:
         that waits for a reply belongs in an :class:`AckWaiter`.
         """
         future: Future = Future()
-        if not self.is_running():
-            future.set_exception(LinkError("The MAVLink link is not connected."))
-            return future
-        self._transmit.put(_TransmitJob(run=run, future=future))
+        with self._lock:
+            thread = self._thread
+            generation = self._active_session_generation
+            connected = self._state.get_connection_state() is ConnectionState.CONNECTED
+            if thread is None or not thread.is_alive() or generation is None or not connected:
+                future.set_exception(LinkError("The MAVLink link is not connected to an identified vehicle."))
+                return future
+            self._transmit.put(
+                _TransmitJob(run=run, future=future, session_generation=generation)
+            )
+        self._worker_wake.set()
         return future
 
     def register_ack_waiter(self, command: int) -> AckWaiter:
@@ -328,6 +422,17 @@ class LinkManager:
         with self._waiter_lock:
             if waiter in self._mode_waiters:
                 self._mode_waiters.remove(waiter)
+
+    def register_arm_state_waiter(self, expected_armed: bool) -> ArmStateWaiter:
+        waiter = ArmStateWaiter(expected_armed)
+        with self._waiter_lock:
+            self._arm_state_waiters.append(waiter)
+        return waiter
+
+    def release_arm_state_waiter(self, waiter: ArmStateWaiter) -> None:
+        with self._waiter_lock:
+            if waiter in self._arm_state_waiters:
+                self._arm_state_waiters.remove(waiter)
 
     # ------------------------------------------------------------------
     # Worker
@@ -361,12 +466,35 @@ class LinkManager:
                     self._settled.set()
                     self._fail_pending_jobs(LinkError(str(error)))
                 finally:
-                    self._close_link()
+                    # Best effort even after a receive failure: the write may
+                    # still succeed. Then forget desired movement so a later
+                    # reconnect can never resume it.
+                    if self._pilot is not None:
+                        with contextlib.suppress(Exception):
+                            with self._lock:
+                                closing_link = self._link
+                            if closing_link is not None:
+                                self._pilot.release_immediately(
+                                    closing_link,
+                                    target_system=self._settings.target_system,
+                                    target_component=self._state.target_component(
+                                        self._settings.target_component
+                                    ),
+                                    reason="mavlink_disconnected",
+                                )
+                            self._pilot.on_link_lost()
+                    with self._lock:
+                        self._active_session_generation = None
+                        closing_link = self._link
+                    self._close_link(expected_link=closing_link)
 
                 if self._stop.is_set() or not self._settings.auto_reconnect:
                     break
         finally:
-            self._close_link()
+            with self._lock:
+                self._active_session_generation = None
+                closing_link = self._link
+            self._close_link(expected_link=closing_link)
             if self._state.get_connection_state() is not ConnectionState.ERROR:
                 self._state.set_connection_state(ConnectionState.DISCONNECTED)
             self._settled.set()
@@ -376,16 +504,27 @@ class LinkManager:
         """One open-until-failure session on the transport."""
         link = self._link_factory()
         with self._lock:
+            self._session_generation += 1
+            session_generation = self._session_generation
+            self._active_session_generation = None
             self._link = link
         link.open()
+        # Every opened transport is a new vehicle/session boundary, including
+        # automatic reconnect. Never let prior RC calibration/source IDs,
+        # observed component, armed state, or freshness timestamps suppress
+        # discovery or authorize output on the replacement link.
+        self._state.reset_vehicle_data()
         self._state.clear_error()
         # Fresh per session (initial connect *and* every reconnect), so a
         # result recorded before a drop can never leak into the next attempt.
         self._essential_stream_tracker.reset()
         self._essential_stream_deadline = None
         self._essential_stream_finalized = False
+        self._next_parameter_request_at = None
+        self._manual_parameter_discovery_started = False
 
         next_heartbeat = time.monotonic()
+        session_started = next_heartbeat
         saw_vehicle_heartbeat = False
 
         while not self._stop.is_set():
@@ -398,10 +537,23 @@ class LinkManager:
                 next_heartbeat = now + self._settings.heartbeat_interval
 
             budget = min(_RECEIVE_SLICE, max(0.01, next_heartbeat - time.monotonic()))
+            if self._pilot is not None:
+                next_tick_delay = self._pilot.next_tick_delay()
+                if next_tick_delay is not None:
+                    # Do not let a quiet telemetry link reduce the advertised
+                    # 15 Hz RC refresh to the generic 5 Hz receive slice.
+                    budget = min(budget, max(0.001, next_tick_delay))
+            if self._worker_wake.is_set():
+                budget = min(budget, 0.001)
             for received in link.receive(budget):
                 applied = self._apply(received)
                 if applied == "HEARTBEAT" and not saw_vehicle_heartbeat:
                     saw_vehicle_heartbeat = True
+                    with self._lock:
+                        # Only now may queued commands for this generation
+                        # execute; before this point the vehicle identity and
+                        # armed/mode state are unknown.
+                        self._active_session_generation = session_generation
                     self._state.set_connection_state(ConnectionState.CONNECTED)
                     self._settled.set()
                     logger.info("vehicle heartbeat received; link is live")
@@ -412,10 +564,49 @@ class LinkManager:
                     # and returns, so the heartbeat cadence and the receive
                     # loop below are unaffected.
                     self._request_essential_streams(link)
+                    self._request_manual_control_parameters(link)
 
             self._maybe_finalize_essential_streams()
+            self._maybe_request_manual_control_parameters(link)
             self._state.evaluate_freshness()
-            if not saw_vehicle_heartbeat and time.monotonic() - now > self._settings.connect_timeout:
+
+            # Manual RC overrides. Runs on the same thread that owns the
+            # transport, after freshness has been re-evaluated so the service
+            # gates on the current link state rather than a stale one. It is
+            # rate-limited internally and returns immediately when there is
+            # nothing to send.
+            # Clear before processing the pilot (or beginning the next loop
+            # when pilot is absent): a concurrent update during/after this
+            # point leaves the event set instead of being lost.
+            self._worker_wake.clear()
+            if self._pilot is not None:
+                try:
+                    self._pilot.tick(
+                        link,
+                        target_system=self._settings.target_system,
+                        target_component=self._state.target_component(self._settings.target_component),
+                    )
+                except Exception:  # noqa: BLE001 - never let control kill the link
+                    logger.exception("manual pilot tick failed; continuing with output inactive")
+                    # A programming/normalization error is just as capable of
+                    # leaving the previous RC frame owned as a serial error.
+                    # Latch the pilot failsafe and use this worker-owned link
+                    # for an immediate best-effort zero-release burst.
+                    with contextlib.suppress(Exception):
+                        self._pilot.command_failsafe("transmit_failed")
+                    with contextlib.suppress(Exception):
+                        self._pilot.release_immediately(
+                            link,
+                            target_system=self._settings.target_system,
+                            target_component=self._state.target_component(
+                                self._settings.target_component
+                            ),
+                            reason="transmit_failed",
+                        )
+            if (
+                not saw_vehicle_heartbeat
+                and time.monotonic() - session_started > self._settings.connect_timeout
+            ):
                 # Port opened but nothing is talking: wrong baud, radio off,
                 # wrong TELEM port, or the aircraft is unpowered.
                 raise LinkError(
@@ -425,6 +616,19 @@ class LinkManager:
                 )
 
     def _apply(self, received: ReceivedMessage) -> str | None:
+        try:
+            msg_type = received.message.get_type()
+        except Exception:  # noqa: BLE001 - TelemetryState handles malformed frames identically
+            return None
+        if not self._is_target_source(received, msg_type):
+            logger.debug(
+                "ignoring %s from non-target MAVLink source %s/%s",
+                msg_type,
+                received.system_id,
+                received.component_id,
+            )
+            return None
+
         applied = self._state.apply_message(
             received.message,
             system_id=received.system_id,
@@ -433,8 +637,36 @@ class LinkManager:
         if applied == "COMMAND_ACK":
             self._dispatch_ack(received.message)
         elif applied == "HEARTBEAT":
-            self._dispatch_mode(received.message)
+            self._dispatch_heartbeat(received.message)
         return applied
+
+    def _is_target_source(self, received: ReceivedMessage, msg_type: str) -> bool:
+        """Whether a frame may affect the configured vehicle or its waiters.
+
+        Source metadata comes from the MAVLink frame header, not payload
+        target fields.  The first valid autopilot HEARTBEAT from the configured
+        system is the one deliberate component exception: it discovers the
+        actual flight-controller component (including component 0).  Once
+        discovered, every message must come from that exact system/component.
+        """
+        if received.system_id != self._settings.target_system:
+            return False
+        if received.component_id is None:
+            return False
+
+        observed_component = self._state.observed_component()
+        if msg_type == "HEARTBEAT" and observed_component is None:
+            from .normalizers import normalize_heartbeat
+
+            autopilot = normalize_heartbeat(received.message).get("autopilot")
+            return autopilot not in (None, constants.MAV_AUTOPILOT_INVALID)
+
+        target_component = (
+            observed_component
+            if observed_component is not None
+            else self._settings.target_component
+        )
+        return received.component_id == target_component
 
     def _dispatch_ack(self, message: Any) -> None:
         from .normalizers import normalize_command_ack  # local import keeps the hot path flat
@@ -484,14 +716,73 @@ class LinkManager:
                 kind="command_ack",
             )
 
-    def _dispatch_mode(self, message: Any) -> None:
+    def _dispatch_heartbeat(self, message: Any) -> None:
         from .normalizers import normalize_heartbeat
 
-        mode = normalize_heartbeat(message).get("flightMode")
+        heartbeat = normalize_heartbeat(message)
+        mode = heartbeat.get("flightMode")
+        armed = heartbeat.get("armed")
+        if self._pilot is not None:
+            observer = getattr(self._pilot, "observe_armed_state", None)
+            if callable(observer):
+                observer(armed)
         with self._waiter_lock:
-            waiters = list(self._mode_waiters)
-        for waiter in waiters:
+            mode_waiters = list(self._mode_waiters)
+            arm_waiters = list(self._arm_state_waiters)
+        for waiter in mode_waiters:
             waiter.offer(mode)
+        for waiter in arm_waiters:
+            waiter.offer(armed)
+
+    # ------------------------------------------------------------------
+    # Read-only manual-control parameter discovery
+    # ------------------------------------------------------------------
+
+    def _request_manual_control_parameters(self, link: MavlinkLink) -> None:
+        """Request missing RC mapping/calibration/timeout values, never write."""
+        if self._pilot is None:
+            self._next_parameter_request_at = None
+            return
+        # Ask for optional MAV source-id diagnostics once. Retry only the
+        # values required to operate: older firmware may not expose every
+        # optional diagnostic, and that should not create permanent polling.
+        if self._manual_parameter_discovery_started:
+            requested_names = list(constants.REQUIRED_MANUAL_CONTROL_PARAMETERS)
+            source_values = self._state.get_parameters(constants.RC_OVERRIDE_SOURCE_PARAMETERS)
+            if not any(
+                name in source_values for name in ("SYSID_MYGCS", "MAV_GCS_SYSID")
+            ):
+                requested_names.extend(constants.RC_OVERRIDE_SOURCE_PARAMETERS)
+            requested_names = tuple(dict.fromkeys(requested_names))
+        else:
+            requested_names = constants.MANUAL_CONTROL_PARAMETERS
+        present = self._state.get_parameters(requested_names)
+        missing = [name for name in requested_names if name not in present]
+        if not missing:
+            self._next_parameter_request_at = None
+            self._manual_parameter_discovery_started = True
+            return
+
+        target_system = self._settings.target_system
+        target_component = self._state.target_component(self._settings.target_component)
+        for name in missing:
+            try:
+                link.send_parameter_request(
+                    target_system=target_system,
+                    target_component=target_component,
+                    name=name,
+                )
+            except LinkError as error:
+                logger.warning("could not request vehicle parameter %s: %s", name, error)
+            else:
+                logger.debug("requested read-only vehicle parameter %s", name)
+        self._manual_parameter_discovery_started = True
+        self._next_parameter_request_at = time.monotonic() + _PARAMETER_RETRY_INTERVAL
+
+    def _maybe_request_manual_control_parameters(self, link: MavlinkLink) -> None:
+        deadline = self._next_parameter_request_at
+        if deadline is not None and time.monotonic() >= deadline:
+            self._request_manual_control_parameters(link)
 
     # ------------------------------------------------------------------
     # Essential telemetry stream bootstrap
@@ -627,6 +918,11 @@ class LinkManager:
                 return
             if job.future.set_running_or_notify_cancel() is False:
                 continue
+            with self._lock:
+                current_generation = self._active_session_generation
+            if current_generation != job.session_generation:
+                job.future.set_exception(LinkError("The MAVLink session changed before transmission."))
+                continue
             try:
                 job.future.set_result(job.run(link))
             except Exception as error:  # noqa: BLE001 - reported to the caller
@@ -642,8 +938,10 @@ class LinkManager:
             if not job.future.done():
                 job.future.set_exception(error)
 
-    def _close_link(self) -> None:
+    def _close_link(self, expected_link: MavlinkLink | None = None) -> None:
         with self._lock:
+            if expected_link is not None and self._link is not expected_link:
+                return
             link, self._link = self._link, None
         if link is None:
             return

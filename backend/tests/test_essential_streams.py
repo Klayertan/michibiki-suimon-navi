@@ -32,6 +32,9 @@ from app.mavlink.telemetry_state import ConnectionState
 from .conftest import wait_until
 
 # The exact table required by the fix: name -> (message id, interval µs).
+# RC_CHANNELS was added later so "RC INPUT SEEN BY PIXHAWK" in Manual Control
+# reflects the vehicle's own reported RC input, not just what the browser
+# intended to send -- see the RC-input diagnostics work in pilot_service.py.
 REQUIRED_RATES: dict[str, tuple[int, int]] = {
     "SYS_STATUS": (1, 1_000_000),
     "GPS_RAW_INT": (24, 500_000),
@@ -39,6 +42,8 @@ REQUIRED_RATES: dict[str, tuple[int, int]] = {
     "GLOBAL_POSITION_INT": (33, 200_000),
     "VFR_HUD": (74, 500_000),
     "BATTERY_STATUS": (147, 1_000_000),
+    "RC_CHANNELS": (65, 200_000),
+    "SERVO_OUTPUT_RAW": (36, 200_000),
 }
 
 
@@ -61,9 +66,18 @@ def test_the_constant_table_matches_the_required_rates_exactly() -> None:
     assert actual == REQUIRED_RATES
 
 
-def test_the_constant_table_names_are_exactly_the_six_required_streams() -> None:
+def test_the_constant_table_names_are_exactly_the_eight_required_streams() -> None:
     names = [name for name, _, _ in constants.ESSENTIAL_TELEMETRY_STREAMS]
-    assert names == ["SYS_STATUS", "GPS_RAW_INT", "ATTITUDE", "GLOBAL_POSITION_INT", "VFR_HUD", "BATTERY_STATUS"]
+    assert names == [
+        "SYS_STATUS",
+        "GPS_RAW_INT",
+        "ATTITUDE",
+        "GLOBAL_POSITION_INT",
+        "VFR_HUD",
+        "BATTERY_STATUS",
+        "RC_CHANNELS",
+        "SERVO_OUTPUT_RAW",
+    ]
 
 
 def test_a_real_connection_requests_exactly_the_required_message_ids_and_intervals(
@@ -71,7 +85,7 @@ def test_a_real_connection_requests_exactly_the_required_message_ids_and_interva
 ) -> None:
     manager.connect()
     assert wait_until(lambda: manager.state.get_connection_state() is ConnectionState.CONNECTED)
-    assert wait_until(lambda: len(stream_calls(mock_link)) >= 6)
+    assert wait_until(lambda: len(stream_calls(mock_link)) >= len(constants.ESSENTIAL_TELEMETRY_STREAMS))
 
     sent = {(call["params"][0], call["params"][1]) for call in stream_calls(mock_link)}
     expected = {(float(msg_id), float(interval_us)) for _, msg_id, interval_us in constants.ESSENTIAL_TELEMETRY_STREAMS}
@@ -80,13 +94,13 @@ def test_a_real_connection_requests_exactly_the_required_message_ids_and_interva
 
 def test_every_essential_stream_request_uses_command_511(manager: LinkManager, mock_link: MockMavlinkLink) -> None:
     manager.connect()
-    assert wait_until(lambda: len(mock_link.command_long_log) >= 6)
+    assert wait_until(lambda: len(mock_link.command_long_log) >= len(constants.ESSENTIAL_TELEMETRY_STREAMS))
     assert all(call["command"] == constants.MAV_CMD_SET_MESSAGE_INTERVAL for call in mock_link.command_long_log)
 
 
 def test_stream_requests_carry_zero_in_every_unused_param(manager: LinkManager, mock_link: MockMavlinkLink) -> None:
     manager.connect()
-    assert wait_until(lambda: len(stream_calls(mock_link)) >= 6)
+    assert wait_until(lambda: len(stream_calls(mock_link)) >= len(constants.ESSENTIAL_TELEMETRY_STREAMS))
     for call in stream_calls(mock_link):
         assert call["params"][2:] == (0.0, 0.0, 0.0, 0.0, 0.0)
 
@@ -95,7 +109,7 @@ def test_stream_requests_address_the_configured_target_system_and_the_detected_c
     manager: LinkManager, mock_link: MockMavlinkLink, settings: Settings
 ) -> None:
     manager.connect()
-    assert wait_until(lambda: len(stream_calls(mock_link)) >= 6)
+    assert wait_until(lambda: len(stream_calls(mock_link)) >= len(constants.ESSENTIAL_TELEMETRY_STREAMS))
     for call in stream_calls(mock_link):
         assert call["target_system"] == settings.target_system
         # The vehicle's own HEARTBEAT in mock mode reports component 1; this
@@ -121,7 +135,7 @@ def test_stream_requests_fall_back_to_the_configured_component_when_the_vehicle_
     manager = LinkManager(settings, lambda: link)
     try:
         manager.connect()
-        assert wait_until(lambda: len(stream_calls(link)) >= 6)
+        assert wait_until(lambda: len(stream_calls(link)) >= len(constants.ESSENTIAL_TELEMETRY_STREAMS))
         for call in stream_calls(link):
             assert call["target_component"] == 0
     finally:
@@ -146,7 +160,9 @@ def test_stream_requests_are_sent_only_once_the_link_is_connected(
     depending on sub-millisecond timing."""
     manager.connect()
     assert wait_until(lambda: manager.state.get_connection_state() is ConnectionState.CONNECTED)
-    assert wait_until(lambda: len(stream_calls(mock_link)) == 6)
+    assert wait_until(
+        lambda: len(stream_calls(mock_link)) == len(constants.ESSENTIAL_TELEMETRY_STREAMS)
+    )
 
 
 # ----------------------------------------------------------------------
@@ -158,15 +174,17 @@ def test_streams_are_requested_again_after_a_manual_disconnect_and_reconnect(
     manager: LinkManager, mock_link: MockMavlinkLink
 ) -> None:
     manager.connect()
-    assert wait_until(lambda: len(stream_calls(mock_link)) >= 6)
+    assert wait_until(lambda: len(stream_calls(mock_link)) >= len(constants.ESSENTIAL_TELEMETRY_STREAMS))
     first_batch = len(mock_link.command_long_log)
 
     manager.disconnect()
     manager.connect()
-    assert wait_until(lambda: len(stream_calls(mock_link)) >= first_batch + 6)
+    assert wait_until(
+        lambda: len(stream_calls(mock_link)) >= first_batch + len(constants.ESSENTIAL_TELEMETRY_STREAMS)
+    )
 
     second_batch = mock_link.command_long_log[first_batch:]
-    assert len(second_batch) == 6
+    assert len(second_batch) == len(constants.ESSENTIAL_TELEMETRY_STREAMS)
     assert all(call["command"] == constants.MAV_CMD_SET_MESSAGE_INTERVAL for call in second_batch)
 
 
@@ -203,7 +221,10 @@ def test_streams_are_requested_again_after_the_manager_auto_reconnects() -> None
         manager.connect(settle_timeout=0.5)
         assert wait_until(lambda: manager.state.get_connection_state() is ConnectionState.CONNECTED, timeout=5.0)
         assert len(links) >= 2, "the manager must have retried onto a second link instance"
-        assert wait_until(lambda: len(stream_calls(links[-1])) >= 6, timeout=3.0)
+        assert wait_until(
+            lambda: len(stream_calls(links[-1])) >= len(constants.ESSENTIAL_TELEMETRY_STREAMS),
+            timeout=3.0,
+        )
         # And the failed first attempt never got the chance to send anything.
         assert stream_calls(links[0]) == []
     finally:
@@ -253,14 +274,13 @@ def test_read_only_backend_still_sends_the_essential_stream_requests(mock_link: 
     manager = LinkManager(read_only, lambda: mock_link)
     try:
         manager.connect()
-        assert wait_until(lambda: len(stream_calls(mock_link)) >= 6)
+        assert wait_until(lambda: len(stream_calls(mock_link)) >= len(constants.ESSENTIAL_TELEMETRY_STREAMS))
     finally:
         manager.shutdown()
 
 
 # ----------------------------------------------------------------------
-# 6. No arm, takeoff, throttle, RC override or movement commands were
-#    introduced
+# 6. Telemetry bootstrap still contains no command-service or actuator path
 # ----------------------------------------------------------------------
 
 
@@ -277,8 +297,7 @@ def test_no_dangerous_command_names_appear_in_the_link_manager_source() -> None:
         "NAV_LAND",
         "NAV_RETURN_TO_LAUNCH",
         "DO_MOTOR_TEST",
-        "RC_CHANNELS_OVERRIDE",
-        "MANUAL_CONTROL",
+        "rc_channels_override_send",
         "SET_POSITION_TARGET",
         "SET_ATTITUDE_TARGET",
     )
@@ -286,17 +305,38 @@ def test_no_dangerous_command_names_appear_in_the_link_manager_source() -> None:
         assert token not in source, f"{token} must not appear in link_manager.py"
 
 
-def test_the_transport_still_only_exposes_a_heartbeat_and_command_long_sender() -> None:
+def test_the_transport_exposes_only_the_reviewed_senders() -> None:
     """Guards against a new send_* method being added to smuggle in a second,
-    less-restricted transmit path alongside this fix."""
+    less-restricted transmit path.
+
+    ``send_velocity_setpoint`` was added deliberately for pilot control (see
+    ``app.mavlink.pilot_service``); it emits SET_POSITION_TARGET_LOCAL_NED,
+    which ArduPilot's own controllers execute. Anything beyond these three
+    needs its own review.
+    """
     from app.mavlink.interface import MavlinkLink
 
     senders = {name for name in dir(MavlinkLink) if name.startswith("send")}
-    assert senders == {"send_gcs_heartbeat", "send_command_long"}
+    assert senders == {
+        "send_gcs_heartbeat",
+        "send_command_long",
+        "send_velocity_setpoint",
+        "send_rc_channels_override",
+        "send_parameter_request",
+    }
 
 
 def test_essential_streams_are_all_known_read_only_telemetry_message_types() -> None:
-    allowed_names = {"SYS_STATUS", "GPS_RAW_INT", "ATTITUDE", "GLOBAL_POSITION_INT", "VFR_HUD", "BATTERY_STATUS"}
+    allowed_names = {
+        "SYS_STATUS",
+        "GPS_RAW_INT",
+        "ATTITUDE",
+        "GLOBAL_POSITION_INT",
+        "VFR_HUD",
+        "BATTERY_STATUS",
+        "RC_CHANNELS",
+        "SERVO_OUTPUT_RAW",
+    }
     names = {name for name, _, _ in constants.ESSENTIAL_TELEMETRY_STREAMS}
     assert names == allowed_names, "only read-only telemetry message types may be requested automatically"
 
@@ -318,7 +358,7 @@ def test_essential_stream_bootstrap_is_not_gated_by_the_allow_safe_commands_flag
 
 def test_duplicate_heartbeats_do_not_resend_stream_requests(manager: LinkManager, mock_link: MockMavlinkLink) -> None:
     manager.connect()
-    assert wait_until(lambda: len(stream_calls(mock_link)) >= 6)
+    assert wait_until(lambda: len(stream_calls(mock_link)) >= len(constants.ESSENTIAL_TELEMETRY_STREAMS))
     count_after_first_batch = len(mock_link.command_long_log)
 
     # The mock keeps emitting a fresh HEARTBEAT every heartbeat_interval
@@ -348,7 +388,9 @@ def test_essential_stream_request_burst_completes_well_within_one_heartbeat_inte
     first heartbeat after CONNECTED; this bounds that gap generously."""
     started = time.monotonic()
     manager.connect()
-    assert wait_until(lambda: len(stream_calls(mock_link)) >= 6, timeout=2.0)
+    assert wait_until(
+        lambda: len(stream_calls(mock_link)) >= len(constants.ESSENTIAL_TELEMETRY_STREAMS), timeout=2.0
+    )
     elapsed = time.monotonic() - started
     assert elapsed < settings.heartbeat_interval * 5
 
@@ -361,19 +403,19 @@ def test_essential_stream_request_burst_completes_well_within_one_heartbeat_inte
 
 def test_accepted_stream_requests_never_set_a_backend_error(manager: LinkManager, mock_link: MockMavlinkLink) -> None:
     manager.connect()
-    assert wait_until(lambda: len(stream_calls(mock_link)) >= 6)
+    assert wait_until(lambda: len(stream_calls(mock_link)) >= len(constants.ESSENTIAL_TELEMETRY_STREAMS))
     time.sleep(0.5)  # let the (accepted-by-default) acks arrive and be processed
     assert manager.state.snapshot()["error"] is None
 
 
 def test_a_single_rejected_optional_stream_does_not_set_a_backend_error(settings: Settings) -> None:
     # reject_commands decrements per send_command_long call; with nothing else
-    # transmitting during connect, this denies only the first of the six.
+    # transmitting during connect, this denies only the first request.
     link = MockMavlinkLink(scenario=MockScenario(reject_commands=1))
     manager = LinkManager(settings, lambda: link)
     try:
         manager.connect()
-        assert wait_until(lambda: len(stream_calls(link)) >= 6)
+        assert wait_until(lambda: len(stream_calls(link)) >= len(constants.ESSENTIAL_TELEMETRY_STREAMS))
         time.sleep(0.5)
         assert manager.state.snapshot()["error"] is None
     finally:
@@ -381,11 +423,13 @@ def test_a_single_rejected_optional_stream_does_not_set_a_backend_error(settings
 
 
 def test_every_essential_stream_rejected_sets_one_clear_backend_error(settings: Settings) -> None:
-    link = MockMavlinkLink(scenario=MockScenario(reject_commands=6))
+    link = MockMavlinkLink(
+        scenario=MockScenario(reject_commands=len(constants.ESSENTIAL_TELEMETRY_STREAMS))
+    )
     manager = LinkManager(settings, lambda: link)
     try:
         manager.connect()
-        assert wait_until(lambda: len(stream_calls(link)) >= 6)
+        assert wait_until(lambda: len(stream_calls(link)) >= len(constants.ESSENTIAL_TELEMETRY_STREAMS))
         assert wait_until(lambda: manager.state.snapshot()["error"] is not None, timeout=3.0)
         error = manager.state.snapshot()["error"]
         assert error["kind"] == "stream_request"
@@ -420,11 +464,13 @@ def test_a_stream_ack_that_never_arrives_still_resolves_via_the_deadline(setting
         allow_safe_commands=True,
         command_timeout=0.5,
     )
-    link = MockMavlinkLink(scenario=MockScenario(drop_acks=6))
+    link = MockMavlinkLink(
+        scenario=MockScenario(drop_acks=len(constants.ESSENTIAL_TELEMETRY_STREAMS))
+    )
     manager = LinkManager(short_timeout, lambda: link)
     try:
         manager.connect()
-        assert wait_until(lambda: len(stream_calls(link)) >= 6)
+        assert wait_until(lambda: len(stream_calls(link)) >= len(constants.ESSENTIAL_TELEMETRY_STREAMS))
         assert wait_until(lambda: manager.state.snapshot()["error"] is not None, timeout=3.0)
         assert manager.state.snapshot()["error"]["kind"] == "stream_request"
     finally:

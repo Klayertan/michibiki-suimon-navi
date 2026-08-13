@@ -95,6 +95,22 @@ def normalize_heartbeat(message: Any) -> dict[str, Any]:
     }
 
 
+def _sensor_bit_healthy(present: float | None, enabled: float | None, health: float | None, bit: int) -> bool | None:
+    """PASS (``True``) / FAIL (``False``) / UNKNOWN (``None``) for exactly one
+    ``onboard_control_sensors_*`` bit.
+
+    ``None`` whenever the bit is not reported as both present and enabled --
+    older firmware, or a bit this vehicle build does not implement, must never
+    be shown as a false PASS or a false FAIL. This never enumerates *which*
+    other bits are set; it answers one named, specific question.
+    """
+    if present is None or enabled is None or health is None:
+        return None
+    if not (int(present) & int(enabled) & bit):
+        return None
+    return bool(int(health) & bit)
+
+
 def normalize_sys_status(message: Any) -> dict[str, Any]:
     """SYS_STATUS -> battery and sensor-health summary."""
     present = _finite(_field(message, "onboard_control_sensors_present"))
@@ -117,6 +133,15 @@ def normalize_sys_status(message: Any) -> dict[str, Any]:
         "sensorsEnabled": None if enabled is None else int(enabled),
         "sensorsHealth": None if health is None else int(health),
         "sensorsOk": sensors_ok,
+        # PASS/FAIL/UNKNOWN only -- never which individual check failed. See
+        # docs on MAV_SYS_STATUS_PREARM_CHECK: this is the same overall verdict
+        # ArduPilot itself uses to decide whether ARM is currently possible.
+        "prearmCheck": _sensor_bit_healthy(present, enabled, health, constants.MAV_SYS_STATUS_PREARM_CHECK),
+        # A direct, vehicle-reported fact (is the RC-receiver sensor healthy),
+        # not an inference from any other telemetry field.
+        "rcReceiverHealthy": _sensor_bit_healthy(
+            present, enabled, health, constants.MAV_SYS_STATUS_SENSOR_RC_RECEIVER
+        ),
     }
 
 
@@ -177,6 +202,62 @@ def normalize_global_position_int(message: Any) -> dict[str, Any]:
         "vy": _scaled(_field(message, "vy"), 100.0, sentinel=INT16_MAX),
         "vz": _scaled(_field(message, "vz"), 100.0, sentinel=INT16_MAX),
         "heading": None if hdg is None else (hdg / 100.0) % 360.0,
+    }
+
+
+#: RC_CHANNELS carries up to 18 channels; only the first 8 are addressable by
+#: RC_CHANNELS_OVERRIDE (and by RCMAP_*), so only those are exposed.
+_RC_CHANNELS_EXPOSED = 8
+
+
+def normalize_rc_channels(message: Any) -> dict[str, Any]:
+    """RC_CHANNELS -> the vehicle's own view of its RC input, channels 1-8.
+
+    This is deliberately not "what the browser intended to send": it is
+    whatever ArduPilot itself currently sees, whether from a physical
+    receiver, from this backend's own MAVLink override, or from neither (an
+    unused channel reports the MAVLink "no data" sentinel, surfaced as
+    ``None`` rather than a fake PWM value).
+    """
+    # `_sentinel_none` maps only the exact UINT16_MAX "no data" sentinel to
+    # `None`; a channel legitimately reading 0 ("no pulse") is preserved.
+    channels: list[int | None] = [
+        (
+            None
+            if (value := _sentinel_none(_field(message, f"chan{index}_raw"), UINT16_MAX)) is None
+            else int(value)
+        )
+        for index in range(1, _RC_CHANNELS_EXPOSED + 1)
+    ]
+    channel_count = _sentinel_none(_field(message, "chancount"), UINT8_MAX)
+    rssi = _sentinel_none(_field(message, "rssi"), UINT8_MAX)
+    return {
+        "channels": channels,
+        "channelCount": None if channel_count is None else int(channel_count),
+        "rssi": None if rssi is None else int(rssi),
+    }
+
+
+def normalize_servo_output_raw(message: Any) -> dict[str, Any]:
+    """SERVO_OUTPUT_RAW -> read-only output PWM values for outputs 1-16.
+
+    MAVLink does not define an unavailable sentinel for these fields. Missing,
+    non-finite, or out-of-range values become ``None``; a literal zero is kept
+    because ArduPilot uses it to represent an output with no PWM pulse.
+    """
+
+    channels: list[int | None] = []
+    for index in range(1, 17):
+        value = _finite(_field(message, f"servo{index}_raw"))
+        channels.append(
+            int(value) if value is not None and 0 <= value <= UINT16_MAX else None
+        )
+    port = _finite(_field(message, "port"))
+    time_usec = _finite(_field(message, "time_usec"))
+    return {
+        "channels": channels,
+        "port": None if port is None else int(port),
+        "timeUsec": None if time_usec is None else int(time_usec),
     }
 
 
@@ -241,6 +322,29 @@ def normalize_command_ack(message: Any) -> dict[str, Any]:
     }
 
 
+def normalize_param_value(message: Any) -> dict[str, Any]:
+    """PARAM_VALUE -> a clean parameter identifier, value, and metadata."""
+    raw_id = _field(message, "param_id")
+    if isinstance(raw_id, (bytes, bytearray)):
+        param_id = bytes(raw_id).decode("ascii", errors="replace")
+    else:
+        param_id = "" if raw_id is None else str(raw_id)
+    # MAVLink parameter identifiers are fixed-size C strings. Treat the first
+    # NUL as the terminator even if a malformed sender leaves bytes after it.
+    param_id = param_id.split("\x00", 1)[0].strip().upper()
+
+    param_type = _finite(_field(message, "param_type"))
+    param_count = _finite(_field(message, "param_count"))
+    param_index = _finite(_field(message, "param_index"))
+    return {
+        "paramId": param_id or None,
+        "value": _finite(_field(message, "param_value")),
+        "type": None if param_type is None else int(param_type),
+        "count": None if param_count is None else int(param_count),
+        "index": None if param_index is None else int(param_index),
+    }
+
+
 #: Dispatch table used by :class:`app.mavlink.telemetry_state.TelemetryState`.
 #: Message types absent from this table are counted but otherwise ignored --
 #: the backend never acts on a message it has not been taught to read.
@@ -251,7 +355,10 @@ NORMALIZERS = {
     "ATTITUDE": normalize_attitude,
     "VFR_HUD": normalize_vfr_hud,
     "GLOBAL_POSITION_INT": normalize_global_position_int,
+    "RC_CHANNELS": normalize_rc_channels,
+    "SERVO_OUTPUT_RAW": normalize_servo_output_raw,
     "STATUSTEXT": normalize_statustext,
     "AUTOPILOT_VERSION": normalize_autopilot_version,
     "COMMAND_ACK": normalize_command_ack,
+    "PARAM_VALUE": normalize_param_value,
 }
