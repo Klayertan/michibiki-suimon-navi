@@ -356,9 +356,19 @@ Verified in-browser at desktop width:
 
 - **Branch:** `main`
 - **Starting commit:** `a63cf6f` (`ui border`)
-- **Commit:** _(filled in at commit time)_
-- **Push status:** _(filled in at push time)_
-- **GitHub Pages:** _(filled in after push)_
+- **Commit:** `491dc88` — `feat(stage1): simplify field registration workflow`
+  (16 files, +2477 / −143)
+- **Push status:** pushed to `origin/main` as a fast-forward
+  (`a63cf6f..491dc88`), non-force. `git fetch` beforehand showed 0 behind /
+  1 ahead, so no remote work was overwritten.
+- **GitHub Pages:** legacy build from `main` / root, published at
+  <https://klayertan.github.io/michibiki-suimon-navi/>. The push triggered a
+  build for `491dc88`, which completed successfully in 19.3s. The live page
+  returns 200 and serves the new markup (`#basicStage1Card`,
+  `#basicHelpButton`, `#basicNmeaInput`, `#basicBoundaryControls`,
+  `#basicFieldRegDialog`), with `#workflowGuidePanel` correctly gated to
+  `data-mode="settings"`. Both new assets are reachable:
+  `css/stage1-basic.css` and `js/fields/boundary-selection.js` return 200.
 
 ### Concurrency note
 
