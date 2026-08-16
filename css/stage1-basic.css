@@ -6,19 +6,13 @@
    allowed to compete with the map for vertical space. */
 
 /* --------------------------------------------------------------------
-   Stage-1 card header + the small "?" help control
+   The small "?" help control
+
+   Lives in the app header (.brand-row-actions), not in the Stage-1 card --
+   one authoritative control, in the same place in every mode. Its placement
+   rules are in index.html alongside the rest of the header CSS; what stays
+   here is the appearance of the control itself.
    -------------------------------------------------------------------- */
-
-.basic-stage1-heading {
-  align-items: flex-start;
-  display: flex;
-  gap: 10px;
-  justify-content: space-between;
-}
-
-.basic-stage1-heading h2 {
-  margin: 2px 0 0;
-}
 
 /* Unobtrusive by design: this replaced a five-step 現地調査ワークフロー
    checklist that grew more useless the more fields existed. It is a
@@ -173,6 +167,22 @@
 .basic-track-summary strong {
   color: var(--text, #183128);
   font-size: 1.05rem;
+}
+
+/* Rejection notice for a file that is not a QZ1 recording. Warning-coloured
+   rather than error-red: the farmer picked the wrong file, nothing broke. */
+.basic-nmea-message {
+  background: #fdf4e3;
+  border-radius: 8px;
+  color: #92400e;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  margin: 10px 0 0;
+  padding: 9px 10px;
+}
+
+.basic-nmea-message[hidden] {
+  display: none;
 }
 
 .basic-boundary {

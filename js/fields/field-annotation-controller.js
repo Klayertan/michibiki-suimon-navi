@@ -300,10 +300,23 @@ export class FieldAnnotationController {
   // Persistence (localStorage)
   // -------------------------------------------------------------------------
 
+  /**
+   * Replaces the in-memory state with whatever the CURRENT storage scope
+   * holds.
+   *
+   * "Replaces" is load-bearing. This used to return early when the key was
+   * absent, which was harmless while it only ran once at mount with empty
+   * arrays. It is now also called when the storage scope moves to a different
+   * signed-in farmer (js/cloud/user-scope.js), and an early return there
+   * would leave the previous farmer's paddies in memory for the next one to
+   * see on a shared phone. An empty scope must therefore produce an empty
+   * controller, not an unchanged one.
+   */
   hydrateFromStorage() {
     if (!this.storage) {
       return;
     }
+    this.resetInMemoryState();
     try {
       const raw = this.storage.getItem(LOCAL_STORAGE_KEY);
       if (!raw) {
@@ -318,13 +331,23 @@ export class FieldAnnotationController {
       this.workflowState = parsed.workflowState;
     } catch {
       // Corrupted localStorage must never crash the app — start empty.
-      this.fields = [];
-      this.boundaryTracks = [];
-      this.waterControlPoints = [];
-      this.surveySessions = [];
-      this.fieldObservations = [];
-      this.workflowState = { lastExportedAt: null };
+      this.resetInMemoryState();
     }
+  }
+
+  /**
+   * Everything that belongs to one farmer's data set. `selected` is included
+   * because a selected-feature editor still pointing at the previous scope's
+   * record would let it be read — and saved — after a user switch.
+   */
+  resetInMemoryState() {
+    this.fields = [];
+    this.boundaryTracks = [];
+    this.waterControlPoints = [];
+    this.surveySessions = [];
+    this.fieldObservations = [];
+    this.workflowState = { lastExportedAt: null };
+    this.selected = null;
   }
 
   /**

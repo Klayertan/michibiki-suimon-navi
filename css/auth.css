@@ -1,0 +1,460 @@
+/* Account surfaces: login/onboarding screen, header account menu, the
+   signed-in 圃場 list, the local-import offer and the sync chip.
+
+   Visually consistent with the Stage-1 Basic design (css/stage1-basic.css):
+   the same card radius, the same 44px minimum touch target, the same
+   green/parchment palette read from the variables index.html defines. No
+   marketing page — the login screen is one column of controls a farmer can
+   work through with wet gloves on. */
+
+/* --------------------------------------------------------------------
+   Login / onboarding screen
+   -------------------------------------------------------------------- */
+
+.auth-screen {
+  align-items: center;
+  background: var(--bg, #f5f3e7);
+  bottom: 0;
+  display: flex;
+  justify-content: center;
+  left: 0;
+  overflow-y: auto;
+  padding: 24px 16px calc(24px + env(safe-area-inset-bottom, 0px));
+  position: fixed;
+  right: 0;
+  top: 0;
+  /* Above Leaflet's controls (1000) and its popups (700), below nothing else
+     -- while this is open it is the only thing the farmer can interact with. */
+  z-index: 3000;
+}
+
+.auth-screen[hidden] {
+  display: none;
+}
+
+/* The app behind the login screen must not scroll on a phone: a login form
+   that slides a half-visible map around feels broken. */
+body.auth-screen-open {
+  overflow: hidden;
+}
+
+.auth-card {
+  background: var(--card, #fffdf5);
+  border: 1px solid var(--line, #d8d8ca);
+  border-radius: 16px;
+  box-shadow: 0 12px 32px rgba(20, 40, 20, 0.12);
+  box-sizing: border-box;
+  max-width: 380px;
+  padding: 28px 22px 22px;
+  width: 100%;
+}
+
+.auth-brand {
+  display: grid;
+  gap: 6px;
+  justify-items: center;
+  margin-bottom: 22px;
+  text-align: center;
+}
+
+.auth-brand-mark {
+  align-items: center;
+  background: var(--accent, #1f6f43);
+  border-radius: 14px;
+  color: #fff;
+  display: flex;
+  font-size: 1.5rem;
+  font-weight: 700;
+  height: 46px;
+  justify-content: center;
+  width: 46px;
+}
+
+.auth-brand-name {
+  font-size: 1.3rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  margin: 6px 0 0;
+}
+
+.auth-brand-tagline {
+  color: var(--muted, #5d6b5d);
+  font-size: 0.88rem;
+  margin: 0;
+}
+
+/* The card's visible title is the brand lockup; this heading exists so the
+   dialog has a programmatic name for `aria-labelledby` without printing
+   "ログイン" twice above the form. */
+.visually-hidden-heading {
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  height: 1px;
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
+
+.auth-form {
+  display: grid;
+  gap: 14px;
+}
+
+.auth-field {
+  display: grid;
+  gap: 6px;
+}
+
+.auth-field[hidden] {
+  display: none;
+}
+
+.auth-field label {
+  color: var(--muted, #5d6b5d);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.auth-field input {
+  background: #fff;
+  border: 1px solid var(--line, #d8d8ca);
+  border-radius: 10px;
+  box-sizing: border-box;
+  /* 16px prevents iOS Safari from zooming the viewport on focus, which on a
+     phone leaves the submit button off-screen. */
+  font-size: 16px;
+  min-height: 48px;
+  padding: 11px 12px;
+  width: 100%;
+}
+
+.auth-field input:focus-visible {
+  border-color: var(--accent, #1f6f43);
+  outline: 2px solid rgba(31, 111, 67, 0.35);
+  outline-offset: 1px;
+}
+
+.auth-submit-button {
+  background: var(--accent, #1f6f43);
+  border: 1px solid var(--accent, #1f6f43);
+  border-radius: 10px;
+  color: #fff;
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: 700;
+  min-height: 48px;
+  padding: 12px;
+  width: 100%;
+}
+
+.auth-submit-button:disabled {
+  cursor: progress;
+  opacity: 0.65;
+}
+
+.auth-message {
+  background: #fdf4e3;
+  border-radius: 8px;
+  color: #92400e;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  margin: 0;
+  padding: 9px 10px;
+}
+
+.auth-message[hidden] {
+  display: none;
+}
+
+.auth-divider {
+  border-top: 1px solid var(--line, #d8d8ca);
+  margin: 18px 0 14px;
+}
+
+.auth-switch-row {
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+  text-align: center;
+}
+
+.auth-switch-prompt {
+  color: var(--muted, #5d6b5d);
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+.auth-secondary-button {
+  background: #fff;
+  border: 1px solid var(--line, #d8d8ca);
+  border-radius: 10px;
+  color: var(--ink, #1c2a1c);
+  cursor: pointer;
+  font-size: 0.95rem;
+  font-weight: 600;
+  min-height: 46px;
+  padding: 11px 14px;
+  width: 100%;
+}
+
+.auth-guest-button {
+  background: transparent;
+  border: none;
+  color: var(--muted, #5d6b5d);
+  cursor: pointer;
+  display: block;
+  font-size: 0.92rem;
+  margin: 16px auto 0;
+  min-height: 44px;
+  padding: 10px 12px;
+  text-decoration: underline;
+}
+
+.auth-close-button {
+  background: transparent;
+  border: none;
+  color: var(--muted, #5d6b5d);
+  cursor: pointer;
+  font-size: 1.3rem;
+  line-height: 1;
+  min-height: 44px;
+  min-width: 44px;
+  position: absolute;
+  right: 18px;
+  top: 18px;
+}
+
+.auth-close-button[hidden] {
+  display: none;
+}
+
+.auth-note {
+  color: var(--muted, #5d6b5d);
+  font-size: 0.78rem;
+  line-height: 1.6;
+  margin: 16px 0 0;
+  text-align: center;
+}
+
+/* --------------------------------------------------------------------
+   Header account control
+   -------------------------------------------------------------------- */
+
+.account-control {
+  position: relative;
+}
+
+.account-control[hidden] {
+  display: none;
+}
+
+.account-menu-button {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  border-radius: 999px;
+  color: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 0.85rem;
+  font-weight: 600;
+  gap: 5px;
+  min-height: 44px;
+  padding: 7px 13px;
+  white-space: nowrap;
+}
+
+.account-menu-caret {
+  font-size: 0.7rem;
+  opacity: 0.8;
+}
+
+.account-menu {
+  background: var(--card, #fffdf5);
+  border: 1px solid var(--line, #d8d8ca);
+  border-radius: 12px;
+  box-shadow: 0 10px 26px rgba(20, 40, 20, 0.18);
+  color: var(--ink, #1c2a1c);
+  display: grid;
+  gap: 8px;
+  min-width: 232px;
+  padding: 12px;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  z-index: 2200;
+}
+
+.account-menu[hidden] {
+  display: none;
+}
+
+.account-menu-identity {
+  font-size: 0.88rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.account-menu-identity[hidden] {
+  display: none;
+}
+
+.account-menu-status,
+.account-menu-sync {
+  color: var(--muted, #5d6b5d);
+  font-size: 0.8rem;
+  margin: 0;
+}
+
+.account-menu button {
+  background: #fff;
+  border: 1px solid var(--line, #d8d8ca);
+  border-radius: 8px;
+  color: var(--ink, #1c2a1c);
+  cursor: pointer;
+  font-size: 0.9rem;
+  min-height: 44px;
+  padding: 10px;
+  text-align: left;
+  width: 100%;
+}
+
+.account-menu button[hidden] {
+  display: none;
+}
+
+/* --------------------------------------------------------------------
+   Sync indicator (brief §26: subtle, three states, no dashboard)
+   -------------------------------------------------------------------- */
+
+.sync-status-chip {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 0.76rem;
+  font-weight: 600;
+  padding: 5px 10px;
+  white-space: nowrap;
+}
+
+.sync-status-chip[hidden] {
+  display: none;
+}
+
+.sync-status-chip[data-sync-status="error"] {
+  background: rgba(220, 38, 38, 0.22);
+}
+
+.sync-status-chip[data-sync-status="pending"],
+.sync-status-chip[data-sync-status="offline"] {
+  background: rgba(202, 138, 4, 0.24);
+}
+
+/* --------------------------------------------------------------------
+   あなたの圃場 (signed-in field home)
+   -------------------------------------------------------------------- */
+
+.account-fields-card[hidden] {
+  display: none;
+}
+
+.account-fields-list {
+  display: grid;
+  gap: 10px;
+  margin: 10px 0 12px;
+}
+
+.account-field-tile {
+  background: #fff;
+  border: 1px solid var(--line, #d8d8ca);
+  border-radius: 12px;
+  cursor: pointer;
+  display: grid;
+  gap: 4px;
+  justify-items: start;
+  min-height: 60px;
+  padding: 12px 14px;
+  text-align: left;
+  width: 100%;
+}
+
+.account-field-tile.is-active {
+  border-color: var(--accent, #1f6f43);
+  box-shadow: inset 3px 0 0 var(--accent, #1f6f43);
+}
+
+.account-field-name {
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.account-field-area {
+  color: var(--muted, #5d6b5d);
+  font-size: 0.85rem;
+}
+
+/* --------------------------------------------------------------------
+   Local -> account import offer
+   -------------------------------------------------------------------- */
+
+.local-import-prompt[hidden] {
+  display: none;
+}
+
+.local-import-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.local-import-actions .panel-button {
+  flex: 1 1 160px;
+  min-height: 44px;
+}
+
+/* --------------------------------------------------------------------
+   Phone
+   -------------------------------------------------------------------- */
+
+@media (max-width: 720px) {
+  .auth-card {
+    padding: 24px 18px 18px;
+  }
+
+  .local-import-actions .panel-button {
+    flex: 1 1 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  /* 使い方 + sync chip + account button have to share a 390px-wide header
+     row with the title, so the cluster tightens rather than wrapping. */
+  .brand-row-actions {
+    gap: 8px;
+  }
+
+  .account-menu-button {
+    padding: 7px 10px;
+  }
+
+  .account-menu-label {
+    max-width: 84px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .sync-status-chip {
+    /* The icon alone still distinguishes ✓ / ⟳ / ! at a glance, and the full
+       wording stays available in the account menu and in Settings. */
+    font-size: 0.72rem;
+    padding: 4px 7px;
+  }
+
+  .sync-status-chip .sync-status-text {
+    display: none;
+  }
+}

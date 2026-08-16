@@ -13,6 +13,7 @@
   <link rel="stylesheet" href="css/recording.css">
   <link rel="stylesheet" href="css/field-annotation.css">
   <link rel="stylesheet" href="css/stage1-basic.css">
+  <link rel="stylesheet" href="css/auth.css">
   <link rel="stylesheet" href="css/field-report.css">
   <link rel="stylesheet" href="css/drone.css">
   <link rel="stylesheet" href="css/gamepad.css">
@@ -42,9 +43,14 @@
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Sans", "Noto Sans JP", sans-serif;
     }
 
+    /* Exactly two children: header, main. The row list is explicit and
+       minmax(0, 1fr) so that if a third element is ever added here it lands
+       in an implicit auto row *below* main and is visible as a mistake,
+       rather than silently stealing main's row -- which is precisely how the
+       old .mobile-decision strip produced a full-height blank 開発ツール. */
     .app {
       display: grid;
-      grid-template-rows: auto 1fr;
+      grid-template-rows: auto minmax(0, 1fr);
       height: 100vh;
       height: 100dvh;
     }
@@ -1122,6 +1128,21 @@
       gap: 12px;
     }
 
+    /* Right-hand cluster of the brand row. flex-shrink:0 keeps 使い方 at a full
+       44px target when the title is long -- the h1 wraps instead. */
+    .brand-row-actions {
+      align-items: center;
+      display: flex;
+      flex: 0 0 auto;
+      gap: 12px;
+    }
+
+    /* The brand row is ~43px tall on its own, so a 44px control costs the map
+       a single pixel and never pushes .mode-nav down. */
+    .brand-row-actions .basic-help-button {
+      flex: 0 0 auto;
+    }
+
     .data-status {
       align-items: center;
       color: var(--muted);
@@ -1520,11 +1541,15 @@
       font-size: 1.05rem;
     }
 
+    /* ONE verdict card, two sizes. This is the compact form for the ~380-430px
+       side panel: still the visual focal point of .gate-card, but not so tall
+       that 圃場を作る drops below the fold on a laptop. The phone form (larger,
+       full-bleed reading size) is in the max-width:760px block. */
     .verdict {
       border-radius: 12px;
-      font-size: clamp(1.7rem, 4vw, 2.3rem);
+      font-size: 1.75rem;
       letter-spacing: 0.08em;
-      padding: 18px;
+      padding: 15px;
     }
 
     .verdict.open {
@@ -1642,10 +1667,6 @@
       padding-top: 10px;
     }
 
-    .mobile-decision {
-      display: none;
-    }
-
     @media (max-width: 980px) {
       main {
         grid-template-columns: 1fr;
@@ -1677,6 +1698,13 @@
 
       .brand-row {
         align-items: flex-start;
+      }
+
+      /* Keep 使い方 optically aligned with the title rather than the top of a
+         wrapped two-line lockup. */
+      .brand-row-actions {
+        align-items: center;
+        min-height: 44px;
       }
 
       .brand-mark {
@@ -1735,44 +1763,6 @@
         padding-bottom: 3px;
       }
 
-      .mobile-decision {
-        align-items: center;
-        background: #f7f8ef;
-        border-bottom: 1px solid #cfd6ca;
-        display: flex;
-        gap: 14px;
-        justify-content: space-between;
-        padding: 12px 16px;
-      }
-
-      body:not([data-workspace="decision"]) .mobile-decision {
-        display: none;
-      }
-
-      .mobile-decision strong {
-        color: var(--green);
-        display: block;
-        font-size: 1.35rem;
-        margin-top: 2px;
-      }
-
-      .mobile-decision strong[data-verdict="close"] {
-        color: var(--red);
-      }
-
-      .mobile-decision strong[data-verdict="hold"] {
-        color: #68766e;
-      }
-
-      .mobile-decision p {
-        color: var(--muted);
-        font-size: 0.74rem;
-        line-height: 1.4;
-        margin: 0;
-        max-width: 58%;
-        text-align: right;
-      }
-
       main {
         display: grid;
         grid-template-rows: minmax(330px, 48dvh) auto;
@@ -1787,8 +1777,24 @@
         padding: 12px;
       }
 
+      /* The phone form of the single verdict card. .gate-card used to carry
+         `display: none` here, on the assumption that the removed
+         .mobile-decision strip was the phone's verdict -- but .gate-card
+         carries data-mode, and the mode gate's `display: revert` outranks a
+         bare class selector, so that rule never actually applied and phones
+         were showing BOTH. The card is now the only one, and gets the room
+         it deserves. */
       .gate-card {
-        display: none;
+        gap: 10px;
+      }
+
+      .verdict {
+        font-size: clamp(2rem, 9vw, 2.6rem);
+        padding: 20px 16px;
+      }
+
+      .verdict-reason {
+        font-size: 0.95rem;
       }
 
       .empty-state {
@@ -1829,9 +1835,69 @@
         border-radius: 12px;
       }
     }
+
+    /* iPhone widths (390/393): drop the 使い方 wording and keep the bare "?".
+       The button stays a 44x44 target and keeps its accessible name from
+       aria-label, so nothing is lost to a screen reader or to voice control. */
+    @media (max-width: 480px) {
+      .basic-help-button-label {
+        display: none;
+      }
+
+      .basic-help-button {
+        padding: 0;
+      }
+    }
   </style>
 </head>
 <body data-mode="basic">
+  <!-- Login / onboarding.
+
+       Position in the DOM matters: it is a sibling of .app, not a child, so
+       its `position: fixed` cannot be trapped by .app's grid.
+
+       It starts hidden and STAYS hidden unless a cloud project is actually
+       configured (see js/auth/auth-state.js shouldShowLoginScreen). With the
+       shipped config/cloud-config.js the app opens straight into 基本モード
+       exactly as it does today -- an account screen with no backend behind it
+       would be a dead end in a paddy, and tomorrow's field test must not
+       depend on a login. -->
+  <div id="authScreen" class="auth-screen" role="dialog" aria-modal="true" aria-labelledby="authTitle" hidden>
+    <div class="auth-card">
+      <button id="authCloseButton" class="auth-close-button" type="button" aria-label="閉じる" hidden>×</button>
+      <div class="auth-brand">
+        <span class="auth-brand-mark" aria-hidden="true">水</span>
+        <p class="auth-brand-name">スイスイナビ</p>
+        <p id="authSubtitle" class="auth-brand-tagline">圃場管理をもっと簡単に</p>
+      </div>
+      <h2 id="authTitle" class="visually-hidden-heading">ログイン</h2>
+      <form id="authForm" class="auth-form" novalidate>
+        <div class="auth-field">
+          <label for="authEmailInput">メールアドレス</label>
+          <input id="authEmailInput" type="email" name="email" autocomplete="email"
+                 inputmode="email" autocapitalize="off" spellcheck="false">
+        </div>
+        <div class="auth-field">
+          <label for="authPasswordInput">パスワード</label>
+          <input id="authPasswordInput" type="password" name="password" autocomplete="current-password">
+        </div>
+        <div id="authDisplayNameRow" class="auth-field" hidden>
+          <label for="authDisplayNameInput">お名前（任意）</label>
+          <input id="authDisplayNameInput" type="text" name="displayName" autocomplete="name">
+        </div>
+        <p id="authMessage" class="auth-message" role="status" aria-live="polite" hidden></p>
+        <button id="authSubmitButton" class="auth-submit-button" type="submit">ログイン</button>
+      </form>
+      <div class="auth-divider"></div>
+      <div id="authSwitchRow" class="auth-switch-row">
+        <p id="authSwitchPrompt" class="auth-switch-prompt">初めての方</p>
+        <button id="authSwitchButton" class="auth-secondary-button" type="button">アカウントを作成</button>
+      </div>
+      <button id="authGuestButton" class="auth-guest-button" type="button">ログインせずに使う</button>
+      <p class="auth-note">ログインしなくても、圃場の測量・面積計算・水管理はこの端末だけで使えます。</p>
+    </div>
+  </div>
+
   <div class="app">
     <header class="app-header">
       <div class="brand-row">
@@ -1842,9 +1908,48 @@
             <span class="app-subtitle">みちびきで、水門判断をもっと確かに。</span>
           </h1>
         </div>
-        <div class="header-actions" data-mode="settings">
-          <span id="headerDataStatus" class="data-status"><span aria-hidden="true"></span>実証データ待機中</span>
-          <button id="workspacePrimaryAction" class="action-button" type="button">選択中データの測位点を表示</button>
+        <!-- Right-hand end of the brand row. 使い方 is deliberately NOT
+             mode-gated: one authoritative help control, always in the same
+             place, so it can never be hunted for. It sits after
+             .header-actions.
+
+             The account control sits after 使い方, matching the layout the
+             accounts brief specifies:
+                 スイスイナビ        [? 使い方] [ Kai ▾ ]
+             It is hidden entirely when no cloud is configured, so a
+             device-only install keeps exactly the header it has today. -->
+        <div class="brand-row-actions">
+          <div class="header-actions" data-mode="settings">
+            <span id="headerDataStatus" class="data-status"><span aria-hidden="true"></span>実証データ待機中</span>
+            <button id="workspacePrimaryAction" class="action-button" type="button">選択中データの測位点を表示</button>
+          </div>
+          <!-- aria-label is required, not decorative: the 使い方 label is
+               dropped below 480px and the "?" glyph is aria-hidden, so without
+               it the button would have no accessible name on a phone. -->
+          <button id="basicHelpButton" class="basic-help-button" type="button"
+                  aria-label="使い方"
+                  aria-haspopup="dialog" aria-controls="basicHelpDialog" aria-expanded="false">
+            <span aria-hidden="true">?</span>
+            <span class="basic-help-button-label">使い方</span>
+          </button>
+          <div id="accountControl" class="account-control" hidden>
+            <!-- Subtle by design (brief §26): three states, no dashboard. The
+                 detail lives in the menu below and in 設定 → アカウント. -->
+            <span id="syncStatusChip" class="sync-status-chip" role="status" aria-live="polite" hidden></span>
+            <button id="accountMenuButton" class="account-menu-button" type="button"
+                    aria-haspopup="menu" aria-controls="accountMenu" aria-expanded="false">
+              <span id="accountMenuLabel" class="account-menu-label">アカウント</span>
+              <span class="account-menu-caret" aria-hidden="true">▾</span>
+            </button>
+            <div id="accountMenu" class="account-menu" role="menu" hidden>
+              <p id="accountMenuIdentity" class="account-menu-identity" hidden></p>
+              <p id="accountMenuStatus" class="account-menu-status"></p>
+              <p id="accountMenuSync" class="account-menu-sync"></p>
+              <button id="accountMenuSyncNowButton" type="button" role="menuitem" hidden>今すぐ同期</button>
+              <button id="accountMenuLoginButton" type="button" role="menuitem">ログイン / アカウント作成</button>
+              <button id="accountMenuLogoutButton" type="button" role="menuitem" hidden>ログアウト</button>
+            </div>
+          </div>
         </div>
       </div>
       <nav class="mode-nav" aria-label="モード選択">
@@ -1877,14 +1982,17 @@
       </details>
     </header>
 
-    <section class="mobile-decision" aria-live="polite" data-mode="basic settings">
-      <div>
-        <span class="eyebrow">今日の水門判断</span>
-        <strong id="mobileVerdictBadge">様子見</strong>
-      </div>
-      <p id="mobileVerdictReason">気象データを確認しています。</p>
-    </section>
-
+    <!-- There is exactly ONE farmer-facing verdict surface: .gate-card in the
+         panel below. A second, raw "今日の水門判断 / 開ける / reason" strip used
+         to sit here for phones. It was removed rather than re-hidden:
+         .mobile-decision carried data-mode, and the mode gate's
+         `display: revert` rolls an author `display: none` back to the UA
+         `display: block` -- so the phone-only strip became visible on desktop,
+         where, as .app's middle child, it swallowed the `1fr` grid row and
+         left main in an implicit `auto` one. That is the giant blank
+         開発ツール workspace. Do not reintroduce a second verdict element
+         here; if a phone peek strip is ever wanted again, it must be inside
+         .gate-card and must not carry data-mode. -->
     <main>
       <div class="map-wrap">
         <div id="map"></div>
@@ -1917,11 +2025,77 @@
       </div>
 
       <aside class="panel">
-        <!-- 今日の水門判断 is the farmer's headline answer, so the verdict,
-             its evidence and the field/data selector behind it all appear in
-             基本モード. The tuning behind the verdict (気象条件 inputs,
-             判断ルール thresholds, 圃場・水門 data sources) stays Settings-only. -->
-        <section id="decisionFieldCard" class="card" data-workspace="decision" data-mode="basic settings">
+        <!-- 今日の水門判断 is the farmer's headline answer, so the verdict
+             itself appears in 基本モード. The tuning behind it (気象条件 inputs,
+             判断ルール thresholds, 圃場・水門 data sources) stays Settings-only,
+             and so does the データを選ぶ card below: in 基本モード the ONE
+             active field is #basicFieldSummaryCard, immediately above. -->
+
+        <!-- First sign-in on a device that already has locally registered
+             paddies. Neither uploading them silently nor discarding them is
+             acceptable, so the farmer is asked once, and the answer is
+             remembered per account. Hidden entirely for guests. -->
+        <section id="localImportPrompt" class="card local-import-prompt" data-mode="basic" hidden>
+          <span class="eyebrow">端末内の圃場</span>
+          <p id="localImportPromptText" class="meta"></p>
+          <p class="meta">アカウントに追加すると、他の端末でも同じ圃場を開けます。端末内のデータは削除されません。</p>
+          <div class="local-import-actions">
+            <button id="localImportAcceptButton" class="panel-button primary" type="button">アカウントに追加する</button>
+            <button id="localImportSkipButton" class="panel-button" type="button">今はしない</button>
+          </div>
+        </section>
+
+        <!-- あなたの圃場: the signed-in home. It is a VIEW over the same
+             fields the local repository already holds, not a second store and
+             not a second selector -- tapping a tile drives
+             #basicActiveFieldSelect, which remains the one authoritative
+             active field for the map, the area, the water context and the
+             水門判断. Hidden for guests, who already have 現在の田圃 below. -->
+        <section id="accountFieldsCard" class="card account-fields-card" data-mode="basic" hidden>
+          <span class="eyebrow">あなたの圃場</span>
+          <div id="accountFieldsList" class="account-fields-list"></div>
+          <p id="accountFieldsEmpty" class="field-annotation-empty" hidden>
+            まだ圃場がありません<br>
+            QZ1を持って圃場の外周を歩くと、面積を自動で計算できます。
+          </p>
+          <div class="veg-actions">
+            <button id="accountFieldsNewButton" class="panel-button primary" type="button">＋ 新しい圃場を測る</button>
+          </div>
+          <p id="localImportMessage" class="meta" role="status" aria-live="polite" hidden></p>
+        </section>
+
+        <!-- 基本モード's single field context. Answers "which paddy am I
+             looking at, and can I trust its measurement?" in one card, so the
+             farmer is never asked to choose the same field twice. The metadata
+             here is the same fieldReportController report that feeds the
+             Settings card below -- read, not duplicated. -->
+        <section id="basicFieldSummaryCard" class="card" data-mode="basic">
+          <span class="eyebrow">現在の田圃</span>
+          <div class="input-row" id="basicFieldSelectRow" hidden>
+            <label for="basicActiveFieldSelect">田圃を選ぶ</label>
+            <select id="basicActiveFieldSelect"></select>
+          </div>
+          <div id="basicFieldEmptyState" class="field-annotation-empty">
+            圃場がまだ登録されていません<br>
+            QZ1を持って圃場の外周を歩くと、面積を自動で計算できます。
+          </div>
+          <div id="basicFieldSummary" class="decision-field-summary" hidden>
+            <div class="kv"><span>面積</span><strong id="basicFieldArea">—</strong></div>
+            <div class="kv"><span>元NMEA</span><strong id="basicFieldSourceFile">—</strong></div>
+            <div class="kv"><span>測位信頼性</span><strong id="basicFieldReliability">—</strong></div>
+            <div class="kv"><span>有効測位点</span><strong id="basicFieldValidPoints">—</strong></div>
+            <div class="kv"><span>水管理ポイント</span><strong id="basicFieldWaterPoints">—</strong></div>
+            <div class="kv"><span>観察メモ</span><strong id="basicFieldObservations">—</strong></div>
+          </div>
+          <div class="veg-actions">
+            <button id="basicMeasureFieldButton" class="panel-button primary" type="button">圃場を測る</button>
+            <button id="basicRecordWaterButton" class="panel-button" type="button" disabled>水位を記録</button>
+            <button id="basicAddWaterPointButton" class="panel-button" type="button" disabled>水管理ポイントを追加</button>
+            <button id="basicViewResultsButton" class="panel-button" type="button" disabled>結果を見る</button>
+          </div>
+        </section>
+
+        <section id="decisionFieldCard" class="card" data-workspace="decision" data-mode="settings">
           <span class="eyebrow">対象圃場 / 使用データ</span>
           <h2>使用する圃場データを選ぶ</h2>
           <div class="input-row">
@@ -1963,23 +2137,11 @@
           <p class="disclaimer">※ 本アプリは判断支援です。最終判断と水門の操作は必ず人が行ってください。</p>
         </section>
 
-        <section class="card proof-card" data-workspace="decision" data-mode="basic settings">
-          <div class="section-heading">
-            <div>
-              <span class="eyebrow">みちびき活用の実証</span>
-              <h2>QZ1 / DGNSS 測位品質</h2>
-            </div>
-            <span id="proofSourceBadge" class="source-badge">未読込</span>
-          </div>
-          <div class="proof-grid">
-            <div class="proof-metric"><span>有効測位点</span><strong id="proofTotal">—</strong></div>
-            <div class="proof-metric emphasis"><span>fix quality 2率</span><strong id="proofSlasRate">—</strong></div>
-            <div class="proof-metric"><span>衛星数</span><strong id="proofSatellites">—</strong></div>
-            <div class="proof-metric"><span>HDOP</span><strong id="proofHdop">—</strong></div>
-          </div>
-          <button id="loadProofButton" class="panel-button primary proof-load" type="button">選択中データの測位点を表示</button>
-          <p id="proofMessage" class="meta">対象圃場を選択すると、その測量データの品質を表示します。</p>
-        </section>
+        <!-- みちびき活用の実証 / QZ1-DGNSS 測位品質 used to sit here, in
+             基本モード. It answers "how far can I trust this QZ1 measurement?",
+             which is a verification question, not a farmer action -- it now
+             lives in 設定 → 測量チェック next to the rest of the assurance
+             tooling. Its calculation is untouched; only the card moved. -->
 
         <section class="card" data-workspace="decision" data-mode="settings">
           <h2>気象条件<span class="en">Weather</span></h2>
@@ -2055,7 +2217,15 @@
           <div class="survey-action-grid">
             <label class="action-button">
               NMEAをアップロード
-              <input id="fileInput" type="file" accept=".nmea,.txt,.log,text/plain">
+              <!-- No accept filter, deliberately: iOS Safari hands the list to
+                   the native Files picker, which greys out .nmea (no platform
+                   UTType) and made a farmer's own recording unselectable on an
+                   iPhone while opening fine on a Mac. accept="*/*" would go
+                   through the same filtering, so the attribute is absent
+                   entirely and the file is validated after selection by
+                   js/gnss/nmea-file-intake.js + the existing parser. JSON
+                   inputs below keep their filter -- .json has a UTType. -->
+              <input id="fileInput" type="file">
             </label>
             <label class="action-button secondary">
               測量JSONを読み込み
@@ -2103,23 +2273,22 @@
              about the same workflow (WebSerial, baud, session diagnostics,
              measurement-type choice, boundary tracks) is in Settings. -->
         <section id="basicStage1Card" class="card basic-stage1" data-mode="basic">
-          <div class="basic-stage1-heading">
-            <div>
-              <span class="eyebrow">圃場を登録する</span>
-              <h2>QZ1データから圃場を作る</h2>
-            </div>
-            <button id="basicHelpButton" class="basic-help-button" type="button"
-                    aria-haspopup="dialog" aria-controls="basicHelpDialog" aria-expanded="false">
-              <span aria-hidden="true">?</span>
-              <span class="basic-help-button-label">使い方</span>
-            </button>
-          </div>
+          <!-- The 使い方 control used to live here; it is now the single
+               header-level affordance. Do not reintroduce a second one. -->
+          <span class="eyebrow">圃場を登録する</span>
+          <h2>QZ1データから圃場を作る</h2>
 
           <label class="action-button basic-upload-button">
             NMEAをアップロード
-            <input id="basicNmeaInput" type="file" accept=".nmea,.txt,.log,text/plain">
+            <!-- No accept filter -- see #fileInput. This is the picker an
+                 iPhone farmer actually taps, so it is the one the bug was
+                 reported against. -->
+            <input id="basicNmeaInput" type="file">
           </label>
           <p id="basicTrackSummary" class="basic-track-summary" role="status" aria-live="polite" hidden>測位点 <strong id="basicTrackPointCount">0</strong></p>
+          <!-- Post-selection rejection, in farmer language. The picker cannot
+               filter NMEA on iOS, so this is where a wrong pick is explained. -->
+          <p id="basicNmeaMessage" class="basic-nmea-message" role="status" aria-live="polite" hidden></p>
 
           <div id="basicBoundaryControls" class="basic-boundary" hidden>
             <p class="basic-boundary-title">圃場の境界を選ぶ</p>
@@ -2180,25 +2349,9 @@
           </div>
         </section>
 
-        <section id="basicFieldSummaryCard" class="card" data-mode="basic">
-          <span class="eyebrow">現在の圃場</span>
-          <div class="input-row" id="basicFieldSelectRow" hidden>
-            <label for="basicActiveFieldSelect">圃場を選択</label>
-            <select id="basicActiveFieldSelect"></select>
-          </div>
-          <div id="basicFieldEmptyState" class="field-annotation-empty">
-            圃場がまだ登録されていません<br>
-            QZ1を持って圃場の外周を歩くと、面積を自動で計算できます。
-          </div>
-          <div id="basicFieldSummary" class="decision-field-summary" hidden>
-            <div class="kv"><span>圃場面積</span><strong id="basicFieldArea">—</strong></div>
-          </div>
-          <div class="veg-actions">
-            <button id="basicMeasureFieldButton" class="panel-button primary" type="button">圃場を測る</button>
-            <button id="basicRecordWaterButton" class="panel-button" type="button" disabled>水位を記録</button>
-            <button id="basicViewResultsButton" class="panel-button" type="button" disabled>結果を見る</button>
-          </div>
-        </section>
+        <!-- 現在の田圃 used to be a second field card down here, below
+             registration. It is now the FIRST card in the panel and carries
+             the metadata that 対象圃場 / 使用データ used to duplicate. -->
 
         <!-- Advanced/legacy registration: keeps the measurement-type choice
              and the 境界トラック outcomes for power users and for existing
@@ -2240,6 +2393,31 @@
             </div>
           </div>
         </section>
+
+        <!-- 設定 → 圃場データ → アカウント.
+
+             Deliberately NOT a field selector: choosing which paddy you are
+             working on is a 基本モード decision and has exactly one control
+             (#basicActiveFieldSelect / あなたの圃場). What lives here is the
+             account itself and the sync detail that would be clutter in
+             基本モード. -->
+        <details id="settingsAccountPanel" class="card paddy-collapsible" data-workspace="fields" data-mode="settings" hidden>
+          <summary><span class="details-title">アカウント<span class="en">Account &amp; sync</span></span></summary>
+          <div class="details-content">
+            <div class="kv"><span>アカウント</span><strong id="settingsAccountIdentity">—</strong></div>
+            <div class="kv"><span>状態</span><strong id="settingsAccountStatus">—</strong></div>
+            <div class="kv"><span>クラウド同期</span><strong id="settingsSyncStatus">—</strong></div>
+            <div class="veg-actions">
+              <button id="settingsSyncNowButton" class="panel-button" type="button" hidden>今すぐ同期</button>
+              <button id="settingsLoginButton" class="panel-button primary" type="button" hidden>ログイン / アカウント作成</button>
+              <button id="settingsLogoutButton" class="panel-button" type="button" hidden>ログアウト</button>
+            </div>
+            <p id="settingsAccountMessage" class="meta" role="status" aria-live="polite"></p>
+            <p class="meta">
+              圃場・水管理ポイント・観察メモ・目標水位はクラウドに同期されます。生のNMEAログとフィールド記録セッションはこの端末にのみ保存されます（サイズが大きいため）。
+            </p>
+          </div>
+        </details>
 
         <details id="registeredFieldsPanel" class="card paddy-collapsible" data-workspace="fields" data-mode="basic settings" open hidden>
           <summary><span class="details-title">登録済み圃場・測量ログ<span class="en">Registered fields &amp; logs</span></span></summary>
@@ -2416,6 +2594,31 @@
           </div>
         </section>
 
+        <!-- Moved here from 基本モード. 測量チェック now owns both halves of the
+             same question: this card is the raw QZ1/DGNSS evidence for the
+             selected dataset, the cards below are the assurance verdict built
+             on top of it. The metrics and #loadProofButton are unchanged --
+             renderProofCard() still follows #decisionFieldSelect, which is
+             now this workspace's own selector rather than a farmer control. -->
+        <section class="card proof-card" data-workspace="assurance" data-mode="settings" hidden>
+          <div class="section-heading">
+            <div>
+              <span class="eyebrow">みちびき活用の実証</span>
+              <h2>QZ1 / DGNSS 測位品質</h2>
+            </div>
+            <span id="proofSourceBadge" class="source-badge">未読込</span>
+          </div>
+          <div class="proof-grid">
+            <div class="proof-metric"><span>有効測位点</span><strong id="proofTotal">—</strong></div>
+            <div class="proof-metric emphasis"><span>fix quality 2率</span><strong id="proofSlasRate">—</strong></div>
+            <div class="proof-metric"><span>衛星数</span><strong id="proofSatellites">—</strong></div>
+            <div class="proof-metric"><span>HDOP</span><strong id="proofHdop">—</strong></div>
+          </div>
+          <button id="loadProofButton" class="panel-button primary proof-load" type="button">選択中データの測位点を表示</button>
+          <p id="proofMessage" class="meta">対象圃場を選択すると、その測量データの品質を表示します。</p>
+          <p class="meta">対象データは「判断デモ」タブの 対象圃場 / 使用データ に従います（基本モードで選んだ田圃がそのまま反映されます）。</p>
+        </section>
+
         <section class="card assurance-guide" data-workspace="assurance" data-mode="settings" hidden>
           <h2>測量チェックの使い方</h2>
           <ol class="assurance-guide-steps">
@@ -2435,8 +2638,11 @@
               <input id="assuranceCaptureDate" type="date">
             </div>
             <div class="assurance-upload-grid">
-              <label class="file-button">QZ1ログを追加<input id="assuranceQz1Input" type="file" accept=".nmea,.txt,.log,text/plain"></label>
-              <label class="file-button">比較用GPSログを追加<input id="assuranceReferenceInput" type="file" accept=".nmea,.txt,.log,text/plain"></label>
+              <!-- Same NMEA/iOS picker problem as #fileInput and
+                   #basicNmeaInput: these take the same kind of log, so they
+                   drop the same filter. -->
+              <label class="file-button">QZ1ログを追加<input id="assuranceQz1Input" type="file"></label>
+              <label class="file-button">比較用GPSログを追加<input id="assuranceReferenceInput" type="file"></label>
             </div>
             <div class="input-row">
               <label for="assuranceQz1Session">QZ1データセット</label>
@@ -3332,6 +3538,12 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
   <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js" integrity="sha256-Hk4dIpcqOSb0hZjgyvFOP+cEmDXUKKNE/tT542ZbNQg=" crossorigin=""></script>
   <script defer src="https://cdn.jsdelivr.net/npm/@turf/turf@7.2.0/turf.min.js" integrity="sha256-1XhsCK5OmIs3qlwm3jKwUewuRoD2AvKpjKO8SzKONDI=" crossorigin="" onload="handleTurfReady()"></script>
+  <!-- Cloud/account configuration. Committed and, in the shipped state,
+       empty: no provider, no keys, no login screen. It may only ever contain
+       a Supabase project URL and the public anon/publishable key -- both safe
+       to ship to a browser, because RLS is what protects the rows. See
+       config/cloud-config.js and docs/SUPABASE_SETUP.md. -->
+  <script src="config/cloud-config.js"></script>
   <script src="js/paddy-intelligence.js"></script>
   <script>
     const FEATURE_OPTIONS = ["gate", "ridge", "channel", "corner", "other", "unknown"];
@@ -3676,8 +3888,6 @@
     };
     const verdictBadge = document.getElementById("verdictBadge");
     const verdictReason = document.getElementById("verdictReason");
-    const mobileVerdictBadge = document.getElementById("mobileVerdictBadge");
-    const mobileVerdictReason = document.getElementById("mobileVerdictReason");
     const decisionFieldSelect = document.getElementById("decisionFieldSelect");
     const decisionProfileSelect = document.getElementById("decisionProfileSelect");
     const decisionFieldEmptyState = document.getElementById("decisionFieldEmptyState");
@@ -3808,7 +4018,29 @@
     let fieldReportController = null;
     let droneController = null;
     let pilotControlPanel = null;
+    let authController = null;
     let serialConnectionState = "disconnected";
+
+    // Per-user namespacing for the local repositories (js/cloud/user-scope.js).
+    //
+    // Created eagerly and in the GUEST scope, because everything downstream --
+    // FieldAnnotationController's `options.storage`, readTargetWaterLevels()
+    // -- has to be able to read through it before we know whether anyone is
+    // signed in. In the guest scope it resolves every key to its original,
+    // unprefixed name, so an install that never signs in behaves exactly as
+    // it did before this existed. AuthController re-points it (and asks the
+    // field controller to re-hydrate) on sign-in and sign-out.
+    //
+    // The real ScopedStorage class replaces this the moment the module loads;
+    // this literal is the same contract, so the couple of milliseconds before
+    // that are not a special case anyone has to think about.
+    let accountScopedStorage = {
+      getItem: (key) => (typeof localStorage !== "undefined" ? localStorage.getItem(key) : null),
+      setItem: (key, value) => { try { localStorage?.setItem(key, value); } catch {} },
+      removeItem: (key) => { try { localStorage?.removeItem(key); } catch {} },
+      setUserId: () => false,
+      userId: null
+    };
 
     // Local MAVLink backend. Override before load (e.g. from the console or a
     // future settings panel) if the backend runs on a different port.
@@ -4214,7 +4446,15 @@
       decisionFieldSelect.append(new Option("デモ（仮ジオメトリ・参考値）", DECISION_DEMO_VALUE));
 
       const validValues = new Set(["", DECISION_SAMPLE_VALUE, DECISION_DEMO_VALUE, ...entries.map((entry) => entry.fieldId)]);
-      if (previous && validValues.has(previous)) {
+      // 基本モード has exactly one field context (#basicActiveFieldSelect) and
+      // it is authoritative: this Settings selector adopts it whenever it can,
+      // so a farmer's choice is never silently overridden by a re-populate.
+      // Only when the farmer has no field selected does this fall back to its
+      // own previous value, then to the first registered field.
+      const activeBasicFieldId = document.getElementById("basicActiveFieldSelect")?.value || "";
+      if (activeBasicFieldId && validValues.has(activeBasicFieldId)) {
+        decisionFieldSelect.value = activeBasicFieldId;
+      } else if (previous && validValues.has(previous)) {
         decisionFieldSelect.value = previous;
       } else if (entries.length > 0) {
         // Real registered field data takes priority over the bundled sample.
@@ -4347,13 +4587,12 @@
         drySpellDays: readNumberInput(thresholdInputs.drySpellDays, th.drySpellDays)
       };
 
+      // One verdict state, one verdict surface (.gate-card). Nothing else in
+      // the app renders decision.verdict, so nothing can drift out of sync.
       const decision = evaluateGate(weather, activeThresholds);
       verdictBadge.className = `verdict ${decision.verdict}`;
       verdictBadge.textContent = decision.label;
       verdictReason.textContent = decision.reason;
-      mobileVerdictBadge.textContent = decision.label;
-      mobileVerdictBadge.dataset.verdict = decision.verdict;
-      mobileVerdictReason.textContent = decision.reason;
     }
 
     function activeGate() {
@@ -4472,7 +4711,72 @@
       return `${Math.round(area).toLocaleString()} m² / ${(area / 100).toFixed(2)} a / ${ha.toFixed(3)} ha`;
     }
 
-    /** Basic-mode "current field" summary -- name/area only, read-only. */
+    // 基本モード's active field is the app's ONE farmer-facing field context,
+    // so it has to outlive a reload -- otherwise a farmer with two paddies
+    // reopens the app to an empty 現在の田圃 card despite having fields, and
+    // every surface that follows it (verdict context, water, reports) starts
+    // blank too. renderFieldTargetOptions() only auto-selects when exactly one
+    // field exists, which is why this is needed and why it never fights it.
+    //
+    // A new key of its own: nothing about the field/water/session schemas
+    // changes, and losing it costs the farmer one tap.
+    const ACTIVE_FIELD_STORAGE_KEY = "suimonNaviActiveFieldV1";
+
+    function readStoredActiveFieldId() {
+      try {
+        return localStorage.getItem(ACTIVE_FIELD_STORAGE_KEY) || "";
+      } catch {
+        return "";
+      }
+    }
+
+    function writeStoredActiveFieldId(fieldId) {
+      try {
+        if (fieldId) {
+          localStorage.setItem(ACTIVE_FIELD_STORAGE_KEY, fieldId);
+        } else {
+          localStorage.removeItem(ACTIVE_FIELD_STORAGE_KEY);
+        }
+      } catch {
+        // Storage full/unavailable -- the choice simply won't persist.
+      }
+    }
+
+    /**
+     * Restores (or, failing that, defaults) the active field, then lets the
+     * normal change handler fan it out to every dependent surface. Only ever
+     * acts when nothing valid is selected, so it can never override a choice
+     * the farmer just made.
+     */
+    function ensureActiveFieldSelected() {
+      const select = document.getElementById("basicActiveFieldSelect");
+      if (!select) {
+        return;
+      }
+      const fields = fieldAnnotationController?.fields || [];
+      if (fields.length === 0) {
+        return;
+      }
+      const isValid = (id) => Boolean(id) && fields.some((field) => field.id === id);
+      if (isValid(select.value)) {
+        return;
+      }
+      const stored = readStoredActiveFieldId();
+      const next = isValid(stored) ? stored : fields[0].id;
+      select.value = next;
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+
+    /**
+     * 基本モード's single field context: 現在の田圃.
+     *
+     * Read-only, and deliberately the ONLY field selector a farmer sees.
+     * The metadata below (元NMEA / 測位信頼性 / 有効測位点 / 水管理ポイント /
+     * 観察メモ) is exactly what 対象圃場 / 使用データ used to show as a second
+     * card -- same fieldReportController report, read here instead of
+     * duplicated, so the two can never disagree. Everything raw
+     * (GPS単独/DGPS split, 判断プロファイル, data-kind) stays in Settings.
+     */
     function renderBasicFieldSummary() {
       const select = document.getElementById("basicActiveFieldSelect");
       const selectRow = document.getElementById("basicFieldSelectRow");
@@ -4484,11 +4788,16 @@
       }
       const fields = fieldAnnotationController?.fields || [];
       selectRow.hidden = fields.length === 0;
-      const recordWaterButton = document.getElementById("basicRecordWaterButton");
-      const viewResultsButton = document.getElementById("basicViewResultsButton");
-      if (recordWaterButton) recordWaterButton.disabled = fields.length === 0;
-      if (viewResultsButton) viewResultsButton.disabled = fields.length === 0;
       const field = fields.find((candidate) => candidate.id === select.value);
+      const hasField = Boolean(field);
+      [
+        "basicRecordWaterButton",
+        "basicViewResultsButton",
+        "basicAddWaterPointButton"
+      ].forEach((id) => {
+        const button = document.getElementById(id);
+        if (button) button.disabled = !hasField;
+      });
       if (!field) {
         emptyState.hidden = fields.length > 0;
         summary.hidden = true;
@@ -4497,6 +4806,25 @@
       emptyState.hidden = true;
       summary.hidden = false;
       areaLabel.textContent = formatAreaBasic(field.properties?.areaM2);
+
+      const setText = (id, value) => {
+        const element = document.getElementById(id);
+        if (element) element.textContent = value;
+      };
+      // buildReportFor() is the same call renderDecisionRegisteredField()
+      // makes; if it is not available yet the card still shows name + area
+      // rather than blanking out.
+      const report = fieldReportController?.buildReportFor(field.id);
+      if (!report) {
+        ["basicFieldSourceFile", "basicFieldReliability", "basicFieldValidPoints",
+          "basicFieldWaterPoints", "basicFieldObservations"].forEach((id) => setText(id, "—"));
+        return;
+      }
+      setText("basicFieldSourceFile", report.surveyLog.found ? (report.surveyLog.sourceFileName || "—") : "—");
+      setText("basicFieldReliability", report.reliabilityCheck.label);
+      setText("basicFieldValidPoints", report.surveyLog.found ? `${report.surveyLog.validCount}点` : "—");
+      setText("basicFieldWaterPoints", `${report.waterControlPoints.length}件`);
+      setText("basicFieldObservations", `${report.observations.length}件`);
     }
 
     /**
@@ -4537,14 +4865,28 @@
     // anywhere else in this app to read from, so this compares only the value
     // being entered right now against an explicit, unpersisted-if-never-set
     // target. New storage key, does not touch any existing schema.
+    //
+    // Read/written through `accountScopedStorage` rather than localStorage
+    // directly: while a farmer is signed in this key is namespaced to their
+    // user id, so two farmers sharing one phone cannot see each other's target
+    // levels. For a guest the scoped storage resolves to the original,
+    // unprefixed key -- byte-identical to before.
     const TARGET_WATER_LEVEL_STORAGE_KEY = "suimonNaviTargetWaterLevelV1";
 
     function readTargetWaterLevels() {
       try {
-        const raw = localStorage.getItem(TARGET_WATER_LEVEL_STORAGE_KEY);
+        const raw = accountScopedStorage.getItem(TARGET_WATER_LEVEL_STORAGE_KEY);
         return raw ? JSON.parse(raw) : {};
       } catch {
         return {};
+      }
+    }
+
+    function writeTargetWaterLevels(all) {
+      try {
+        accountScopedStorage.setItem(TARGET_WATER_LEVEL_STORAGE_KEY, JSON.stringify(all));
+      } catch {
+        // Storage full/unavailable -- the target simply won't persist across reloads.
       }
     }
 
@@ -4558,11 +4900,8 @@
       } else {
         delete all[fieldId];
       }
-      try {
-        localStorage.setItem(TARGET_WATER_LEVEL_STORAGE_KEY, JSON.stringify(all));
-      } catch {
-        // Storage full/unavailable -- the target simply won't persist across reloads.
-      }
+      writeTargetWaterLevels(all);
+      authController?.notifyLocalChange();
     }
 
     function loadTargetWaterLevelForActiveField() {
@@ -5565,7 +5904,12 @@
 
     function syncLayerVisibility() {
       setLayerVisible(fieldLayer, showFieldLayerInput.checked);
-      const showLegacySurveyLayers = activeWorkspace !== "assurance";
+      // 測量チェック draws its own comparison layers and hides the plain QZ1
+      // point layer so the two do not overlap. 選択中データの測位点を表示 now
+      // lives in that workspace (it moved with the QZ1/DGNSS card), and its
+      // whole purpose is to put those points on the map -- so an explicit
+      // request wins over the blanket hide until the workspace changes.
+      const showLegacySurveyLayers = activeWorkspace !== "assurance" || proofPointsRequested;
       setLayerVisible(pointLayer, showLegacySurveyLayers && showQz1LayerInput.checked);
       // The Stage-1 candidate boundary is derived from those same QZ1 points,
       // so it follows their gate rather than floating over a hidden track.
@@ -5589,11 +5933,13 @@
       // 今日の水門判断 is no longer reachable only through the 判断デモ
       // workspace -- it is the headline of 基本モード, where activeWorkspace is
       // whatever the mode defaulted to. Keying purely off the workspace would
-      // leave the farmer's verdict, field summary and proof card stale.
-      if (activeWorkspace === "decision" || document.body.dataset.mode === "basic") {
+      // leave the farmer's verdict and field summary stale. "assurance" is in
+      // the list because QZ1 / DGNSS 測位品質 now lives in 測量チェック.
+      if (activeWorkspace === "decision" || activeWorkspace === "assurance" || document.body.dataset.mode === "basic") {
         populateDecisionFieldOptions();
         renderDecisionFieldSummary();
         renderProofCard();
+        renderBasicFieldSummary();
       }
       // The generic [data-workspace] unhide pass above always reveals
       // fieldRegDialog when entering 圃場データ, regardless of whether an
@@ -5948,8 +6294,13 @@
     // Displays the currently selected 対象圃場/使用データ's own points on the
     // shared map — separate from renderProofCard(), which shows the metrics
     // regardless of whether this has been clicked.
+    // Set by 選択中データの測位点を表示, cleared on any workspace change: see
+    // syncLayerVisibility().
+    let proofPointsRequested = false;
+
     async function showSelectedDatasetOnMap() {
       const value = decisionFieldSelect?.value || "";
+      proofPointsRequested = true;
       if (value === DECISION_SAMPLE_VALUE) {
         await loadBundledProof();
         await renderProofCard();
@@ -6095,6 +6446,7 @@
         workspace = "decision";
       }
       activeWorkspace = workspace;
+      proofPointsRequested = false;
       document.body.dataset.workspace = workspace;
       // Workspaces are a Settings-only concept (they are the nested
       // settings/* routes). In 基本 / ドローン the workspace tabs are not even
@@ -6781,16 +7133,74 @@
       refreshFieldOverlay();
     }
 
+    // The NMEA pickers carry no `accept` filter (see #basicNmeaInput), so
+    // anything the OS let the farmer tap arrives here -- including, on iOS,
+    // a .nmea File whose .type is "" or "application/octet-stream". Neither
+    // the name nor the MIME type is trusted: only the bytes are.
+    let nmeaIntakeApi = null;
+
+    async function loadNmeaIntakeApi() {
+      if (!nmeaIntakeApi) {
+        nmeaIntakeApi = await import("./js/gnss/nmea-file-intake.js");
+      }
+      return nmeaIntakeApi;
+    }
+
+    function reportNmeaRejected(message) {
+      setEmptyState("NMEAデータを確認できませんでした", message);
+      const basicMessage = document.getElementById("basicNmeaMessage");
+      if (basicMessage) {
+        basicMessage.textContent = message;
+        basicMessage.hidden = false;
+      }
+    }
+
+    function clearNmeaRejection() {
+      const basicMessage = document.getElementById("basicNmeaMessage");
+      if (basicMessage) {
+        basicMessage.textContent = "";
+        basicMessage.hidden = true;
+      }
+    }
+
     /**
      * Shared by the Settings upload control (#fileInput) and Basic mode's own
-     * (#basicNmeaInput). Parsing, map rendering and assurance import are
-     * identical for both; only what happens *after* a successful parse
-     * differs by mode.
+     * (#basicNmeaInput). Reading, validation, parsing, map rendering and
+     * assurance import are identical for both; only what happens *after* a
+     * successful parse differs by mode.
      */
     async function handleNmeaFileSelected(file) {
-      const rawText = await file.text();
+      const { describeNmeaCandidate, NMEA_INTAKE_REJECTED_MESSAGE } = await loadNmeaIntakeApi();
+
+      let rawText = null;
+      try {
+        rawText = await file.text();
+      } catch (error) {
+        // An unreadable pick (a still-downloading iCloud file, a revoked
+        // handle) is the same story for the farmer as an unusable one.
+        console.warn("NMEA file could not be read", error);
+      }
+
+      // First gate: does this look like NMEA at all? Cheap, and it runs
+      // before any parser state is touched, so a wrong pick cannot wipe the
+      // track the farmer already had loaded.
+      if (!describeNmeaCandidate({ name: file.name, text: rawText || "" }).accepted) {
+        reportNmeaRejected(NMEA_INTAKE_REJECTED_MESSAGE);
+        return;
+      }
+
+      clearNmeaRejection();
+      // Second gate: the EXISTING parser decides whether there are usable
+      // fixes. applyNmeaText() returns false (and leaves its own detailed
+      // empty state) when there are none; the farmer-readable line is added
+      // on top so Basic mode never shows only parser vocabulary.
       const loaded = applyNmeaText(rawText, file.name);
       if (!loaded) {
+        const basicMessage = document.getElementById("basicNmeaMessage");
+        if (basicMessage) {
+          basicMessage.textContent = NMEA_INTAKE_REJECTED_MESSAGE;
+          basicMessage.hidden = false;
+        }
         return;
       }
       if (document.body.dataset.mode === "basic") {
@@ -6933,6 +7343,7 @@
       cascadeTo("obsTargetFieldSelect"); // not auto-synced from the above -- the one real gap this closes
       cascadeTo("decisionFieldSelect");
       cascadeTo("reportFieldSelect");
+      writeStoredActiveFieldId(fieldId);
       renderBasicFieldSummary();
       renderDroneModeGate();
       loadTargetWaterLevelForActiveField();
@@ -6953,6 +7364,27 @@
         const card = document.getElementById("basicStage1Card");
         scrollElementWithinPanel(card, { block: "start" });
         document.getElementById(parsedPoints.length > 0 ? "basicPickStartButton" : "basicNmeaInput")?.focus();
+      }, 100);
+    });
+    // 水管理ポイントを追加, from the farmer's own field card. Same destination
+    // as Settings' 水管理ポイントを追加する, minus the field-picking step: the
+    // active field is already chosen, so it is simply carried across.
+    document.getElementById("basicAddWaterPointButton")?.addEventListener("click", () => {
+      const targetFieldId = document.getElementById("basicActiveFieldSelect")?.value;
+      switchWorkspace("fields");
+      window.setTimeout(() => {
+        const waterPanel = document.getElementById("waterControlPanel");
+        const wcpSelect = document.getElementById("wcpTargetFieldSelect");
+        if (targetFieldId && wcpSelect && [...wcpSelect.options].some((option) => option.value === targetFieldId)) {
+          wcpSelect.value = targetFieldId;
+          wcpSelect.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+        if (waterPanel) {
+          waterPanel.open = true;
+          waterPanel.hidden = false;
+          scrollElementWithinPanel(waterPanel, { block: "start" });
+        }
+        document.getElementById("wcpAddGateButton")?.focus();
       }, 100);
     });
     document.getElementById("basicRecordWaterButton")?.addEventListener("click", () => {
@@ -7080,6 +7512,17 @@
     (async function init() {
       initSerialCard();
       try {
+        // Must land BEFORE FieldAnnotationController is constructed: the
+        // controller captures `options.storage` once, and that object is what
+        // AuthController later re-points at a signed-in farmer's namespace.
+        const { ScopedStorage } = await import("./js/cloud/user-scope.js");
+        accountScopedStorage = new ScopedStorage(localStorage);
+      } catch (error) {
+        // Falls back to the plain-localStorage literal above: guest-scope
+        // behavior, which is the correct degradation.
+        console.error("Storage scoping initialization failed", error);
+      }
+      try {
         boundarySelectionApi = await import("./js/fields/boundary-selection.js");
       } catch (error) {
         console.error("Boundary selection initialization failed", error);
@@ -7110,6 +7553,12 @@
           getPhonePoints: () => phonePoints,
           getSourceLabel: () => activePointSource,
           getSmartphonePosition: getSmartphoneGeolocation,
+          // The one line that makes accounts possible without touching the
+          // repository itself: `options.storage` was always injectable, so
+          // per-user namespacing is a storage concern, not a domain concern.
+          // In the guest scope this resolves to exactly the keys the
+          // controller has always used.
+          storage: accountScopedStorage,
           // Observation placement mode must not fight paddy-intelligence.js's
           // own live map-click drawing (drone-mission zones / annotations)
           // for the next click — cancel it the moment placement mode starts.
@@ -7120,10 +7569,19 @@
           // once the user happens to visit 判断デモ/詳細解析 (which populate
           // lazily on their own mount/refresh).
           onFieldsChanged: () => {
+            // Reports first: 現在の田圃 now reads its 元NMEA/測位信頼性/
+            // 有効測位点 metadata out of fieldReportController, so refreshing
+            // it afterwards would render the card from the previous state.
+            fieldReportController?.refresh();
+            ensureActiveFieldSelected();
             renderBasicFieldSummary();
             renderDroneModeGate();
             populateDecisionFieldOptions();
-            fieldReportController?.refresh();
+            // Local write already happened (the controller persists before it
+            // notifies). This only queues the cloud copy, and is a no-op for
+            // a guest or an unconfigured install -- a registration is never
+            // waiting on the network to be real.
+            authController?.notifyLocalChange();
           },
           // 選び直す / キャンセル on the Stage-1 dialog: nothing was created,
           // so the trimming panel and the START/END markers come straight
@@ -7155,10 +7613,60 @@
         populateDecisionFieldOptions();
         renderDecisionFieldSummary();
         renderProofCard();
+        // 現在の田圃 was rendered once already, before any report data
+        // existed; now that it does, restore the farmer's field and fill in
+        // the merged metadata.
+        ensureActiveFieldSelected();
+        renderBasicFieldSummary();
       } catch (error) {
         console.error("Field report initialization failed", error);
         const warning = document.getElementById("reportMessage");
         if (warning) warning.textContent = `圃場レポートを初期化できませんでした: ${error.message}`;
+      }
+      try {
+        // Accounts. Mounted after the field + report controllers because it
+        // reads through both, and deliberately NOT awaited by anything the
+        // farmer needs: if this whole block fails the app is the offline-first
+        // app it has always been.
+        const { AuthController } = await import("./js/auth/auth-controller.js");
+        authController = new AuthController({
+          getFieldController: () => fieldAnnotationController,
+          scopedStorage: accountScopedStorage,
+          backingStorage: localStorage,
+          // A scope change swapped the underlying data set for a different
+          // farmer, so every surface that reads fields has to be rebuilt --
+          // the same list onFieldsChanged refreshes after a registration.
+          onScopeChanged: () => {
+            fieldReportController?.refresh();
+            ensureActiveFieldSelected();
+            renderBasicFieldSummary();
+            renderDroneModeGate();
+            populateDecisionFieldOptions();
+            loadTargetWaterLevelForActiveField();
+          },
+          // あなたの圃場 is a view, not a second selector: it drives the ONE
+          // authoritative active-field control, whose existing change handler
+          // cascades to every other surface.
+          onSelectField: (fieldId) => {
+            const select = document.getElementById("basicActiveFieldSelect");
+            if (select && [...select.options].some((option) => option.value === fieldId)) {
+              select.value = fieldId;
+              select.dispatchEvent(new Event("change", { bubbles: true }));
+            }
+          },
+          // ＋ 新しい圃場を測る is the same journey as 圃場を測る, so it reuses
+          // that button rather than forking a second registration entry point.
+          onRequestNewField: () => document.getElementById("basicMeasureFieldButton")?.click(),
+          getWaterTargets: () => readTargetWaterLevels(),
+          setWaterTargets: (values) => {
+            writeTargetWaterLevels(values);
+            loadTargetWaterLevelForActiveField();
+          }
+        });
+        await authController.mount();
+        window.authController = authController;
+      } catch (error) {
+        console.error("Account initialization failed", error);
       }
       try {
         const { SatelliteAssuranceController } = await import("./js/assurance/satellite-assurance-controller.js");

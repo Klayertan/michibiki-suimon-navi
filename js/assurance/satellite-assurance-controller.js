@@ -1,4 +1,5 @@
 import { parseNmeaSession } from "../gnss/nmea-parser.js";
+import { NMEA_INTAKE_REJECTED_MESSAGE, describeNmeaCandidate } from "../gnss/nmea-file-intake.js";
 import { GnssStore, makeId } from "../gnss/gnss-store.js";
 import { FieldRegistry } from "../fields/field-registry.js";
 import {
@@ -119,7 +120,14 @@ export class SatelliteAssuranceController {
     const file = event.target.files?.[0];
     if (!file) return;
     try {
-      this.importNmeaText(await file.text(), { receiverId, sourceName: file.name, captureDate: this.elements.assuranceCaptureDate.value || null });
+      // These inputs carry no `accept` filter (iOS greys out .nmea when they
+      // do), so what arrives is validated by content here instead.
+      const text = await file.text();
+      if (!describeNmeaCandidate({ name: file.name, text }).accepted) {
+        this.setWarnings([NMEA_INTAKE_REJECTED_MESSAGE]);
+        return;
+      }
+      this.importNmeaText(text, { receiverId, sourceName: file.name, captureDate: this.elements.assuranceCaptureDate.value || null });
     } catch (error) {
       this.setWarnings([`読み込み失敗: ${error.message}`]);
     } finally {
