@@ -1,520 +1,562 @@
-# Stage-1 accounts and cloud field persistence
+# Stage-1 Accounts + Cloud Field Persistence
 
 A farmer can create an account, log in, see only their own registered 田圃,
-select one, keep using 基本モード exactly as before, log out, and log back in on
-another device to recover the same field data.
+select one, keep using 基本モード unchanged, log out, and log back in on
+another device to recover the same fields.
 
-The offline app was not touched. **スイスイナビ still works with no account and
-no network**, and that is the state the repository ships in.
+**The offline app is untouched.** No account is required for anything. With the
+configuration this repository ships (`config/cloud-config.js`, empty), there is
+no login screen, no account control, and the local storage keys are byte-for-byte
+what they were before this change.
 
----
-
-## 1. Executive summary
-
-| | |
-|---|---|
-| **Provider** | Supabase (Auth + Postgres + Row Level Security) |
-| **Passwords** | Never stored, hashed, compared or logged by this code |
-| **Ships enabled?** | **No.** `config/cloud-config.js` has no credentials, so there is no login screen and no behavior change until an operator completes `docs/SUPABASE_SETUP.md`. |
-| **Guest mode** | Unchanged and unconditional. NMEA → boundary → area → register → water management all work signed out. |
-| **Local-first** | Every write lands on the device first. A sync failure is a status, never a lost paddy. |
-| **Isolation** | Enforced in the database by RLS on `owner_id = auth.uid()`, not by frontend filtering. |
-| **Local record shape** | Unchanged. `buildField()` and the five persisted arrays are byte-identical; sync bookkeeping lives in a separate sidecar. |
-| **Tests** | 324 unit (81 new), 274 browser (33 new), plus a database-level RLS script |
+Setup: [SUPABASE_SETUP.md](SUPABASE_SETUP.md).
+Prior work: [STAGE1_FIELD_WORKFLOW_SIMPLIFICATION.md](STAGE1_FIELD_WORKFLOW_SIMPLIFICATION.md).
 
 ---
 
-## 2. Architecture
+## 1. Architecture
 
 ```
-                     ┌──────────────────────────────────────────┐
-  index.html  ─────► │ AuthController                           │
-  (init sequence)    │  login screen · header menu ·            │
-                     │  あなたの圃場 · import offer · Settings    │
-                     └───────┬──────────────────────┬───────────┘
-                             │                      │
-                 ┌───────────▼──────────┐  ┌────────▼───────────┐
-                 │ AuthClient           │  │ FieldSyncService   │
-                 │  Supabase | Mock     │  │  debounce, queue,  │
-                 │  session, sign-in    │  │  status            │
-                 └──────────────────────┘  └────────┬───────────┘
-                                                    │
-                                    ┌───────────────┴───────────┐
-                                    │                           │
-                        ┌───────────▼──────────┐   ┌────────────▼─────────┐
-                        │ field-sync-core.js   │   │ CloudFieldStore      │
-                        │ PURE merge rules     │   │  Supabase | Mock     │
-                        └──────────────────────┘   └──────────────────────┘
-
-  ScopedStorage ───► FieldAnnotationController ───► localStorage
-  (per-user key)     (unchanged domain boundary)
+                         ┌──────────────────────────┐
+  farmer's actions ─────▶│  Basic Mode (index.html) │
+                         └────────────┬─────────────┘
+                                      │  (unchanged call sites)
+                         ┌────────────▼─────────────┐
+                         │ FieldAnnotationController│  domain + local persistence
+                         └────────────┬─────────────┘
+                                      │  options.storage
+                         ┌────────────▼─────────────┐
+                         │  ScopedStorage           │  guest → original keys
+                         │  js/cloud/user-scope.js  │  signed in → ::u:<uid>
+                         └────────────┬─────────────┘
+                                      │
+                                 localStorage
+                                      ▲
+                                      │  reads / writes merged records
+                         ┌────────────┴─────────────┐
+      ✓ ⟳ ! status ◀─────│  FieldSyncService        │  debounced, never blocking
+                         └────────────┬─────────────┘
+                                      │
+                         ┌────────────▼─────────────┐
+                         │ SupabaseCloudStore       │ (or MockCloudStore in tests)
+                         └────────────┬─────────────┘
+                                      │  PostgREST + JWT
+                         ┌────────────▼─────────────┐
+                         │ Postgres + RLS           │  owner_id = auth.uid()
+                         └──────────────────────────┘
 ```
+
+Two rules shape it:
+
+**The local repository stays the domain boundary.** `FieldAnnotationController`
+was not rewritten and `buildField()` was not touched. The account feature
+attaches at exactly two seams that already existed: `options.storage` (which is
+how per-user namespacing works) and `onFieldsChanged` (which is how the sync
+queue learns about a change).
+
+**Cloud sync sits beside the repository, never in front of it.** Nothing in
+the field workflow awaits a network call. A registration is written to
+localStorage and rendered before the sync service is even told about it.
 
 ### Files
 
 **New**
 
-| File | Lines | Purpose |
-|---|---:|---|
-| `js/auth/auth-state.js` | 128 | Pure state machine; decides when the login screen may appear |
-| `js/auth/auth-errors.js` | 133 | Provider errors → farmer-readable Japanese |
-| `js/auth/auth-controller.js` | 950 | All DOM binding for the account surfaces |
-| `js/auth/supabase-auth-client.js` | 163 | Supabase Auth adapter |
-| `js/auth/mock-auth-client.js` | 183 | In-memory provider for tests |
-| `js/cloud/cloud-config.js` | 167 | Config normalization, redirect resolution, service_role guard |
-| `js/cloud/user-scope.js` | 160 | `ScopedStorage` — per-user namespacing of the local repositories |
-| `js/cloud/field-sync-core.js` | 385 | **Pure** record↔row mapping, merge, queue, status |
-| `js/cloud/field-sync-service.js` | 372 | Orchestration: triggers, debounce, error handling |
-| `js/cloud/supabase-client.js` | 69 | Lazy SDK loader |
-| `js/cloud/supabase-cloud-store.js` | 141 | Postgres adapter |
-| `js/cloud/mock-cloud-store.js` | 247 | In-memory store that simulates RLS |
-| `css/auth.css` | 460 | Login screen, account menu, field tiles, sync chip |
-| `config/cloud-config.js` | 53 | The one file an operator edits |
-| `supabase/migrations/001_accounts_fields.sql` | 368 | Schema + RLS |
-| `supabase/tests/rls_verification.sql` | 161 | Database-level isolation proof |
-| `tests/unit/auth-state.test.js` | 192 | 25 tests |
-| `tests/unit/auth-errors.test.js` | 83 | 8 tests |
-| `tests/unit/cloud-config.test.js` | 113 | 12 tests |
-| `tests/unit/user-scope.test.js` | 153 | 12 tests |
-| `tests/unit/field-sync-core.test.js` | 257 | 24 tests |
-| `tests/browser/auth-cloud-fields.spec.js` | 771 | 33 tests (35 with the two mobile viewports) |
-| `docs/SUPABASE_SETUP.md` | — | Operator setup |
-| `docs/STAGE1_AUTH_CLOUD_FIELDS.md` | — | This report |
+| File | Purpose |
+|---|---|
+| `config/cloud-config.js` | Committed frontend configuration. Empty in the shipped state. |
+| `js/cloud/cloud-config.js` | Config normalisation, redirect-URL derivation, `service_role` guard. Pure. |
+| `js/cloud/user-scope.js` | `ScopedStorage` — per-user namespacing of the existing keys. |
+| `js/cloud/field-sync-core.js` | Record↔row mapping, merge rules, import planning, status. Pure. |
+| `js/cloud/field-sync-service.js` | Orchestration: queue, debounce, two-way sync, status events. |
+| `js/cloud/supabase-client.js` | Lazy CDN load of the Supabase SDK. |
+| `js/cloud/supabase-cloud-store.js` | Postgres adapter. |
+| `js/cloud/mock-cloud-store.js` | RLS-simulating in-memory store, for tests. |
+| `js/auth/auth-state.js` | State machine + login-screen visibility rules. Pure. |
+| `js/auth/auth-errors.js` | Provider errors → Japanese. Pure. |
+| `js/auth/auth-controller.js` | All DOM binding for the account surfaces. |
+| `js/auth/supabase-auth-client.js` | Supabase Auth adapter. |
+| `js/auth/mock-auth-client.js` | In-memory auth provider, for tests. |
+| `css/auth.css` | Login screen, account menu, 圃場 tiles, sync chip. |
+| `supabase/migrations/001_accounts_fields.sql` | Schema + RLS. |
+| `supabase/tests/rls_verification.sql` | Database-level cross-user verification. |
+| `tests/unit/cloud-config.test.js` | 12 tests |
+| `tests/unit/auth-state.test.js` | 15 tests |
+| `tests/unit/auth-errors.test.js` | 8 tests |
+| `tests/unit/user-scope.test.js` | 12 tests |
+| `tests/unit/field-sync-core.test.js` | 24 tests |
+| `tests/browser/auth-cloud-fields.spec.js` | 35 tests |
+| `docs/STAGE1_AUTH_CLOUD_FIELDS.md`, `docs/SUPABASE_SETUP.md` | This report and the setup guide |
 
 **Modified**
 
 | File | Change |
 |---|---|
-| `index.html` | Login screen markup, header account control + sync chip, `あなたの圃場` card, import-offer card, `設定 → アカウント` panel, `<script src="config/cloud-config.js">`, `ScopedStorage` bootstrap, `storage:` injection into `FieldAnnotationController`, `AuthController` mount, target-water-level reads routed through the scoped storage |
-| `js/fields/field-annotation-controller.js` | `hydrateFromStorage()` now **replaces** in-memory state instead of returning early on an empty scope (see §9), extracted as `resetInMemoryState()` |
-
-Nothing else in the field, water, drone, recording, report or assurance code
-changed.
+| `index.html` | Login screen markup; account control in the header after 使い方; あなたの圃場 card; local-import prompt; 設定 → アカウント panel; `config/cloud-config.js` script tag; `accountScopedStorage`; `storage:` passed to `FieldAnnotationController`; `authController.notifyLocalChange()` in `onFieldsChanged`; target water levels routed through the scoped storage; AuthController mounted in `init()` |
+| `js/fields/field-annotation-controller.js` | `hydrateFromStorage()` now calls a new `resetInMemoryState()` first — see §9 |
+| `css/stage1-basic.css` | untouched by this work |
 
 ---
 
-## 3. Why a provider, and not our own password table
-
-The brief forbids custom password storage; this implementation contains none.
-
-Doing it properly would mean owning Argon2id/bcrypt parameters, per-user salts,
-timing-safe comparison, credential-stuffing rate limits, breached-password
-screening, email-verification token issue and expiry, recovery-token rotation,
-and session revocation. Every one of those is a way to leak a farmer's
-credentials, and none of them is this project's problem. Supabase Auth owns all
-of it.
-
-Concretely, in this codebase:
-
-- No password is ever written to `localStorage`, IndexedDB, a log, or a URL.
-- The password input is cleared the moment the provider has been called
-  (`clearCredentialInputs()`), so an unlocked shared phone does not hand the
-  next person a filled-in field.
-- `MockAuthClient` — used only by tests — compares two in-memory strings and
-  persists no password anywhere.
-
-Supabase was chosen because the domain is relational (users → fields → water
-points / observations), because Postgres RLS gives database-level authorization
-rather than frontend filtering, and because it works from a static GitHub Pages
-site with no server. No alternative was silently substituted.
-
----
-
-## 4. Login UX
+## 2. Login UX
 
 ```
-              水
-        スイスイナビ
-     圃場管理をもっと簡単に
+                        水
+                   スイスイナビ
+               圃場管理をもっと簡単に
 
-  メールアドレス
-  [__________________________]
+    メールアドレス
+    [__________________________]
 
-  パスワード
-  [__________________________]
+    パスワード
+    [__________________________]
 
-  [        ログイン         ]
-  ────────────────────────────
-         初めての方
-  [    アカウントを作成      ]
+    [        ログイン           ]
+    ─────────────────────────────
+              初めての方
+    [     アカウントを作成      ]
 
-      ログインせずに使う
+           ログインせずに使う
 
   ログインしなくても、圃場の測量・面積計算・
   水管理はこの端末だけで使えます。
 ```
 
-One column, Japanese-first, no marketing. `アカウントを作成` swaps the same form
-into sign-up mode and reveals an optional お名前 field.
+One column, Japanese-first, no marketing. `アカウントを作成` switches the same
+form into sign-up mode and reveals an optional お名前 field. Inputs are 48px
+tall with `font-size: 16px` (below 16px, iOS Safari zooms the viewport on focus
+and pushes the submit button off-screen).
 
-**Signed-in header** — the account control sits after 使い方, which stays
-exactly where it was:
-
-```
-スイスイナビ                      [? 使い方] [✓ 同期済み] [ Kai ▾ ]
-```
-
-The menu holds the email, the state, the sync line, `今すぐ同期`, and
-`ログアウト`. Nothing else was added to the header.
-
-**あなたの圃場** appears in 基本モード above 現在の田圃:
-
-```
-あなたの圃場
-┌──────────────┐  ┌──────────────┐
-│ 北田          │  │ 南田          │
-│ 4,286 m²      │  │ 3,910 m²      │
-└──────────────┘  └──────────────┘
-[ ＋ 新しい圃場を測る ]
-```
-
-### When the login screen appears — and when it must not
+### When it appears — and when it must not
 
 `shouldShowLoginScreen()` in `js/auth/auth-state.js`, unit-tested:
 
-| Situation | Login screen |
+| Situation | Screen? |
 |---|---|
-| Session still being restored (`unknown`) | **No** — this is the flash §21 forbids |
+| Session still being restored (`unknown`) | **No** — this is the flash the brief forbids |
 | No cloud configured (`unavailable`) — the shipped state | **No** |
 | Signed in, online or offline | **No** |
 | Farmer previously chose ログインせずに使う | **No** |
 | Farmer asked for it from the account menu | **Yes** |
-| Cloud available, nobody has decided yet | **Yes**, once |
+| Cloud available, nobody has decided yet | **Yes** |
+| Last attempt failed | **Yes**, with the error, so it can be retried |
 
-### Error messages
+The guest choice is stored in `suimonNaviAuthChoiceV1` and survives reloads.
 
-Every provider error passes through `authErrorMessage()`. A farmer never sees
-`Invalid login credentials`, a status code, or a stack trace.
+### Header
 
-| Cause | Shown |
-|---|---|
-| Wrong password | メールアドレスまたはパスワードが違います。 |
-| Duplicate email | このメールアドレスは既に登録されています。ログインしてください。 |
-| Weak password | パスワードが短すぎます。8文字以上にしてください。 |
-| Invalid email | メールアドレスの形式が正しくありません。 |
-| Unconfirmed email | メールの確認が完了していません。届いた確認メールのリンクを開いてください。 |
-| Rate limited | 試行回数が多すぎます。しばらく待ってからもう一度お試しください。 |
-| **Offline** | インターネットに接続できません。オフラインのままでも「ログインせずに使う」で作業を続けられます。 |
-| Server 5xx | クラウド側で問題が発生しました。データは端末に保存されています。 |
+```
+スイスイナビ                        [? 使い方]  [✓ 同期済み]  [ Kai ▾ ]
+```
 
-A dropped connection is never reported as a wrong password — that would send a
-farmer hunting for a typo that does not exist, and imply their data was gone.
+`? 使い方` is unchanged and still present in every mode. The account control is
+added after it and is hidden entirely when no cloud is configured. The menu
+holds the email, the status line, 今すぐ同期, and ログアウト — nothing else.
 
 ---
 
-## 5. Guest mode
+## 3. Guest mode
 
-`ログインせずに使う` is not a degraded mode. A guest can load NMEA, pick
-START/END, build a polygon, see the area, register a 田圃, add water-management
-points, record water levels and read 今日の水門判断 — all of it, with no
-account and no network.
+`ログインせずに使う` is a first-class path, not a downgrade. A guest can load
+NMEA, pick START/END, build the polygon, read the area, register the field,
+manage water points, set a target water level and see 今日の水門判断 — the
+entire Stage-1 workflow, on the device, with no network.
 
-The choice is remembered (`suimonNaviAuthChoiceV1`), so the screen is not shown
-again. Guest data is written to the **original, unprefixed** storage keys, so a
-device that never signs in is byte-identical to the app before this change.
-That is asserted by both a unit test and a browser test.
+Guest data is written to the **original, unprefixed** storage keys. Pinned by a
+browser test that registers a field with no cloud configured and asserts the
+only field key in localStorage is `suimonNaviFieldAnnotationsV2`.
 
 ---
 
-## 6. Ownership model and database schema
+## 4. Database schema
 
-```
-auth.users
-  └── profiles (display_name — a label, never an authorization input)
-  └── fields
-        ├── water_control_points
-        ├── field_observations
-        └── field_water_targets
-```
+Five tables. Full DDL in `supabase/migrations/001_accounts_fields.sql`.
 
-Ownership is `owner_id`, never a display name. `owner_id` defaults to
-`auth.uid()` in the database and the browser never sends it.
-
-### fields
-
-| Column | Notes |
+| Table | Key columns |
 |---|---|
-| `id uuid` | Cloud primary key, generated. Never a human-readable name. |
-| `owner_id uuid` | `default auth.uid()` |
-| `legacy_field_id text` | The device id (`paddy-001`). **Unique per owner**, and the sync matching key. |
-| `name`, `area_m2`, `source_nmea_filename`, `boundary jsonb` | Denormalized for querying and support |
-| `record jsonb` | **The verbatim local record.** Authority for round-trip. |
-| `local_updated_at` | The record's own `properties.updatedAt` at upload time |
+| `profiles` | `user_id` (PK, `auth.uid()`), `display_name` |
+| `fields` | `id` uuid PK, `owner_id`, `legacy_field_id`, `name`, `area_m2`, `source_nmea_filename`, `boundary` jsonb, `record` jsonb, `local_updated_at`; unique `(owner_id, legacy_field_id)` |
+| `water_control_points` | `id` uuid PK, `owner_id`, `field_id`, `legacy_point_id`, `legacy_field_id`, `point_type`, `lat`, `lon`, `record`; unique `(owner_id, legacy_point_id)` |
+| `field_observations` | same shape, plus `observation_type`, `severity`; unique `(owner_id, legacy_observation_id)` |
+| `field_water_targets` | PK `(owner_id, legacy_field_id)`, `target_water_level_cm` |
 
-`water_control_points` and `field_observations` follow the same pattern with
-`legacy_point_id` / `legacy_observation_id`, plus a resolved `field_id` FK.
-`field_water_targets` is keyed `(owner_id, legacy_field_id)`.
+### Why `record jsonb`
 
-### Why `record jsonb` rather than full normalization
+The brief says preserving the current field structure may matter more than
+database elegance, and here it does. `buildField()` produces a record the map
+layer, the area calculation, 圃場レポート, the JSON export and roughly a
+hundred existing tests all depend on, and the Stage-1 report explicitly pins
+"Field record shape — `buildField()` not touched".
 
-The brief says preserving the exact current field structure may matter more
-than database elegance, and here it does. `buildField()` produces a record the
-map layer, the area calculation, the 圃場レポート, the export format and the
-existing test suite all depend on, and the Stage-1 report explicitly pins
-"`buildField()` not touched". Round-tripping a paddy through a normalized
-schema risks changing it. So the blob is the authority and the columns are for
-humans. A column drifting out of step can never corrupt a boundary.
+So the cloud row carries the local record verbatim and reconstructs from it
+alone. The denormalized columns exist so the table is queryable and so a
+support question is answerable in the Supabase table editor — they are never
+read back. A column drifting out of step with the blob cannot corrupt a paddy
+boundary.
 
-### Semantics deliberately preserved
+### IDs
+
+`id` is a `uuid` from `gen_random_uuid()`. A human-readable name is never a
+primary key. The device's own id (`paddy-001`) is kept in `legacy_field_id`,
+unique **per owner** — so two farmers can both have a `paddy-001`, and existing
+code that expects `paddy-001` keeps working untouched.
+
+### Legacy semantics preserved
 
 - `relatedFieldId` (water points) and `fieldId` (observations) are **not**
-  merged into one "field" concept — they mean different things in this codebase
-  and the exported JSON would change.
-- `[lat, lon]` tuples stay in Leaflet order. Not flipped to GeoJSON `[lng, lat]`.
-- The exported long-form water types (`water_gate`, `water_inlet`, …) are
-  carried through, not re-derived.
-- `point_type` / `observation_type` are `text`, not enums, so a new type on the
-  device cannot fail an upload.
+  merged into one concept; each maps to its own `legacy_field_id` column and
+  the distinction is asserted by a unit test.
+- `[lat, lon]` tuples stay in that order. `boundary` is the ring exactly as
+  Leaflet holds it.
+- The exported type strings (`water_gate`, `water_inlet`, …) are stored as-is
+  rather than re-derived; `point_type` is deliberately `text`, not an enum, so
+  a new type on the device can never fail an upload.
 
 ---
 
-## 7. What syncs, and what does not
+## 5. Security
 
-**Synced**
+### The model
 
-- fields (polygon, area, source NMEA filename, fix-quality summary, memo)
-- water-management points
-- field observations
-- per-field target water level
+1. `owner_id uuid not null default auth.uid()` on every user-owned table.
+   **The browser never sends `owner_id`** — `js/cloud/supabase-cloud-store.js`
+   omits it from every payload.
+2. RLS `enable` **and** `force` on all five tables. `force` matters: without
+   it the table owner bypasses the policies.
+3. Four policies per table, `to authenticated`, with **both**
+   `using (owner_id = auth.uid())` and `with check (owner_id = auth.uid())`.
+   `using` decides what can be seen; `with check` decides what can be written.
+   A payload naming another farmer is rejected, not silently rewritten.
+4. **No policy exists for `anon`.** An unauthenticated request reads nothing.
+5. The client deliberately does **not** add `.eq("owner_id", …)` to its
+   SELECTs. Adding it would imply the filter is the protection. It is not. If a
+   query could return another farmer's row that is a database bug to fix in the
+   migration, not to hide in JavaScript.
 
-**Local only, on purpose**
+### Verification
 
-| Not synced | Why |
-|---|---|
-| Raw `.nmea` text and survey sessions | A single walk can be megabytes. §8 of the brief rules this out for v1, and the measurement quality that matters (`sourceFileName`, `sourcePointCount`, `fixQualitySummary`) already travels inside the field record. |
-| The IndexedDB recording store | Raw NMEA lines and image blobs, same reason. |
-| **Session-child water-level readings** | Audited before designing the schema: these are `waterLevel` on a *marked observation* inside the recording store, keyed by a recording session, and creating one requires an active WebSerial connection to the QZ1. They belong to the recording session, not the paddy. A `water_measurements` table was therefore **not** invented — an empty table would imply a sync that does not exist. |
-| Boundary tracks | A Settings-only legacy concept the Stage-1 Basic flow can no longer create. |
+`supabase/tests/rls_verification.sql` impersonates two users the way PostgREST
+does and asserts, inside the database:
 
-Settings → 圃場データ → アカウント states this in the UI, in Japanese, so nobody
-is left believing everything syncs.
+- A's two paddies and B's one paddy stay separate even when both use the local
+  id `paddy-001`
+- B reading A's row **by primary key** returns nothing — the "change the field
+  ID" attack named in the brief
+- B's `UPDATE`/`DELETE` against A's rows affect zero rows
+- B's `INSERT` claiming `owner_id = A` raises `insufficient_privilege`
+- anonymous reads return nothing from all five tables
 
-**Target water level** merges by union with the device's value winning. Unlike
-the record types, its existing storage format is a bare `{ fieldId: number }`
-map with no timestamp anywhere, so there is no honest way to decide which side
-is newer. Rather than invent a timestamp and pretend, the rule is documented.
+It ends in `ROLLBACK`. The browser suite checks the same five properties
+against `MockCloudStore`, which implements the same rules — including
+`RlsDeniedError` on a spoofed owner and `NotAuthenticatedError` with no token.
 
----
-
-## 8. Local-first behavior and sync strategy
-
-```
-farmer action
-   ↓
-FieldAnnotationController.persist()      ← already done, unchanged
-   ↓
-onFieldsChanged → authController.notifyLocalChange()
-   ↓
-FieldSyncService.scheduleSync()          ← debounced 2.5s, non-blocking
-   ↓
-runSync(): merge → upload → download → apply
-```
-
-No button click waits on the network. Sync runs on sign-in, on an explicit
-`今すぐ同期`, when the browser reports the network returned, and debounced after
-a local change.
-
-**Conflict rule — last write wins**, compared on the records' own
-`properties.updatedAt` on both sides (the cloud row's `local_updated_at` holds
-what that value was at upload). A client clock is therefore only ever compared
-with another client clock, so server/client skew never decides which polygon
-survives. A genuine three-way merge of a boundary is not attempted in v1.
-
-**Matching is by the device id, not the cloud UUID.** A farmer who registers a
-paddy offline on a phone and again on a tablet would otherwise get two rows for
-one field. `unique (owner_id, legacy_field_id)` makes the upsert idempotent.
-
-**The queue is the persisted sidecar**, `suimonNaviCloudSyncV1`, stored per
-user and separate from the field records. It holds `{ cloudId,
-syncedLocalUpdatedAt, syncedAt, state }` per record, so an edit made with no
-signal is still detected as pending after a reload or a flat battery.
-
-**Deletions** only propagate for rows this device previously synced. A row
-created on another device and never downloaded here is not "deleted here".
-
-A cloud row whose `record` is missing or malformed is skipped rather than
-half-rebuilt, and the device's copy is pushed back up — a field reconstructed
-from columns alone would render as an empty polygon and silently lose the walk.
-
----
-
-## 9. User switching and shared-device privacy
-
-Two farmers can share one phone. The implementation is **option A** from the
-brief: namespace the local caches by user id.
-
-```
-guest        suimonNaviFieldAnnotationsV2
-user abc123  suimonNaviFieldAnnotationsV2::u:abc123
-```
-
-`ScopedStorage` (`js/cloud/user-scope.js`) is a `Storage`-shaped object handed
-to `FieldAnnotationController` through `options.storage` — an injection point
-that already existed. The controller learns nothing about accounts; it remains
-the domain and local-persistence boundary. Three keys are namespaced
-(`…FieldAnnotationsV2`, `…TargetWaterLevelV1`, `…CloudSyncV1`); UI preferences
-stay global.
-
-### The bug this exposed, and the fix
-
-`hydrateFromStorage()` returned early when the key was absent. Harmless while
-it only ran once at mount with empty arrays — but on a user switch it would
-have left **User A's paddies in memory for User B**. It now resets in-memory
-state first, so an empty scope produces an empty controller. `this.selected` is
-reset too, so a selected-feature editor cannot still point at the previous
-scope's record. Covered by
-`user B never sees user A's fields after a switch on the same browser`.
-
-### Logout
-
-Logout ends the cloud session and returns the scope to guest. It **does not
-delete anything** — the signed-out farmer's cache stays under their own key, so
-signing back in on this device is instant and works with no signal. Settings
-says so explicitly:
-「ログアウトしました。この端末に保存された圃場データは削除していません。」
-`clearScope()` exists for an explicit "remove this account from this device"
-and is not wired to logout.
-
----
-
-## 10. Offline behavior
-
-| | |
-|---|---|
-| Cached session, no network | `offline_authenticated` — still signed in. Signing a farmer out because their phone lost signal would hide the paddies they are standing in. |
-| Cached fields | Visible, selectable, map and area intact |
-| New registration offline | Succeeds locally, queued for the cloud |
-| Sync indicator | `⟳ 同期待ち N件` |
-| SDK unreachable (blocked CDN, no signal on first load) | Degrades to `unavailable` — the offline-first app, not a broken one |
-
-A network failure during sync sets `providerUnreachable`, not `lastError`, so
-the chip reads `⟳ 同期待ち` rather than `! 同期エラー`. `!` is reserved for
-something that waiting will not fix.
-
----
-
-## 11. Security review
+### Security audit (brief §35)
 
 | Check | Result |
 |---|---|
-| Passwords logged | **No.** No password reaches `console`, storage, or a URL anywhere in the codebase. |
-| Passwords stored | **No.** Supabase Auth owns credentials; nothing here hashes or persists one. |
-| Tokens printed into the UI | **No.** The account menu shows an email and a status; no token is rendered. |
-| `service_role` key present | **No.** Repository-wide search is clean, and `normalizeCloudConfig()` refuses to start the cloud if one is configured. |
-| RLS enabled | **Yes**, `ENABLE` + `FORCE` on all five tables, four policies each. |
-| Cross-user reads denied | **Yes.** Browser test (`fetchById` returns null, `listFields` returns 0) and `supabase/tests/rls_verification.sql` (by primary key, at the database). |
-| Cross-user writes denied | **Yes.** `UPDATE`/`DELETE` against another owner's row affect zero rows. |
-| `owner_id` spoofable from the browser | **No.** The client never sends it; the column defaults to `auth.uid()` and `WITH CHECK` rejects a mismatch. Both the browser test and the SQL script attempt the spoof and observe a denial. |
-| Anonymous access | **No policy grants `anon` anything.** Verified in both suites. |
-| Logout clears cloud state | **Yes.** Session ended, scope returned to guest, cloud view cleared, `pendingImport` dropped. |
-| User-switch UI leak | **No.** Field list, active-field selector and registered-fields panel are all empty for the second farmer. |
-| Frontend-only filtering | **Deliberately absent.** `supabase-cloud-store.js` does not add `.eq("owner_id", …)`; a query that could return another owner's row is a database bug to fix, not to hide. |
-
-**Committed secrets: none.** Searches for `service_role`, `Bearer`, `secret`,
-`password`, `private key` and `token` across the working tree return only
-documentation prose, the guard code, and test fixtures using
-`@example.test` addresses.
-
-One residual risk, stated plainly: the Supabase SDK is loaded by dynamic
-`import()` from jsDelivr, and a dynamic import cannot carry a Subresource
-Integrity attribute. `sdkUrl` in the config exists so an operator can vendor
-the bundle and remove the third-party CDN from the auth path.
+| Passwords never logged | ✅ No `console.*` anywhere in `js/auth/` or `js/cloud/` receives a password. The only log is `console.warn("Cloud auth unavailable:", error.message)` on SDK load failure. |
+| Passwords never persisted by us | ✅ Only Supabase Auth handles them. `MockAuthClient` compares two in-memory strings and persists no password. The password input is cleared immediately after the provider call. |
+| Tokens never printed into the UI | ✅ No template or render path reads `accessToken`. The account menu shows email and status only. |
+| `service_role` key absent | ✅ Not in the repo; and `normalizeCloudConfig()` refuses to enable the cloud if one is pasted into the config, discarding the value. |
+| RLS enabled | ✅ `enable` + `force` on all five tables, verified in §8 of the setup guide. |
+| Cross-user reads denied | ✅ SQL verification + 3 browser tests. |
+| Cross-user writes denied | ✅ SQL verification (`insufficient_privilege`) + browser test (`RlsDeniedError`). |
+| `owner_id` cannot be spoofed | ✅ Never sent by the client (unit-tested for all three row builders); rejected by `with check` if it were. |
+| Logout clears cloud state | ✅ Session ended, scope re-pointed to guest, account card and sync chip hidden, store rejects every call with `NotAuthenticatedError`. |
+| User-switch state cannot leak | ✅ §6 below; pinned by a browser test that switches A→B→A. |
+| Secrets in the diff | ✅ Searched for `service_role`, `password`, `Bearer`, `secret`, `token`, `private key`, `BEGIN .* KEY`, `sb_secret_`, `eyJ`. Only the guard code, its tests, and documentation prose. |
 
 ---
 
-## 12. Tests
+## 6. User switching and shared-device privacy
 
-```bash
-npm test           # 324 passed, 0 failed
-npx playwright test --workers=1   # 274 passed, 0 failed (7.7m)
+Option **A** from the brief: namespace the local caches by user id.
+
+```
+guest            suimonNaviFieldAnnotationsV2
+farmer abc-123   suimonNaviFieldAnnotationsV2::u:abc-123
+farmer def-456   suimonNaviFieldAnnotationsV2::u:def-456
 ```
 
-Both suites were green before and after. No pre-existing test was modified.
+Three keys are namespaced: the field domain, the target water levels, and the
+sync bookkeeping. Anything else (e.g. `suimonNaviFieldMode`, a UI preference)
+stays global. That list is asserted by a unit test, because a key added later
+and forgotten here would be a cross-user leak.
 
-**Unit — 81 new**
+The namespace uses the provider's opaque user id, never an email or display
+name — an email is personal data with no business being in a storage key, and a
+display name is not unique.
 
-- `auth-state.test.js` (25) — state derivation, every login-screen visibility
-  rule, labels, credential validation, provider-error translation
-- `auth-errors.test.js` (8) — the same error surface from the message side,
-  including "no sync failure message omits 端末に保存されています"
-- `cloud-config.test.js` (12) — unconfigured degradation, the service_role
-  guard in both key formats, GitHub Pages sub-path redirect resolution
-- `user-scope.test.js` (12) — guest byte-identity, namespacing, the shared-phone
-  switch, logout preserving both caches
-- `field-sync-core.test.js` (24) — lossless round-trip, no `owner_id` from the
-  browser, last-write-wins in both directions, matching by device id, a broken
-  cloud row never overwriting a good local one, import planning, status states
+`ScopedStorage` is a `Storage`-shaped object, so it drops into
+`FieldAnnotationController`'s existing `options.storage`. On a scope change the
+controller is asked to re-hydrate and re-render. In the guest scope it resolves
+every key to its original name, so nothing changes for an install that never
+signs in.
 
-**Browser — 33 (35 including both mobile viewports)**, all against the mock
-provider, all listed in the order of the brief's §32:
+### The bug this surfaced
 
-first-load login screen · guest entry and persistence · full Stage-1 workflow as
-a guest · sign-up with display name · duplicate address · weak password ·
-malformed email · wrong password · signed-in header beside 使い方 · reload
-without a flash · あなたの圃場 listing · selecting a paddy driving the ONE active
-field · local-first registration then cloud · verbatim record round-trip ·
-restore after sign-out/in · sync failure not losing the paddy · offline
-workflow · queue draining on reconnect · logout keeping local data · **user B
-seeing none of user A's fields** · **direct read of another owner's row by id
-denied** · **write claiming another owner denied** · **signed-out store access
-denied** · import offer and import · 今はしない · no offer for the second farmer
-· sync indicator states · Settings account section · 今すぐ同期 · mobile 390×844
-and 393×852 · and three tests pinning that with no cloud configured there is no
-login screen, no account control, and the original storage key is still used.
+`hydrateFromStorage()` used to `return` early when the key was absent. That was
+harmless when it only ran once at mount against empty arrays. Called on a user
+switch it was a privacy hole: signing in as B, whose namespace is empty, would
+have left A's paddies in memory. It now calls `resetInMemoryState()` first,
+which also clears `this.selected` — a selected-feature editor still pointing at
+the previous scope's record could otherwise read *and save* it after a switch.
 
-**Database** — `supabase/tests/rls_verification.sql` proves the same isolation
-properties in Postgres, with no browser involved. It is the only check that
-exercises the real policies; it has **not** been run, because no Supabase
-project exists (see §14).
+---
 
-**Mobile** — verified at 390×844 and 393×852: no horizontal scroll on the login
-screen or in signed-in Basic; ≥44px on the submit, switch, guest, email,
-password, account button and field tiles; 16px inputs so iOS Safari does not
-zoom the viewport on focus and push the submit button off-screen; the map still
-≥200px tall with the account cards added; the verdict card still reachable.
+## 7. Sync strategy
+
+### Trigger points
+
+Sign-in; an explicit 今すぐ同期; the browser's `online` event; and a **1.5s
+debounced** call after a local change. Never per click.
+
+### Matching and conflicts
+
+Records are matched by the **local** id, carried on the row as `legacy_*_id`
+and unique per owner. Matching on the cloud UUID would give a farmer who
+registers offline on a phone and again on a tablet two rows for one paddy.
+
+Conflicts resolve **last-write-wins**, compared on the record's own
+`properties.updatedAt` against the row's `local_updated_at` — a local clock on
+both sides, so client/server clock skew never decides which boundary survives.
+Ties mean "already in sync" and cost nothing. A v1 three-way merge of a polygon
+is not attempted, and this rule is stated here rather than left to be
+discovered.
+
+A cloud row whose `record` is missing or malformed is never applied; the
+device's copy wins and is pushed back up.
+
+### The queue
+
+The queue *is* the persisted sidecar (`suimonNaviCloudSyncV1`, per user), which
+holds `{ cloudId, syncedLocalUpdatedAt, syncedAt, state }` per record. A record
+is pending if it has no entry or its `updatedAt` differs from the stamp
+captured at upload. So an edit made in a paddy with no signal is still detected
+after a reload and a battery death.
+
+Sidecar, not record: adding a sync field to a paddy record would change the
+shape §4 exists to protect.
+
+### Target water level — an honest exception
+
+Union merge, device wins on conflict. The existing local format is a bare
+`{ fieldId: number }` map with **no timestamp anywhere**, so there is no honest
+way to say which side is newer. Inventing a timestamp and pretending would be
+worse than documenting the rule.
+
+### Sync status
+
+Three states, one small chip in the header, detail in Settings.
+
+| | Meaning |
+|---|---|
+| `✓ 同期済み` | Everything local is in the cloud |
+| `⟳ 同期待ち N件` | Queued — offline, or the debounce has not fired |
+| `! 同期エラー` | Something went wrong that waiting will not fix |
+
+An unreachable server is `⟳`, not `!`. `!` should mean a farmer needs to do
+something. The chip is hidden entirely for a guest.
+
+The count is computed against **live local data**, not against the sidecar
+alone: a paddy registered thirty seconds ago has no sidecar entry, and counting
+only known entries would show ✓ 同期済み over a paddy that has never left the
+phone.
+
+---
+
+## 8. Local data → account (§17)
+
+On the first sign-in on a device that already has guest-registered paddies:
+
+```
+端末内の圃場
+ログインせずに登録した圃場が2件あります。
+アカウントに追加すると、他の端末でも同じ圃場を開けます。
+端末内のデータは削除されません。
+
+[ アカウントに追加する ]   [ 今はしない ]
+```
+
+- Offered on an **actual sign-in**, never on a plain reload, and **at most once
+  per user per device** (`suimonNaviLocalImportChoiceV1`). Neither nagging nor
+  silently uploading.
+- Importing **copies**. The guest namespace is left intact, so the farmer can
+  keep working without an account and nothing is destroyed if they decide the
+  account was a mistake.
+- Records already in the account (same local id) are skipped — the duplicate
+  guard.
+- Children follow their parent: water points, observations, survey sessions and
+  boundary tracks come across only for paddies actually being adopted. A water
+  point belonging to a paddy the account already had would be a duplicate.
+- Adopted records are marked pending and sync on the next pass.
+
+**Conflict behaviour:** a guest paddy whose local id already exists in the
+account is *not* imported and *not* merged. Two different paddies that happen
+to share the id `paddy-001` is the realistic case, and silently overwriting one
+with the other would destroy a measurement. The account's copy wins and the
+guest copy stays where it is.
+
+---
+
+## 9. Offline behaviour
+
+| Situation | Behaviour |
+|---|---|
+| No signal at launch, session cached | `offline_authenticated`. Fields, map, area, water all work from cache. The SDK restores the session with no network call. |
+| Signal lost while working | `online`/`offline` events flip the state; the chip goes ⟳. Nothing is interrupted. |
+| Register a paddy offline | Written to localStorage and rendered immediately; queued. Pinned by a test that registers with the provider forced offline and asserts the record is on disk. |
+| Signal returns | The `online` event triggers a sync; the queue drains; the chip returns to ✓. |
+| Login attempted offline | 「インターネットに接続できません。オフラインのままでも「ログインせずに使う」で作業を続けられます。」 Never "wrong password". |
+| Supabase SDK cannot be fetched | Caught at mount, logged as a warning, state becomes `unavailable`. The app is the offline app. |
+
+No console errors are produced in any of these paths; the offline browser test
+asserts `pageerror` stays empty.
+
+---
+
+## 10. What syncs, and what does not
+
+**Syncs:** registered fields (polygon, area, source filename, point count, fix
+quality summary — the whole record), water-management points, field
+observations, per-field target water level, display name.
+
+**Stays local, deliberately:**
+
+| | Why |
+|---|---|
+| Raw NMEA text and survey sessions | A single walk can be megabytes. Uploading it would make accounts slow and expensive for no farmer-visible gain. The cloud field row still carries the measurement quality that matters. |
+| Recording sessions (IndexedDB) and their marked observations | These are the session-child water-level readings the brief asks about. Audited before designing the schema: they live in the recording store keyed by a recording session id, alongside raw NMEA lines and image blobs, and creating one requires an active WebSerial connection. They belong to the recording session, not the paddy, so they follow the recording data. A `water_measurements` table invented now would be a guess at a Stage-2 shape. |
+| Boundary tracks | A Settings-only legacy concept the Stage-1 Basic flow can no longer create. |
+
+Both the Settings account panel and the migration file state this in place, so
+nobody is left believing everything syncs.
+
+---
+
+## 11. Tests
+
+```bash
+npm test
+```
+**324 passed, 0 failed.** 71 of those are new here, across five files; the remaining 253 are the pre-existing suite plus 11 from the concurrent iPhone-UX session (see §16).
+
+```bash
+npx playwright test --workers=1
+```
+**274 passed, 0 failed** (8.3 min), including all 35 new tests and every
+pre-existing spec — NMEA, START/END, field registration, water, navigation,
+basemap, iPhone upload, decision, recording, drone, pilot, vegetation,
+assurance.
+
+Every new browser test runs against the mock provider, injected before page
+load. No external Supabase project is contacted, and the default (uninjected)
+configuration is the one every other spec runs in.
+
+Coverage by requirement:
+
+| # | Requirement | Test |
+|---|---|---|
+| 1 | First load shows login appropriately | login screen with cloud; **no** login screen without |
+| 2 | Guest enters Basic | + choice survives reload; + full Stage-1 workflow with no account and nothing uploaded |
+| 3 | Signup form | display-name field appears; duplicate email; short password; malformed email |
+| 4 | Login success | + session survives reload without a flash |
+| 5 | Login error | Japanese wording, no raw provider text, email retained |
+| 6 | Signed-in header | 使い方 *and* the account control; menu shows email + status + logout |
+| 7 | Fields render | あなたの圃場 with names and m² |
+| 8 | Selection drives the existing active field | exactly one selector; tile click sets `#basicActiveFieldSelect` |
+| 9 | Register → sync | local first, then cloud; record verbatim; UUID PK ≠ name ≠ local id |
+| 10 | Sync failure keeps local data | registered with the provider offline |
+| 11 | Logout | session ends, cache retained on disk |
+| 12 | Second user sees nothing of the first | A→B→A, plus selector and registered-list checks |
+| 13 | Import prompt | offered, imported, guest copy retained |
+| 14 | Skip import | nothing uploaded, not asked again |
+| 15 | Sync indicator | hidden for guests, ✓ after sync, ⟳ 同期待ち offline, small |
+| §24 | RLS | direct read by id → null; spoofed owner → `RlsDeniedError`; signed out → `NotAuthenticatedError`; plus `supabase/tests/rls_verification.sql` |
+| §25 | Offline | fields/map/water usable, new registration works, queue drains on reconnect, no page errors |
+| §33 | Mobile | 390×844 and 393×852 |
+
+### Bugs found while testing
+
+1. **✓ 同期済み over an unsynced paddy.** The status counted only sidecar
+   entries, and a newly registered paddy has none — so the chip claimed
+   everything was safe in the cloud the instant after a registration. Now
+   computed against live local data.
+2. **`hydrateFromStorage()` returned early on an empty scope**, leaving the
+   previous farmer's paddies in memory after a user switch. See §6.
+3. **An offline sync was reported as `! 同期エラー`.** A dropped connection is
+   not an error a farmer can act on; it is now `⟳ 同期待ち`.
+4. **Double sign-in handling.** The provider fires its own auth-state event
+   during `signIn()`, so `completeSignIn()` ran twice — re-running the import
+   check and re-rendering. It is now idempotent per user id.
+
+---
+
+## 12. Mobile verification
+
+390×844 and 393×852, both asserted:
+
+- No horizontal scroll on the login screen or in signed-in Basic
+- `#authEmailInput`, `#authPasswordInput`, `#authSubmitButton`,
+  `#authSwitchButton`, `#authGuestButton` all ≥ 44px tall and within the
+  viewport width
+- The account button is ≥ 44px and shares the header row with 使い方; below
+  480px the cluster gap tightens, the account label ellipsises, and the sync
+  chip drops its wording but keeps its ✓ / ⟳ / ! glyph
+- Field tiles are ≥ 44px
+- The map stays > 200px tall and 水位を記録 stays enabled
+- Inputs are 16px so iOS Safari does not zoom on focus
+- `body.auth-screen-open` locks background scroll while the login screen is up
 
 ---
 
 ## 13. External setup still required
 
-**The account feature is not live.** No Supabase project was created, no
-external service was provisioned, and nothing was paid for — per §30 of the
-brief, that boundary was not crossed.
+**Cloud sign-in does not work yet, and this report does not claim it does.**
 
-To enable it, follow `docs/SUPABASE_SETUP.md`: create a project, run
-`supabase/migrations/001_accounts_fields.sql`, set the Site URL and redirect
-URLs, paste the project URL and anon key into `config/cloud-config.js`, create
-the two test users, and run `supabase/tests/rls_verification.sql`.
+No Supabase project was created, no credentials exist in this repository, and
+no live sign-in, live sync, or live RLS behaviour was observed. Everything
+verified above ran against the mock provider and against pure functions.
 
-**No claim is made that live sign-in works**, because it has not been observed.
-What has been verified is the frontend, the merge logic, the storage scoping and
-the authorization *model*, against a mock store that mirrors the migration's
-policies.
+To turn it on, follow [SUPABASE_SETUP.md](SUPABASE_SETUP.md): create a project,
+run `001_accounts_fields.sql`, set the Site/Redirect URLs, paste the project
+URL and anon key into `config/cloud-config.js`, then run
+`supabase/tests/rls_verification.sql`.
+
+Until that is done the deployed site is the offline app it is today.
 
 ---
 
 ## 14. Known limitations
 
-1. **Live cloud sync is unverified.** Everything above was tested against the
-   mock provider. The RLS SQL script is written but unrun.
-2. **Last-write-wins can lose an edit.** Two devices editing the same paddy
-   offline: the later `updatedAt` wins outright. Documented, not silent.
-3. **Target water level has no timestamp**, so its merge is union-with-device-
-   wins rather than last-write-wins (§7).
-4. **Raw NMEA, recording sessions and their water-level readings stay local.**
-   A farmer who loses their phone loses those, though the paddy, its area and
-   its measurement summary are recoverable.
-5. **Boundary tracks do not sync.**
-6. **No password reset flow in the UI.** Supabase can send a recovery email and
-   the redirect URL is configured for it, but the app has no
-   「パスワードを忘れた」 screen yet.
-7. **No account deletion in the UI.** `clearScope()` removes a user's local
-   cache but nothing calls it; cloud rows must be deleted in the dashboard.
-8. **The SDK has no SRI pin** (§11).
-9. **Deletion propagation is device-scoped** — deleting a paddy on a device that
-   never synced it does nothing to the cloud row (§8).
-10. **One active field, one account.** Sharing a paddy between two farmers is
-    not modelled; there is no team or farm-level ownership.
+1. **Live cloud unverified.** See §13.
+2. **Last-write-wins.** A paddy edited on two devices while both were offline
+   keeps the later `updatedAt` and loses the other. Documented, not hidden.
+3. **No password reset UI.** Supabase can send a recovery email and the
+   redirect URL is configured for it, but there is no 「パスワードをお忘れですか」
+   flow in the app yet. A farmer who forgets their password needs help.
+4. **No account deletion or "remove this account's data from this device".**
+   `clearScope()` exists and is tested but is not wired to a button.
+5. **Deletions do not propagate.** `rowsToDelete()` is implemented and tested
+   but is not called by the sync pass: getting deletion wrong loses a paddy,
+   and it needs a tombstone the local repository does not keep. Deleting a
+   field in 設定 removes it locally; the cloud row stays and would be
+   re-downloaded on the next device.
+6. **Raw NMEA and recording sessions do not follow the account** (§10), so a
+   farmer who signs in on a new device gets their fields and their measurement
+   *summary*, not the original logs.
+7. **The guest namespace is shared between farmers on one device.** That is
+   what "guest" means, and the import offer is per-account, but two farmers
+   sharing a phone who both work as guests share one local data set.
+8. **The Supabase SDK loads from jsDelivr** and a dynamic `import()` cannot
+   carry an integrity attribute. `sdkUrl` allows self-hosting; see the setup
+   guide.
+9. **The mock provider is reachable from a page that sets
+   `provider: "mock"`.** That requires deliberately editing the config or
+   injecting a global before load. It is the test seam, and the shipped config
+   does not enable it.
+10. **`display_name` is user-editable metadata.** It is a label; ownership is
+    decided only by `auth.uid()` inside the database.
 
 ---
 
@@ -522,38 +564,60 @@ policies.
 
 Verified in-browser:
 
-- **390×844, login screen** — one column, centred card, 水 mark over
-  スイスイナビ / 圃場管理をもっと簡単に, two inputs, a full-width green ログイン,
-  a divider, 初めての方 / アカウントを作成, an underlined ログインせずに使う, and
-  the note that the app works without an account. No horizontal scroll; submit
-  50px, guest 44px, inputs 16px.
-- **390×844, shipped configuration** — identical to before this change: header
-  with 使い方 only, no account control, the three mode tabs, the map dominant,
-  水管理ポイント toolbar, 現在の田圃 with 圃場を測る. Console clean apart from the
-  pre-existing MAVLink backend connection errors (the backend is not running).
-- **1280×900, signed in** — `✓ 同期済み` chip and `Kai ▾` after 使い方;
-  あなたの圃場 tiles above 現在の田圃; 設定 → 圃場データ → アカウント showing the
-  email, ログイン中, the sync line with a last-sync timestamp, and 今すぐ同期 /
-  ログアウト.
+- **Default (no cloud), desktop:** header is exactly as before — brand, `? 使い方`,
+  mode tabs. No account control, no login screen, no あなたの圃場 card.
+- **Login screen, 390×844:** centred card on the parchment background; 水 mark,
+  スイスイナビ, 圃場管理をもっと簡単に; two full-width inputs; a green
+  ログイン button; a rule; 初めての方 / アカウントを作成; ログインせずに使う
+  underlined below; the reassurance note at the bottom. No horizontal scroll.
+- **Signed in, desktop:** header reads `スイスイナビ … [? 使い方] [✓ 同期済み] [ 北田さん ▾ ]`.
+  The panel opens with あなたの圃場 — one tile per paddy with its name and
+  `4,286 m²`, the active one carrying a green left bar — then
+  `＋ 新しい圃場を測る`, then the unchanged 現在の田圃 card.
+- **Account menu:** email, ログイン中, `✓ 同期済み`, 今すぐ同期, ログアウト.
+- **Import offer:** a 端末内の圃場 card above あなたの圃場 with the count and
+  the two buttons, stacking to full width below 720px.
+- **設定 → 圃場データ → アカウント:** アカウント / 状態 / クラウド同期 rows with
+  the last-sync timestamp, the three buttons, and the note about what stays on
+  the device. No field selector.
 
 ---
 
-## 16. Git
+## 16. Git information
 
 - **Branch:** `main`
-- **Starting commit:** `7e4281e` — *docs(stage1): record commit, push and
-  GitHub Pages status*
+- **Starting commit:** `7e4281e` (`docs(stage1): record commit, push and GitHub Pages status`)
+- **Commit:** `a79b0ec` — `feat(auth): add user accounts and cloud field sync`
+  (33 files, +8326 / −157)
+- **Push:** fast-forward `7e4281e..a79b0ec` to `origin/main`, non-force.
+  `git fetch` beforehand showed 0 behind / 1 ahead, so no remote work was
+  overwritten.
+- **Secret scan before staging:** searches for `service_role`, `sb_secret_`,
+  JWT-shaped strings, `Bearer`, `secret`, `password`, private keys and tokens
+  returned only documentation prose, the guard code in
+  `js/cloud/cloud-config.js`, and test fixtures using `@example.test`
+  addresses. No `.env` or credential file exists in the tree.
+- **GitHub Pages:** legacy build from `main` / root, published at
+  <https://klayertan.github.io/michibiki-suimon-navi/>. **Frontend deployed;
+  cloud authentication pending Supabase configuration** — the site serves the
+  new assets, and because `config/cloud-config.js` ships with `provider: null`
+  it correctly shows no login screen and no account control. Sign-in does not
+  work publicly and no claim is made that it does; see §14.
 
 ### Concurrency note
 
-This work shared a checkout with a second, concurrent session (the Stage-1
-iPhone Basic-UX task: `docs/STAGE1_IPHONE_BASIC_UX.md`,
-`js/gnss/nmea-file-intake.js`, `tests/browser/basic-ux-consolidation.spec.js`,
-`tests/browser/nmea-ios-upload.spec.js`, `tests/unit/nmea-file-intake.test.js`,
-and further edits to `index.html`, `css/stage1-basic.css` and
-`js/assurance/satellite-assurance-controller.js`). That session's changes were
-**preserved in full** and this work was adapted to them — for example the
-account bootstrap sits alongside their `ensureActiveFieldSelected()` in
-`onFieldsChanged`. Because both sessions edited `index.html`, that file's diff
-contains both sets of changes, and the commit for this task stages only the
-files listed in §2.
+This work shared a checkout with a second, concurrent session (the same
+situation the Stage-1 report records). That session's changes to `index.html`,
+`css/stage1-basic.css`, `js/assurance/satellite-assurance-controller.js`,
+`js/gnss/nmea-file-intake.js` and its new specs were **preserved in full** and
+this work was adapted around them:
+
+- every `index.html` edit here was made against a freshly read anchor rather
+  than by rewriting a region
+- the account cards were inserted alongside that session's Basic-mode layout,
+  not in place of it
+- `ensureActiveFieldSelected()`, added by that session, is called from the
+  scope-change handler so a user switch restores the correct active field
+
+Because both sessions edited `index.html`, that file's diff contains both sets
+of changes.
