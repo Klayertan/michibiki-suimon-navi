@@ -9,10 +9,10 @@ const TIGHT_LOOP_NMEA = [
 ].join("\r\n");
 
 async function openSurveyWorkspace(page) {
-  await page.goto("/#survey");
+  await page.goto("/#settings/fields");
   await expect(page.locator("#fieldRegDialog")).toBeAttached({ timeout: 15_000 });
   await page.evaluate(() => {
-    document.querySelectorAll("details[data-workspace='survey']").forEach((card) => { card.open = true; });
+    document.querySelectorAll("details[data-workspace='fields']").forEach((card) => { card.open = true; });
   });
 }
 
@@ -31,7 +31,7 @@ test("判断デモ shows the 対象圃場/使用データ selector, and the empt
   await expect(page.locator("#decisionFieldCard")).toContainText("対象圃場 / 使用データ");
   await expect(page.locator("#decisionFieldEmptyState")).toBeVisible();
   await expect(page.locator("#decisionFieldEmptyState")).toHaveText(
-    "まだ実測圃場データがありません。QZ1測量でNMEAログをアップロードし、圃場を登録してください。"
+    "まだ実測圃場データがありません。基本モードでNMEAログをアップロードし、圃場を登録してください。"
   );
   await expect(page.locator("#decisionFieldSummary")).toBeHidden();
 
@@ -64,7 +64,7 @@ test("selecting 圃場1 updates the decision card with real survey data, and emp
   await expect(page.locator("#decisionGpsBreakdown")).toHaveText("4点 / 1点");
   await expect(page.locator("#decisionReliability")).not.toHaveText("—");
   await expect(page.locator("#decisionWaterPointsNote")).toHaveText(
-    "この圃場には水門・給水口・排水口がまだ登録されていません。QZ1測量タブで水管理ポイントを追加してください。"
+    "この圃場には水門・給水口・排水口がまだ登録されていません。圃場データタブで水管理ポイントを追加してください。"
   );
   await expect(page.locator("#decisionObservationsNote")).toHaveText("現地観察メモはまだ登録されていません。");
 });
@@ -128,19 +128,19 @@ test("with no registered fields, the built-in sample can still be selected manua
   await expect(page.locator("#decisionDataKind")).toHaveText("サンプル");
 });
 
-test("選択している圃場に水管理ポイントが無い場合、追加を促すボタンが表示され、クリックするとQZ1測量の水管理ポイントパネルに移動する", async ({ page }) => {
+test("選択している圃場に水管理ポイントが無い場合、追加を促すボタンが表示され、クリックすると圃場データの水管理ポイントパネルに移動する", async ({ page }) => {
   await openSurveyWorkspace(page);
   await registerField(page);
   await openDecisionWorkspace(page);
 
   await expect(page.locator("#decisionWaterPointsNote")).toHaveText(
-    "この圃場には水門・給水口・排水口がまだ登録されていません。QZ1測量タブで水管理ポイントを追加してください。"
+    "この圃場には水門・給水口・排水口がまだ登録されていません。圃場データタブで水管理ポイントを追加してください。"
   );
   const addButton = page.locator("#decisionAddWaterPointButton");
   await expect(addButton).toBeVisible();
   await addButton.click();
 
-  await expect(page.getByRole("button", { name: "QZ1測量" })).toHaveClass(/active/);
+  await expect(page.getByRole("button", { name: "圃場データ" })).toHaveClass(/active/);
   await expect(page.locator("#waterControlPanel")).toBeVisible();
   await expect(page.locator("#wcpTargetFieldSelect")).toHaveValue("paddy-001");
 });

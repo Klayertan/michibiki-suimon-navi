@@ -12,6 +12,7 @@
   <link rel="stylesheet" href="css/vegetation-intelligence.css">
   <link rel="stylesheet" href="css/recording.css">
   <link rel="stylesheet" href="css/field-annotation.css">
+  <link rel="stylesheet" href="css/stage1-basic.css">
   <link rel="stylesheet" href="css/field-report.css">
   <link rel="stylesheet" href="css/drone.css">
   <link rel="stylesheet" href="css/gamepad.css">
@@ -537,7 +538,7 @@
       margin-bottom: 4px;
     }
 
-    /* Floating water-management quick toolbar (QZ1測量 map overlay).
+    /* Floating water-management quick toolbar (圃場データ map overlay).
        Bottom-left, clear of Leaflet's default top-left zoom control and
        bottom-right attribution — reachable in fullscreen without hunting
        the side panel. */
@@ -1869,12 +1870,14 @@
           <button class="workspace-tab active" type="button" data-workspace-target="decision" aria-selected="true">判断デモ</button>
           <button class="workspace-tab" type="button" data-workspace-target="survey" aria-selected="false">QZ1測量</button>
           <button class="workspace-tab" type="button" data-workspace-target="assurance" aria-selected="false">測量チェック</button>
+          <button class="workspace-tab" type="button" data-workspace-target="fields" aria-selected="false">圃場データ</button>
           <button class="workspace-tab" type="button" data-workspace-target="analysis" aria-selected="false">詳細解析</button>
+          <button class="workspace-tab" type="button" data-workspace-target="devtools" aria-selected="false">開発ツール</button>
         </nav>
       </details>
     </header>
 
-    <section class="mobile-decision" aria-live="polite" data-mode="settings">
+    <section class="mobile-decision" aria-live="polite" data-mode="basic settings">
       <div>
         <span class="eyebrow">今日の水門判断</span>
         <strong id="mobileVerdictBadge">様子見</strong>
@@ -1893,7 +1896,7 @@
           <strong id="emptyStateTitle">QZ1ログが未読込です</strong>
           <span id="emptyStateDetail">NMEAファイル（.nmea）をアップロードするか、測量JSONを読み込むと測位点が表示されます。</span>
         </div>
-        <div id="waterQuickToolbar" class="map-quick-toolbar" data-workspace="survey" data-mode="basic settings" hidden>
+        <div id="waterQuickToolbar" class="map-quick-toolbar" data-workspace="fields" data-mode="basic settings" hidden>
           <p class="map-quick-toolbar-title">水管理ポイント</p>
           <p id="waterQuickActiveField" class="map-quick-toolbar-field"></p>
           <div id="waterQuickFieldRow" class="map-quick-toolbar-field-row" hidden>
@@ -1914,7 +1917,11 @@
       </div>
 
       <aside class="panel">
-        <section id="decisionFieldCard" class="card" data-workspace="decision" data-mode="settings">
+        <!-- 今日の水門判断 is the farmer's headline answer, so the verdict,
+             its evidence and the field/data selector behind it all appear in
+             基本モード. The tuning behind the verdict (気象条件 inputs,
+             判断ルール thresholds, 圃場・水門 data sources) stays Settings-only. -->
+        <section id="decisionFieldCard" class="card" data-workspace="decision" data-mode="basic settings">
           <span class="eyebrow">対象圃場 / 使用データ</span>
           <h2>使用する圃場データを選ぶ</h2>
           <div class="input-row">
@@ -1932,7 +1939,7 @@
               <option value="experimental">実験モード</option>
             </select>
           </div>
-          <p id="decisionFieldEmptyState" class="field-annotation-empty">まだ実測圃場データがありません。QZ1測量でNMEAログをアップロードし、圃場を登録してください。</p>
+          <p id="decisionFieldEmptyState" class="field-annotation-empty">まだ実測圃場データがありません。基本モードでNMEAログをアップロードし、圃場を登録してください。</p>
           <div id="decisionFieldSummary" class="decision-field-summary" hidden>
             <div class="kv"><span>対象圃場</span><strong id="decisionFieldLabel">—</strong></div>
             <div class="kv"><span>データ種別</span><strong id="decisionDataKind">—</strong></div>
@@ -1947,7 +1954,7 @@
           </div>
         </section>
 
-        <section class="card gate-card" data-workspace="decision" data-mode="settings">
+        <section class="card gate-card" data-workspace="decision" data-mode="basic settings">
           <span class="eyebrow">今日の水門判断</span>
           <h2>気象と圃場位置からの推奨</h2>
           <p id="decisionDataWarning" class="data-source-warning" role="status" aria-live="polite" hidden></p>
@@ -1956,7 +1963,7 @@
           <p class="disclaimer">※ 本アプリは判断支援です。最終判断と水門の操作は必ず人が行ってください。</p>
         </section>
 
-        <section class="card proof-card" data-workspace="decision" data-mode="settings">
+        <section class="card proof-card" data-workspace="decision" data-mode="basic settings">
           <div class="section-heading">
             <div>
               <span class="eyebrow">みちびき活用の実証</span>
@@ -2037,7 +2044,11 @@
           <p class="meta">測位点を地図のポップアップで「圃場の角」「水路」「水門」にタグ付けすると、その場で境界線・水路・水門位置が描画されます。圃場の角は外周を歩いた順にタグ付けしてください（3点以上で境界線が描画されます）。</p>
         </section>
 
-        <section class="card survey-tools" data-workspace="survey" data-mode="basic settings" hidden>
+        <!-- Settings-only since the Stage-1 simplification: Basic mode gets
+             the compact #basicStage1Card below instead. Nothing here was
+             removed — 測量JSON import/export, layer filters, スマホGPS and the
+             parse-quality summary all still live here for power users. -->
+        <section class="card survey-tools" data-workspace="fields" data-mode="settings" hidden>
           <span class="eyebrow">現地測量ワークフロー</span>
           <h2>QZ1ログを読み込む</h2>
           <p class="meta">NMEAログを地図に表示し、測位品質の確認や圃場・水門のタグ付けを行います。</p>
@@ -2073,11 +2084,100 @@
           <div id="gpsMessage" class="gps-message" role="status" aria-live="polite" hidden></div>
         </section>
 
-        <section id="workflowGuidePanel" class="card workflow-guide" data-workspace="survey" data-mode="basic settings" hidden>
+        <!-- Settings-only since the Stage-1 simplification. This five-step
+             checklist is genuinely useful the first time through, but it
+             consumed most of Basic mode's vertical space and only got less
+             relevant as fields accumulated (steps 3-5 stay "done" forever
+             once one field has water points / observations / an export).
+             Basic mode now points at the constant-size ? help control on
+             #basicStage1Card instead. -->
+        <section id="workflowGuidePanel" class="card workflow-guide" data-workspace="fields" data-mode="settings" hidden>
           <h2>現地調査ワークフロー</h2>
           <p id="workflowProgressLabel" class="workflow-progress-label"></p>
           <p id="workflowNextTask" class="workflow-next-task" role="status" aria-live="polite"></p>
           <div id="workflowStepsContainer" class="workflow-steps"></div>
+        </section>
+
+        <!-- Stage 1, farmer-facing: load QZ1/NMEA -> trim the walked track to
+             the real boundary -> build the polygon. Everything technical
+             about the same workflow (WebSerial, baud, session diagnostics,
+             measurement-type choice, boundary tracks) is in Settings. -->
+        <section id="basicStage1Card" class="card basic-stage1" data-mode="basic">
+          <div class="basic-stage1-heading">
+            <div>
+              <span class="eyebrow">圃場を登録する</span>
+              <h2>QZ1データから圃場を作る</h2>
+            </div>
+            <button id="basicHelpButton" class="basic-help-button" type="button"
+                    aria-haspopup="dialog" aria-controls="basicHelpDialog" aria-expanded="false">
+              <span aria-hidden="true">?</span>
+              <span class="basic-help-button-label">使い方</span>
+            </button>
+          </div>
+
+          <label class="action-button basic-upload-button">
+            NMEAをアップロード
+            <input id="basicNmeaInput" type="file" accept=".nmea,.txt,.log,text/plain">
+          </label>
+          <p id="basicTrackSummary" class="basic-track-summary" role="status" aria-live="polite" hidden>測位点 <strong id="basicTrackPointCount">0</strong></p>
+
+          <div id="basicBoundaryControls" class="basic-boundary" hidden>
+            <p class="basic-boundary-title">圃場の境界を選ぶ</p>
+            <div class="basic-boundary-row" data-boundary-end="start">
+              <span class="basic-boundary-label">開始点</span>
+              <strong id="basicBoundaryStartValue" class="basic-boundary-value" data-state="empty">未選択</strong>
+              <button id="basicPickStartButton" class="panel-button" type="button" aria-pressed="false">地図で選ぶ</button>
+            </div>
+            <div class="basic-boundary-row" data-boundary-end="end">
+              <span class="basic-boundary-label">終了点</span>
+              <strong id="basicBoundaryEndValue" class="basic-boundary-value" data-state="empty">未選択</strong>
+              <button id="basicPickEndButton" class="panel-button" type="button" aria-pressed="false">地図で選ぶ</button>
+            </div>
+            <p id="basicBoundaryHint" class="basic-boundary-hint" role="status" aria-live="polite" hidden></p>
+            <p class="basic-boundary-count">選択範囲 <strong id="basicBoundaryCount">—</strong></p>
+            <div class="veg-actions">
+              <button id="basicCreateFieldButton" class="panel-button primary" type="button">この範囲で圃場を作る</button>
+              <button id="basicBoundaryResetButton" class="panel-button" type="button">全体に戻す</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- Stage-1 registration: field only. No 測量タイプ radios (a farmer
+             registering a paddy should not have to classify their walk as a
+             polygon vs a boundary track vs water points) and no
+             境界トラックとして保存 escape hatch. Both remain on #fieldRegDialog
+             under Settings. -->
+        <section id="basicFieldRegDialog" class="card basic-field-reg" data-mode="basic" hidden>
+          <span class="eyebrow">圃場を登録する</span>
+          <h2>この範囲を圃場にする</h2>
+          <p id="basicFieldRegSummary" class="meta"></p>
+          <div class="input-row">
+            <label for="basicFieldRegNameInput">圃場名</label>
+            <input id="basicFieldRegNameInput" type="text" autocomplete="off">
+          </div>
+          <div class="input-row">
+            <label for="basicFieldRegMemoInput">メモ</label>
+            <textarea id="basicFieldRegMemoInput" rows="2"></textarea>
+          </div>
+          <details class="basic-field-reg-advanced">
+            <summary>詳細</summary>
+            <div class="input-row">
+              <label for="basicFieldRegIdInput">圃場ID（自動）</label>
+              <input id="basicFieldRegIdInput" type="text" autocomplete="off" readonly>
+            </div>
+          </details>
+          <div class="veg-actions">
+            <button id="basicFieldRegConfirmButton" class="panel-button primary" type="button">登録する</button>
+            <button id="basicFieldRegCancelButton" class="panel-button" type="button">キャンセル</button>
+          </div>
+          <p id="basicFieldRegMessage" class="meta" role="status" aria-live="polite"></p>
+          <div id="basicFieldRegCloseWarning" class="field-close-warning" role="alertdialog" hidden>
+            <p id="basicFieldRegCloseWarningText"></p>
+            <div class="field-close-warning-actions basic-close-actions">
+              <button id="basicFieldRegForceCloseButton" class="panel-button primary" type="button">この範囲で圃場を作る</button>
+              <button id="basicFieldRegReselectButton" class="panel-button" type="button">選び直す</button>
+            </div>
+          </div>
         </section>
 
         <section id="basicFieldSummaryCard" class="card" data-mode="basic">
@@ -2100,7 +2200,11 @@
           </div>
         </section>
 
-        <section id="fieldRegDialog" class="card field-reg-dialog" data-workspace="survey" data-mode="basic settings" hidden>
+        <!-- Advanced/legacy registration: keeps the measurement-type choice
+             and the 境界トラック outcomes for power users and for existing
+             stored data. Settings-only since the Stage-1 simplification —
+             Basic mode uses #basicFieldRegDialog above. -->
+        <section id="fieldRegDialog" class="card field-reg-dialog" data-workspace="fields" data-mode="settings" hidden>
           <h2>圃場として登録<span class="en">Register field</span></h2>
           <p class="meta">このNMEAログをどの圃場として登録しますか？</p>
           <p id="fieldRegSummary" class="meta"></p>
@@ -2137,7 +2241,7 @@
           </div>
         </section>
 
-        <details id="registeredFieldsPanel" class="card paddy-collapsible" data-workspace="survey" data-mode="basic settings" open hidden>
+        <details id="registeredFieldsPanel" class="card paddy-collapsible" data-workspace="fields" data-mode="basic settings" open hidden>
           <summary><span class="details-title">登録済み圃場・測量ログ<span class="en">Registered fields &amp; logs</span></span></summary>
           <div class="details-content">
           <div class="metric-grid">
@@ -2151,7 +2255,7 @@
           </div>
         </details>
 
-        <details id="waterControlPanel" class="card paddy-collapsible" data-workspace="survey" data-mode="basic settings" hidden>
+        <details id="waterControlPanel" class="card paddy-collapsible" data-workspace="fields" data-mode="basic settings" hidden>
           <summary><span class="details-title">水管理ポイント<span class="en">Water management points</span></span></summary>
           <div class="details-content">
             <div class="input-row">
@@ -2173,7 +2277,49 @@
           </div>
         </details>
 
-        <details id="fieldObservationsPanel" class="card paddy-collapsible" data-workspace="survey" data-mode="settings" hidden>
+        <!-- Moved verbatim out of the Field Recording card (#recPanel) by the
+             Stage-1 simplification so Basic mode keeps its water workflow
+             while the technical recording surface became Settings-only.
+             Every id is unchanged, so recording-controller.js binds to these
+             exactly as before — 現在地を記録 still requires an active
+             recording session, and the 水位/目標水位 comparison still works
+             without one, which is the Basic-mode use. -->
+        <!-- Stays in QZ1測量 with the rest of the recording surface: its
+             #recObs* controls are driven by recordingController and only mean
+             anything during an open session, so splitting them from
+             #recStartButton would break one flow across two workspaces.
+             基本モード still gets the card through data-mode. -->
+        <details id="basicWaterRecordCard" class="card paddy-collapsible" data-workspace="survey" data-mode="basic settings" open hidden>
+          <summary><span class="details-title">水位・観察を記録<span class="en">Mark observation</span></span></summary>
+          <div class="details-content">
+            <div class="input-row">
+              <label for="recObsTypeSelect">観測タイプ</label>
+              <select id="recObsTypeSelect"></select>
+            </div>
+            <div class="input-row">
+              <label for="recObsWaterLevelInput">水位 (cm・任意)</label>
+              <input id="recObsWaterLevelInput" type="number" step="0.1" inputmode="decimal">
+            </div>
+            <div class="input-row">
+              <label for="recTargetWaterLevelInput">目標水位 (cm・任意)</label>
+              <input id="recTargetWaterLevelInput" type="number" step="0.1" inputmode="decimal">
+            </div>
+            <p id="recWaterLevelVerdict" class="meta" role="status" aria-live="polite" hidden></p>
+            <div class="input-row">
+              <label for="recObsNoteInput">メモ</label>
+              <textarea id="recObsNoteInput" rows="2"></textarea>
+            </div>
+            <label class="file-button">
+              写真を撮影・添付（任意）
+              <input id="recObsImageInput" type="file" accept="image/*" capture="environment">
+            </label>
+            <button id="recRecordPositionButton" class="rec-record-position" type="button" disabled>現在地を記録</button>
+            <p id="recObsMessage" class="meta" role="status" aria-live="polite"></p>
+            <div id="recObsHistoryContainer" class="rec-obs-history"></div>
+          </div>
+        </details>
+
+        <details id="fieldObservationsPanel" class="card paddy-collapsible" data-workspace="fields" data-mode="settings" hidden>
           <summary><span class="details-title">現地観察メモ<span class="en">Field observations</span></span></summary>
           <div class="details-content">
             <div class="input-row">
@@ -2207,7 +2353,7 @@
           </div>
         </details>
 
-        <details class="card paddy-collapsible" data-workspace="survey" data-mode="settings" open hidden>
+        <details class="card paddy-collapsible" data-workspace="fields" data-mode="settings" open hidden>
           <summary><span class="details-title">選択した地物<span class="en">Feature editor</span></span></summary>
           <div class="details-content">
             <p id="selFeatureEmpty" class="field-annotation-empty">圃場ポリゴン・境界トラック・水利ポイント・観察メモを地図上でクリックすると編集できます。</p>
@@ -2249,7 +2395,7 @@
           </div>
         </details>
 
-        <details class="card paddy-collapsible" data-workspace="survey" data-mode="settings" hidden>
+        <details class="card paddy-collapsible" data-workspace="fields" data-mode="settings" hidden>
           <summary><span class="details-title">圃場・水利ポイント 凡例<span class="en">Fields &amp; water points legend</span></span></summary>
           <div class="details-content">
             <div id="fieldAnnotationLegend" class="paddy-legend"></div>
@@ -2400,7 +2546,11 @@
           <p class="meta">旧形式JSONはそのまま読み込めます。派生した信頼性結果は、読み込み時に現在の計算版で再計算してください。</p>
         </section>
 
-        <details id="fieldReportPanel" class="card paddy-collapsible" data-workspace="analysis" data-mode="basic settings" open hidden>
+        <!-- Reports/exports are a 設定 concern. This was tagged "basic" but the
+             workspace gate meant it never actually rendered in 基本モード;
+             now that data-mode alone drives 基本, the tag has to be dropped or
+             it would appear there for the first time. -->
+        <details id="fieldReportPanel" class="card paddy-collapsible" data-workspace="fields" data-mode="settings" open hidden>
           <summary><span class="details-title">圃場レポート<span class="en">Field report</span></span></summary>
           <div class="details-content">
           <p class="meta">登録済みの圃場ごとに、測量・水管理・観察メモ・測量チェック結果をまとめます。</p>
@@ -2416,7 +2566,7 @@
             <button id="reportCopyMarkdownButton" class="panel-button" type="button" disabled>Markdownをコピー</button>
           </div>
           <p id="reportMessage" class="meta" role="status" aria-live="polite"></p>
-          <p id="reportEmptyState" class="field-annotation-empty">まだ圃場データがありません。QZ1測量でNMEAログをアップロードし、圃場を登録してください。</p>
+          <p id="reportEmptyState" class="field-annotation-empty">まだ圃場データがありません。NMEAログをアップロードし、圃場を登録してください。</p>
           <div id="reportPreview" class="field-report-preview" hidden></div>
           </div>
         </details>
@@ -2823,7 +2973,7 @@
         <details class="card paddy-collapsible" data-workspace="analysis" data-mode="settings" hidden>
           <summary><span class="details-title">圃場ポリゴン作成（詳細設定）<span class="en">Create field polygon — advanced</span></span></summary>
           <div class="details-content">
-            <p class="meta">通常はQZ1測量タブでNMEAをアップロードすると自動的に登録を確認されます。この詳細設定は、既に読み込んだ点列から特定の範囲だけを選んで圃場ポリゴンを作りたい場合の高度なツールです。</p>
+            <p class="meta">通常は圃場データタブでNMEAをアップロードすると自動的に登録を確認されます。この詳細設定は、既に読み込んだ点列から特定の範囲だけを選んで圃場ポリゴンを作りたい場合の高度なツールです。</p>
             <div class="input-row">
               <label for="fieldSourceSelect">使用する点</label>
               <select id="fieldSourceSelect">
@@ -2859,7 +3009,14 @@
           </div>
         </details>
 
-        <details class="card paddy-collapsible" data-workspace="survey" data-mode="basic settings" open hidden>
+        <!-- Settings-only since the Stage-1 simplification. Nothing here was
+             deleted: WebSerial/QZ1 direct connection, baud, recording
+             sessions, recovery, live GNSS and diagnostics all still work
+             exactly as before, they are just no longer the first thing a
+             farmer sees in Basic mode. The 水位・観察を記録 section that used
+             to live inside this card was moved out to #basicWaterRecordCard
+             below so Basic mode keeps its water workflow. -->
+        <details class="card paddy-collapsible" data-workspace="survey" data-mode="settings" open hidden>
           <summary><span class="details-title">圃場を測る<span class="en">Field recording</span></span></summary>
           <div id="recPanel" class="details-content">
           <p class="meta">QZ1を持って圃場の外周を歩いてください。「記録開始」を押すまでデータは保存されません。</p>
@@ -2949,34 +3106,6 @@
             </div>
           </section>
 
-          <section class="rec-section">
-            <h3 class="rec-section-title">水位・観察を記録<span class="en">Mark observation</span></h3>
-            <div class="input-row">
-              <label for="recObsTypeSelect">観測タイプ</label>
-              <select id="recObsTypeSelect"></select>
-            </div>
-            <div class="input-row">
-              <label for="recObsWaterLevelInput">水位 (cm・任意)</label>
-              <input id="recObsWaterLevelInput" type="number" step="0.1" inputmode="decimal">
-            </div>
-            <div class="input-row">
-              <label for="recTargetWaterLevelInput">目標水位 (cm・任意)</label>
-              <input id="recTargetWaterLevelInput" type="number" step="0.1" inputmode="decimal">
-            </div>
-            <p id="recWaterLevelVerdict" class="meta" role="status" aria-live="polite" hidden></p>
-            <div class="input-row">
-              <label for="recObsNoteInput">メモ</label>
-              <textarea id="recObsNoteInput" rows="2"></textarea>
-            </div>
-            <label class="file-button">
-              写真を撮影・添付（任意）
-              <input id="recObsImageInput" type="file" accept="image/*" capture="environment">
-            </label>
-            <button id="recRecordPositionButton" class="rec-record-position" type="button" disabled>現在地を記録</button>
-            <p id="recObsMessage" class="meta" role="status" aria-live="polite"></p>
-            <div id="recObsHistoryContainer" class="rec-obs-history rec-secondary"></div>
-          </section>
-
           <!-- Storage: everything that persists or exports this session's
                data, including the future per-observation image storage. -->
           <section class="rec-section">
@@ -3046,7 +3175,7 @@
              the only process that owns the serial link. Read-mostly by design —
              there is no arm, takeoff, throttle or manual-control affordance
              anywhere in this panel, and none exists in the backend either. -->
-        <details id="dronePanel" class="card paddy-collapsible" data-workspace="survey" data-mode="drone settings" hidden>
+        <details id="dronePanel" class="card paddy-collapsible" data-workspace="devtools" data-mode="drone settings" hidden>
           <summary><span class="details-title">ドローン / MAVLink<span class="en">Drone / MAVLink</span></span></summary>
           <div class="details-content">
             <p class="meta">
@@ -3156,12 +3285,48 @@
              the same provider/controller/backend path. The browser sends only
              normalized intentions; the backend maps them to the vehicle's
              RCMAP/RCx calibration and emits bounded RC override frames. -->
-        <details id="pilotPanel" class="card paddy-collapsible pilot-panel gamepad-panel" data-workspace="survey" data-mode="settings" hidden>
+        <details id="pilotPanel" class="card paddy-collapsible pilot-panel gamepad-panel" data-workspace="devtools" data-mode="settings" hidden>
           <summary><span class="details-title">手動操縦（開発者向け）<span class="en">Manual Control</span></span></summary>
           <div id="pilotRoot" class="details-content"></div>
         </details>
       </aside>
     </main>
+  </div>
+
+  <!-- Stage-1 help. Replaces the five-step 現地調査ワークフロー card that used
+       to sit in Basic mode's panel: constant size, opened on demand, and
+       written for a farmer rather than an engineer (no IndexedDB / schema /
+       parser / WebSerial vocabulary anywhere in it). Lives outside .app so
+       it overlays without reflowing the map — opening it never touches map
+       state and never reloads the page. -->
+  <div id="basicHelpDialog" class="basic-help-dialog" role="dialog" aria-modal="true"
+       aria-labelledby="basicHelpTitle" hidden>
+    <div class="basic-help-backdrop" data-basic-help-dismiss></div>
+    <div class="basic-help-panel" role="document">
+      <div class="basic-help-header">
+        <h2 id="basicHelpTitle">スイスイナビの使い方</h2>
+        <button id="basicHelpCloseButton" class="basic-help-close" type="button" aria-label="閉じる">×</button>
+      </div>
+      <ol class="basic-help-steps">
+        <li>
+          <strong>QZ1/NMEAデータを読み込む</strong>
+          <span>圃場の外周を歩いて記録したデータを読み込みます。</span>
+        </li>
+        <li>
+          <strong>境界を確認する</strong>
+          <span>地図上の測位点を確認し、圃場として使う開始点と終了点を選びます。</span>
+        </li>
+        <li>
+          <strong>圃場を登録する</strong>
+          <span>選んだ範囲を閉じて圃場ポリゴンを作り、面積を計算します。</span>
+        </li>
+        <li>
+          <strong>水位を記録する</strong>
+          <span>登録した圃場ごとに水位や水管理情報を記録します。</span>
+        </li>
+      </ol>
+      <p class="basic-help-footnote">詳しい機能は「設定 → その他の機能」から利用できます。</p>
+    </div>
   </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
@@ -4030,7 +4195,7 @@
     // -------------------------------------------------------------------------
     const DECISION_SAMPLE_VALUE = "__sample__";
     const DECISION_DEMO_VALUE = "__demo__";
-    const DECISION_NO_WATER_POINTS_MESSAGE = "この圃場には水門・給水口・排水口がまだ登録されていません。QZ1測量タブで水管理ポイントを追加してください。";
+    const DECISION_NO_WATER_POINTS_MESSAGE = "この圃場には水門・給水口・排水口がまだ登録されていません。圃場データタブで水管理ポイントを追加してください。";
     const DECISION_NO_OBSERVATIONS_MESSAGE = "現地観察メモはまだ登録されていません。";
     const DECISION_SAMPLE_WARNING = "現在はサンプルデータで判断しています。実際の圃場判断ではありません。";
     const DECISION_DEMO_WARNING = "現在はデモデータで判断しています。実際の圃場判断ではありません。";
@@ -4926,24 +5091,29 @@
     }
 
     function renderPoints(options = {}) {
-      const visiblePoints = augmentedOnlyInput.checked
-        ? parsedPoints.filter((point) => point.augmented)
-        : parsedPoints;
+      // Each marker carries its position in the ORIGINAL measurement order.
+      // Stage-1 boundary trimming addresses points by that index, so it has
+      // to survive the DGNSS-only filter rather than being re-derived from
+      // the filtered array.
+      const visiblePoints = parsedPoints
+        .map((point, index) => ({ point, index }))
+        .filter(({ point }) => !augmentedOnlyInput.checked || point.augmented);
 
       ensurePointContainer(visiblePoints.length);
 
-      visiblePoints.forEach((point) => {
-        L.circleMarker([point.lat, point.lon], markerStyle(point))
+      visiblePoints.forEach(({ point, index }) => {
+        L.circleMarker([point.lat, point.lon], markerStyle(point, index))
           .bindPopup(buildPopup(point), { maxWidth: 360 })
-          .on("click", () => paddyIntelligence?.selectGnssPoint(point))
+          .on("click", () => handleGnssPointClick(point, index))
           .addTo(pointLayer);
       });
 
       if (visiblePoints.length > 0 && options.fit !== false) {
-        const bounds = L.latLngBounds(visiblePoints.map((point) => [point.lat, point.lon]));
+        const bounds = L.latLngBounds(visiblePoints.map(({ point }) => [point.lat, point.lon]));
         map.fitBounds(bounds, { padding: [36, 36], maxZoom: 18 });
       }
 
+      renderBasicBoundaryOverlay();
       emptyState.hidden = parsedPoints.length > 0 || phonePoints.length > 0;
       exportButton.disabled = parsedPoints.length === 0;
       syncLayerVisibility();
@@ -4951,16 +5121,242 @@
       paddyIntelligence?.refresh();
     }
 
-    function markerStyle(point) {
-      const fillColor = point.augmented ? "#15803d" : "#d97706";
+    /**
+     * Stage-1 readability pass. Over the GSI aerial basemap the previous
+     * uniform 8px / 0.84-opacity dots merged into one dark mass that hid the
+     * very imagery the farmer is checking the boundary against. Ordinary
+     * points are now small and translucent, points inside the chosen
+     * START..END range are emphasised, and START/END themselves are large
+     * high-contrast pins.
+     *
+     * No measured point is ever dropped or merged away — every fix is still
+     * drawn, still clickable, and still carries its full popup, so accuracy
+     * inspection is unaffected. Tagged points (圃場の角/水門/水路…) stay
+     * larger than untagged ones at every level so their meaning survives.
+     */
+    function markerStyle(point, index) {
+      const role = basicBoundaryRole(index);
+      // The measurement index and boundary role travel with the marker as
+      // class names, so the SVG element itself says which fix it is and what
+      // part it plays in the candidate boundary.
+      const className = `qz1-point qz1-point-${index}${role ? ` qz1-point--${role}` : ""}`;
+      if (role === "start" || role === "end") {
+        return {
+          className,
+          radius: 10,
+          color: "#ffffff",
+          fillColor: role === "start" ? "#15803d" : "#b91c1c",
+          fillOpacity: 1,
+          opacity: 1,
+          weight: 3
+        };
+      }
+      const tagged = Boolean(point.feature) && point.feature !== "unknown";
+      const emphasised = role !== "outside";
       return {
-        radius: 8,
+        className,
+        radius: (tagged ? 6 : 4) + (emphasised ? 1 : 0),
         color: FEATURE_COLORS[point.feature],
-        fillColor,
-        fillOpacity: 0.84,
-        opacity: 1,
-        weight: point.feature === "unknown" ? 3 : 5
+        fillColor: point.augmented ? "#15803d" : "#d97706",
+        fillOpacity: emphasised ? 0.85 : 0.4,
+        opacity: emphasised ? 0.95 : 0.45,
+        weight: tagged ? 3 : (emphasised ? 2 : 1)
       };
+    }
+
+    // -----------------------------------------------------------------------
+    // Stage-1 boundary trimming (Basic mode)
+    //
+    // The farmer names two EXISTING measured points as the start and the end
+    // of the field boundary; everything between them, in walk order, becomes
+    // the candidate polygon. index.html owns the map markers and the panel;
+    // all index arithmetic lives in js/fields/boundary-selection.js and all
+    // geometry/area/persistence in the field-annotation modules.
+    // -----------------------------------------------------------------------
+
+    let boundarySelectionApi = null; // js/fields/boundary-selection.js
+    let basicBoundarySelection = { startIndex: null, endIndex: null };
+    let basicBoundaryPickMode = null; // null | "start" | "end"
+    let basicTrackSource = { fileName: null, rawText: null };
+    const basicBoundaryLayer = L.layerGroup().addTo(map);
+
+    function basicBoundaryRole(index) {
+      const { startIndex, endIndex } = basicBoundarySelection;
+      if (!Number.isInteger(startIndex) || !Number.isInteger(endIndex)) {
+        return null;
+      }
+      if (index === startIndex) {
+        return "start";
+      }
+      if (index === endIndex) {
+        return "end";
+      }
+      return index > startIndex && index < endIndex ? "inside" : "outside";
+    }
+
+    function currentBasicBoundaryRange() {
+      if (!boundarySelectionApi) {
+        return null;
+      }
+      return boundarySelectionApi.selectBoundaryPoints(parsedPoints, basicBoundarySelection);
+    }
+
+    /**
+     * The candidate boundary drawn over the raw track: a solid line along the
+     * points the farmer actually walked, plus a dashed END -> START segment
+     * for the one edge they did not. Drawing the closing segment differently
+     * is what makes the closure gap legible before they commit to it.
+     */
+    function renderBasicBoundaryOverlay() {
+      basicBoundaryLayer.clearLayers();
+      const range = currentBasicBoundaryRange();
+      if (!range || !range.valid || range.coordinates.length < 2) {
+        return;
+      }
+      // interactive:false is load-bearing, not cosmetic: the boundary is drawn
+      // directly on top of the very markers the farmer has to tap to choose
+      // START/END, and an interactive path would swallow those taps.
+      L.polyline(range.coordinates, {
+        className: "basic-boundary-line", color: "#166534", weight: 4, opacity: 0.95, interactive: false
+      }).addTo(basicBoundaryLayer);
+      L.polyline([range.coordinates[range.coordinates.length - 1], range.coordinates[0]], {
+        className: "basic-boundary-closing-line",
+        color: "#166534", weight: 3, opacity: 0.8, dashArray: "6 6", interactive: false
+      }).addTo(basicBoundaryLayer);
+    }
+
+    function setBasicBoundaryHint(message) {
+      const hint = document.getElementById("basicBoundaryHint");
+      if (!hint) {
+        return;
+      }
+      hint.textContent = message || "";
+      hint.hidden = !message;
+    }
+
+    function renderBasicBoundaryPanel() {
+      const controls = document.getElementById("basicBoundaryControls");
+      const summary = document.getElementById("basicTrackSummary");
+      const countLabel = document.getElementById("basicTrackPointCount");
+      if (!controls || !summary || !countLabel) {
+        return;
+      }
+      const hasTrack = parsedPoints.length > 0;
+      summary.hidden = !hasTrack;
+      countLabel.textContent = String(parsedPoints.length);
+      controls.hidden = !hasTrack;
+      if (!hasTrack) {
+        return;
+      }
+
+      const label = boundarySelectionApi?.boundaryPointLabel ?? (() => "未選択");
+      [["start", "basicBoundaryStartValue", "basicPickStartButton"],
+       ["end", "basicBoundaryEndValue", "basicPickEndButton"]].forEach(([kind, valueId, buttonId]) => {
+        const index = kind === "start" ? basicBoundarySelection.startIndex : basicBoundarySelection.endIndex;
+        const value = document.getElementById(valueId);
+        const button = document.getElementById(buttonId);
+        if (value) {
+          value.textContent = Number.isInteger(index) ? label(index) : "未選択";
+          value.dataset.state = Number.isInteger(index) ? "set" : "empty";
+        }
+        if (button) {
+          const picking = basicBoundaryPickMode === kind;
+          button.setAttribute("aria-pressed", String(picking));
+          button.textContent = picking ? "選択中…" : "地図で選ぶ";
+        }
+      });
+
+      const range = currentBasicBoundaryRange();
+      const countEl = document.getElementById("basicBoundaryCount");
+      if (countEl) {
+        countEl.textContent = range && Number.isInteger(range.startIndex) && Number.isInteger(range.endIndex)
+          ? boundarySelectionApi.selectionSummaryLabel(range)
+          : "—";
+      }
+      const createButton = document.getElementById("basicCreateFieldButton");
+      if (createButton) {
+        createButton.disabled = !range?.valid;
+      }
+    }
+
+    /**
+     * Called after a successful Basic-mode NMEA parse. Defaults to the whole
+     * track (START = first fix, END = last) so a farmer who walked a clean
+     * loop can register immediately, and only has to trim when the walk
+     * includes an approach or a return leg.
+     */
+    function armBasicBoundarySelection({ fileName = null, rawText = null } = {}) {
+      basicTrackSource = { fileName, rawText };
+      basicBoundaryPickMode = null;
+      basicBoundarySelection = parsedPoints.length > 0
+        ? { startIndex: 0, endIndex: parsedPoints.length - 1 }
+        : { startIndex: null, endIndex: null };
+      setBasicBoundaryHint(parsedPoints.length > 0
+        ? "全体が選択されています。approach（行き帰り）の区間が含まれる場合は開始点・終了点を選び直してください。"
+        : "");
+      renderBasicBoundaryPanel();
+      renderPoints({ fit: true });
+    }
+
+    function beginBasicBoundaryPick(kind) {
+      if (parsedPoints.length === 0) {
+        return;
+      }
+      basicBoundaryPickMode = basicBoundaryPickMode === kind ? null : kind;
+      setBasicBoundaryHint(basicBoundaryPickMode
+        ? `地図上の測位点をタップして${kind === "start" ? "開始点" : "終了点"}を選んでください。`
+        : "");
+      renderBasicBoundaryPanel();
+    }
+
+    /**
+     * Reversed picks are re-labelled, never silently reinterpreted and never
+     * wrapped around the end of the track: normalizeBoundarySelection() makes
+     * the earlier measured point 開始点 and the later one 終了点, and the
+     * panel says so via REVERSED_SELECTION_NOTE.
+     */
+    function setBasicBoundaryPoint(kind, index) {
+      if (!boundarySelectionApi) {
+        return;
+      }
+      const picked = {
+        startIndex: kind === "start" ? index : basicBoundarySelection.startIndex,
+        endIndex: kind === "end" ? index : basicBoundarySelection.endIndex
+      };
+      const normalized = boundarySelectionApi.normalizeBoundarySelection({
+        startIndex: picked.startIndex, endIndex: picked.endIndex, pointCount: parsedPoints.length
+      });
+      basicBoundarySelection = Number.isInteger(normalized.startIndex) && Number.isInteger(normalized.endIndex)
+        ? { startIndex: normalized.startIndex, endIndex: normalized.endIndex }
+        : picked;
+      basicBoundaryPickMode = null;
+      setBasicBoundaryHint(normalized.reversed
+        ? boundarySelectionApi.REVERSED_SELECTION_NOTE
+        : (normalized.error || ""));
+      renderBasicBoundaryPanel();
+      renderPoints({ fit: false });
+    }
+
+    function handleGnssPointClick(point, index) {
+      if (basicBoundaryPickMode) {
+        map.closePopup();
+        setBasicBoundaryPoint(basicBoundaryPickMode, index);
+        return;
+      }
+      paddyIntelligence?.selectGnssPoint(point);
+    }
+
+    /** Clears the trimming UI entirely — used once a field has been created. */
+    function clearBasicBoundarySelection() {
+      basicBoundarySelection = { startIndex: null, endIndex: null };
+      basicBoundaryPickMode = null;
+      basicTrackSource = { fileName: null, rawText: null };
+      setBasicBoundaryHint("");
+      const controls = document.getElementById("basicBoundaryControls");
+      const summary = document.getElementById("basicTrackSummary");
+      if (controls) controls.hidden = true;
+      if (summary) summary.hidden = true;
+      renderPoints({ fit: false });
     }
 
     function renderPhonePoints(options = {}) {
@@ -5171,6 +5567,9 @@
       setLayerVisible(fieldLayer, showFieldLayerInput.checked);
       const showLegacySurveyLayers = activeWorkspace !== "assurance";
       setLayerVisible(pointLayer, showLegacySurveyLayers && showQz1LayerInput.checked);
+      // The Stage-1 candidate boundary is derived from those same QZ1 points,
+      // so it follows their gate rather than floating over a hidden track.
+      setLayerVisible(basicBoundaryLayer, showLegacySurveyLayers && showQz1LayerInput.checked);
       setLayerVisible(phoneLayer, showLegacySurveyLayers && showPhoneLayerInput.checked);
       setLayerVisible(liveLocationLayer, showLegacySurveyLayers && showPhoneLayerInput.checked);
       const showAnalysisLayers = activeWorkspace === "analysis";
@@ -5183,20 +5582,25 @@
       }
       assuranceController?.setWorkspaceActive(activeWorkspace === "assurance");
       vegetationController?.setWorkspaceActive(activeWorkspace === "analysis");
-      if (activeWorkspace === "analysis") {
+      // 圃場レポート moved to 圃場データ along with the rest of the field panels.
+      if (activeWorkspace === "fields") {
         fieldReportController?.refresh();
       }
-      if (activeWorkspace === "decision") {
+      // 今日の水門判断 is no longer reachable only through the 判断デモ
+      // workspace -- it is the headline of 基本モード, where activeWorkspace is
+      // whatever the mode defaulted to. Keying purely off the workspace would
+      // leave the farmer's verdict, field summary and proof card stale.
+      if (activeWorkspace === "decision" || document.body.dataset.mode === "basic") {
         populateDecisionFieldOptions();
         renderDecisionFieldSummary();
         renderProofCard();
       }
       // The generic [data-workspace] unhide pass above always reveals
-      // fieldRegDialog when entering QZ1測量, regardless of whether an
+      // fieldRegDialog when entering 圃場データ, regardless of whether an
       // upload is actually pending — let the controller correct that.
       fieldAnnotationController?.syncDialogVisibility();
       // Same problem, higher stakes: that pass would reveal the pilot panel on
-      // every entry to QZ1測量 even when the backend forbids pilot control.
+      // every entry to 開発ツール even when the backend forbids pilot control.
       // A flight-control surface must never appear unasked for.
       syncPilotPanelVisibility();
     }
@@ -5459,7 +5863,7 @@
 
     // Cached separately from the shared map's `parsedPoints` global — the
     // proof card must show the same 校内実測サンプル numbers regardless of
-    // whatever the QZ1測量 tab currently has loaded onto the map.
+    // whatever the 圃場データ tab currently has loaded onto the map.
     let schoolSampleCache = null;
 
     async function ensureSchoolSampleLoaded() {
@@ -5618,7 +6022,7 @@
         }
         proofMessage.textContent = "奈良高専の寮周辺で取得した実測ログです。圃場測量データではありません。";
       } catch (error) {
-        proofMessage.textContent = `実測ログを読み込めませんでした（${error.message}）。QZ1測量画面からNMEAファイルを選択してください。`;
+        proofMessage.textContent = `実測ログを読み込めませんでした（${error.message}）。圃場データ画面からNMEAファイルを選択してください。`;
       } finally {
         loadProofButton.disabled = false;
         workspacePrimaryAction.disabled = false;
@@ -5648,6 +6052,10 @@
     }
 
     const PRODUCT_MODES = ["basic", "drone", "settings"];
+    const WORKSPACES = ["decision", "survey", "assurance", "fields", "analysis", "devtools"];
+    // Only these four ever had bare #hash routes in the wild, so only these
+    // stay accepted as top-level legacy routes. "fields"/"devtools" are new
+    // and are reachable as settings/* only.
     const LEGACY_WORKSPACES = ["decision", "survey", "assurance", "analysis"];
 
     function writeRoute(route, { replace = false } = {}) {
@@ -5683,13 +6091,20 @@
     }
 
     function switchWorkspace(workspace, { updateHash = true, replace = false } = {}) {
-      if (!["decision", "survey", "assurance", "analysis"].includes(workspace)) {
+      if (!WORKSPACES.includes(workspace)) {
         workspace = "decision";
       }
       activeWorkspace = workspace;
       document.body.dataset.workspace = workspace;
+      // Workspaces are a Settings-only concept (they are the nested
+      // settings/* routes). In 基本 / ドローン the workspace tabs are not even
+      // reachable, so applying their gate there would arbitrarily suppress
+      // cards purely because of which legacy workspace they happen to sit in
+      // -- that is what kept 今日の水門判断 (data-workspace="decision") out of
+      // 基本モード. Outside Settings, data-mode is the single source of truth.
+      const workspaceGated = document.body.dataset.mode === "settings";
       document.querySelectorAll("[data-workspace]").forEach((section) => {
-        section.hidden = section.dataset.workspace !== workspace;
+        section.hidden = workspaceGated && section.dataset.workspace !== workspace;
       });
       document.querySelectorAll("[data-workspace-target]").forEach((tab) => {
         const selected = tab.dataset.workspaceTarget === workspace;
@@ -5700,7 +6115,9 @@
         decision: "選択中データの測位点を表示",
         survey: "NMEAをアップロード",
         assurance: "測量チェックを実行",
-        analysis: "解析デモを読み込む"
+        fields: "圃場・水管理データを表示",
+        analysis: "解析デモを読み込む",
+        devtools: "バックエンド状態を確認"
       }[workspace];
       document.querySelector(".panel").scrollTop = 0;
       if (updateHash) {
@@ -5716,7 +6133,7 @@
 
     function applyRouteFromLocation() {
       const route = location.hash.slice(1).toLowerCase();
-      const nestedSettings = route.match(/^settings\/(decision|survey|assurance|analysis)$/);
+      const nestedSettings = route.match(/^settings\/([a-z]+)$/);
       const engineeringNav = document.querySelector(".engineering-nav");
       if (nestedSettings) {
         if (engineeringNav) engineeringNav.open = true;
@@ -6364,17 +6781,45 @@
       refreshFieldOverlay();
     }
 
+    /**
+     * Shared by the Settings upload control (#fileInput) and Basic mode's own
+     * (#basicNmeaInput). Parsing, map rendering and assurance import are
+     * identical for both; only what happens *after* a successful parse
+     * differs by mode.
+     */
+    async function handleNmeaFileSelected(file) {
+      const rawText = await file.text();
+      const loaded = applyNmeaText(rawText, file.name);
+      if (!loaded) {
+        return;
+      }
+      if (document.body.dataset.mode === "basic") {
+        // Stage 1 trims the walked track first. The whole-recording
+        // registration dialog would ask the farmer to accept a boundary they
+        // have not chosen yet, so it stays out of the way until they have
+        // picked START and END.
+        armBasicBoundarySelection({ fileName: file.name, rawText });
+        return;
+      }
+      fieldAnnotationController?.handleNmeaUploaded({ points: parsedPoints, fileName: file.name, rawText });
+    }
+
     fileInput.addEventListener("change", async (event) => {
       const file = event.target.files[0];
       if (!file) {
         return;
       }
-      const rawText = await file.text();
-      const loaded = applyNmeaText(rawText, file.name);
-      if (loaded) {
-        fieldAnnotationController?.handleNmeaUploaded({ points: parsedPoints, fileName: file.name, rawText });
-      }
+      await handleNmeaFileSelected(file);
       fileInput.value = "";
+    });
+
+    document.getElementById("basicNmeaInput")?.addEventListener("change", async (event) => {
+      const file = event.target.files[0];
+      if (!file) {
+        return;
+      }
+      await handleNmeaFileSelected(file);
+      event.target.value = "";
     });
 
     importInput.addEventListener("change", async (event) => {
@@ -6449,7 +6894,7 @@
     decisionAddWaterPointButton?.addEventListener("click", () => {
       const targetFieldId = decisionFieldSelect?.value;
       const isRealField = targetFieldId && targetFieldId !== DECISION_SAMPLE_VALUE && targetFieldId !== DECISION_DEMO_VALUE;
-      switchWorkspace("survey");
+      switchWorkspace("fields");
       window.setTimeout(() => {
         const waterPanel = document.getElementById("waterControlPanel");
         const wcpSelect = document.getElementById("wcpTargetFieldSelect");
@@ -6499,21 +6944,22 @@
       updateWaterLevelVerdict();
     });
     document.getElementById("recObsWaterLevelInput")?.addEventListener("input", updateWaterLevelVerdict);
+    // Points at Stage-1's own card now that the technical recording surface
+    // is Settings-only: in Basic mode "圃場を測る" means "load the walk you
+    // recorded and turn it into a field", not "open a WebSerial console".
     document.getElementById("basicMeasureFieldButton")?.addEventListener("click", () => {
       switchWorkspace("survey");
       window.setTimeout(() => {
-        const recDetails = document.getElementById("recPanel")?.closest("details");
-        if (recDetails) recDetails.open = true;
-        const startButton = document.getElementById("recStartButton");
-        scrollElementWithinPanel(startButton, { block: "start" });
-        startButton?.focus();
+        const card = document.getElementById("basicStage1Card");
+        scrollElementWithinPanel(card, { block: "start" });
+        document.getElementById(parsedPoints.length > 0 ? "basicPickStartButton" : "basicNmeaInput")?.focus();
       }, 100);
     });
     document.getElementById("basicRecordWaterButton")?.addEventListener("click", () => {
-      switchWorkspace("survey");
+      switchWorkspace("fields");
       window.setTimeout(() => {
-        const recDetails = document.getElementById("recPanel")?.closest("details");
-        if (recDetails) recDetails.open = true;
+        const waterCard = document.getElementById("basicWaterRecordCard");
+        if (waterCard) waterCard.open = true;
         const typeSelect = document.getElementById("recObsTypeSelect");
         if (typeSelect && [...typeSelect.options].some((option) => option.value === "water_level")) {
           typeSelect.value = "water_level";
@@ -6523,8 +6969,74 @@
         waterInput?.focus();
       }, 100);
     });
+
+    // ---- Stage-1 help ----------------------------------------------------
+    const basicHelpDialog = document.getElementById("basicHelpDialog");
+    const basicHelpButton = document.getElementById("basicHelpButton");
+
+    function setBasicHelpOpen(open) {
+      if (!basicHelpDialog) {
+        return;
+      }
+      basicHelpDialog.hidden = !open;
+      basicHelpButton?.setAttribute("aria-expanded", String(open));
+      if (open) {
+        document.getElementById("basicHelpCloseButton")?.focus();
+      } else {
+        basicHelpButton?.focus();
+      }
+    }
+
+    basicHelpButton?.addEventListener("click", () => setBasicHelpOpen(basicHelpDialog?.hidden !== false));
+    document.getElementById("basicHelpCloseButton")?.addEventListener("click", () => setBasicHelpOpen(false));
+    basicHelpDialog?.addEventListener("click", (event) => {
+      if (event.target.hasAttribute("data-basic-help-dismiss")) {
+        setBasicHelpOpen(false);
+      }
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && basicHelpDialog && !basicHelpDialog.hidden) {
+        setBasicHelpOpen(false);
+      }
+    });
+
+    // ---- Stage-1 boundary trimming --------------------------------------
+    document.getElementById("basicPickStartButton")?.addEventListener("click", () => beginBasicBoundaryPick("start"));
+    document.getElementById("basicPickEndButton")?.addEventListener("click", () => beginBasicBoundaryPick("end"));
+    document.getElementById("basicBoundaryResetButton")?.addEventListener("click", () => {
+      if (parsedPoints.length === 0) {
+        return;
+      }
+      basicBoundaryPickMode = null;
+      basicBoundarySelection = { startIndex: 0, endIndex: parsedPoints.length - 1 };
+      setBasicBoundaryHint("");
+      renderBasicBoundaryPanel();
+      renderPoints({ fit: false });
+    });
+    document.getElementById("basicCreateFieldButton")?.addEventListener("click", () => {
+      const range = currentBasicBoundaryRange();
+      if (!range) {
+        return;
+      }
+      if (!range.valid) {
+        setBasicBoundaryHint(range.error);
+        return;
+      }
+      fieldAnnotationController?.beginBasicFieldRegistration({
+        rawPoints: range.points,
+        coordinates: range.coordinates,
+        fileName: basicTrackSource.fileName,
+        rawText: basicTrackSource.rawText,
+        selection: { startIndex: range.startIndex, endIndex: range.endIndex }
+      });
+    });
+    // 圃場レポート is owned by 設定 → 圃場データ (see #fieldReportPanel), so this
+    // navigates there rather than pulling a reports/exports panel into 基本モード.
+    // switchWorkspace() alone is not enough any more: outside Settings the
+    // workspace gate is inert, so the panel's data-mode="settings" would keep
+    // it hidden and this button would open nothing.
     document.getElementById("basicViewResultsButton")?.addEventListener("click", () => {
-      switchWorkspace("analysis");
+      switchMode("settings", { workspace: "fields" });
       window.setTimeout(() => {
         const reportPanel = document.getElementById("fieldReportPanel");
         if (reportPanel) reportPanel.open = true;
@@ -6535,9 +7047,9 @@
     document.getElementById("droneModeGoMeasureButton")?.addEventListener("click", () => {
       switchMode("basic");
       window.setTimeout(() => {
-        const startButton = document.getElementById("recStartButton");
-        scrollElementWithinPanel(startButton, { block: "start" });
-        startButton?.focus();
+        const card = document.getElementById("basicStage1Card");
+        scrollElementWithinPanel(card, { block: "start" });
+        card?.querySelector(".basic-upload-button")?.focus();
       }, 100);
     });
     document.querySelectorAll("[data-weather-scenario]").forEach((button) => {
@@ -6567,6 +7079,11 @@
 
     (async function init() {
       initSerialCard();
+      try {
+        boundarySelectionApi = await import("./js/fields/boundary-selection.js");
+      } catch (error) {
+        console.error("Boundary selection initialization failed", error);
+      }
       // A bare/unknown URL is Basic. Legacy workspace hashes continue to open
       // their original Settings content, while normal navigation writes only
       // canonical product-mode routes.
@@ -6607,7 +7124,17 @@
             renderDroneModeGate();
             populateDecisionFieldOptions();
             fieldReportController?.refresh();
-          }
+          },
+          // 選び直す / キャンセル on the Stage-1 dialog: nothing was created,
+          // so the trimming panel and the START/END markers come straight
+          // back with the farmer's picks intact.
+          onBasicReselect: () => {
+            renderBasicBoundaryPanel();
+            renderPoints({ fit: false });
+          },
+          // Registered: the raw track has served its purpose and the field
+          // polygon now carries the boundary, so the trimming UI stands down.
+          onBasicRegistered: () => clearBasicBoundarySelection()
         });
         fieldAnnotationController.mount();
         paddyIntelligence.getFieldAnnotationExport = () => fieldAnnotationController.getExportData();

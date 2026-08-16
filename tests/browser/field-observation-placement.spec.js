@@ -18,10 +18,10 @@ const INSIDE_FIELD_LATLNG = { lat: 34.65462, lng: 135.83005 };
 const OUTSIDE_FIELD_LATLNG = { lat: 34.7, lng: 135.9 };
 
 async function openSurveyWorkspace(page) {
-  await page.goto("/#survey");
+  await page.goto("/#settings/fields");
   await expect(page.locator("#fieldRegDialog")).toBeAttached({ timeout: 15_000 });
   await page.evaluate(() => {
-    document.querySelectorAll("details[data-workspace='survey']").forEach((card) => { card.open = true; });
+    document.querySelectorAll("details[data-workspace='fields']").forEach((card) => { card.open = true; });
   });
 }
 
@@ -244,9 +244,9 @@ test("field report shows 手動配置 as the observation's source, agreeing with
   await mapClick(page, INSIDE_FIELD_LATLNG);
   await page.locator("#selFeatureSaveButton").click();
 
-  await page.getByRole("button", { name: "詳細解析" }).click();
+  await page.getByRole("button", { name: "圃場データ" }).click();
   await page.evaluate(() => {
-    document.querySelectorAll("details[data-workspace='analysis']").forEach((card) => { card.open = true; });
+    document.querySelectorAll("details[data-workspace='fields']").forEach((card) => { card.open = true; });
   });
   await page.locator("#reportFieldSelect").selectOption("paddy-001");
   await page.locator("#reportGenerateButton").click();

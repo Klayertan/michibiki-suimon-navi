@@ -32,10 +32,10 @@ const PADDING_LINE = "NOOP padding line to inflate file size for the large-file 
 const OVERSIZED_NMEA = TIGHT_LOOP_NMEA + "\r\n" + PADDING_LINE.repeat(Math.ceil(2_100_000 / PADDING_LINE.length));
 
 async function openSurveyWorkspace(page) {
-  await page.goto("/#survey");
+  await page.goto("/#settings/fields");
   await expect(page.locator("#fieldRegDialog")).toBeAttached({ timeout: 15_000 });
   await page.evaluate(() => {
-    document.querySelectorAll("details[data-workspace='survey']").forEach((card) => { card.open = true; });
+    document.querySelectorAll("details[data-workspace='fields']").forEach((card) => { card.open = true; });
   });
 }
 
@@ -153,7 +153,7 @@ test("plain キャンセル on the registration dialog creates nothing", async (
   await expect(page.locator("#fieldAnnotationSummaryFields")).toHaveText("0");
 });
 
-test("registered fields are visible in QZ1測量, survive a tab switch, and survive a page reload", async ({ page }) => {
+test("registered fields are visible in 圃場データ, survive a tab switch, and survive a page reload", async ({ page }) => {
   await openSurveyWorkspace(page);
   await uploadNmea(page, TIGHT_LOOP_NMEA);
   await page.locator("#fieldRegConfirmButton").click();
@@ -165,14 +165,14 @@ test("registered fields are visible in QZ1測量, survive a tab switch, and surv
   await page.getByRole("button", { name: "詳細解析" }).click();
   const stillOnMap = await page.evaluate(() => window.map.hasLayer(window.fieldAnnotationController.layers.fields));
   expect(stillOnMap).toBe(true);
-  await page.getByRole("button", { name: "QZ1測量" }).click();
+  await page.getByRole("button", { name: "圃場データ" }).click();
   await expect(page.locator("#registeredFieldsContainer")).toContainText("圃場1 / paddy-001");
 
   // A full reload must restore state from localStorage.
   await page.reload();
   await expect(page.locator("#fieldRegDialog")).toBeAttached({ timeout: 15_000 });
   await page.evaluate(() => {
-    document.querySelectorAll("details[data-workspace='survey']").forEach((card) => { card.open = true; });
+    document.querySelectorAll("details[data-workspace='fields']").forEach((card) => { card.open = true; });
   });
   await expect(page.locator("#fieldAnnotationSummaryFields")).toHaveText("1");
   await expect(page.locator("#registeredFieldsContainer")).toContainText("圃場1 / paddy-001");
@@ -388,9 +388,9 @@ test("a water-control marker's popup shows 編集/削除; 削除 removes it from
   await expect(page.locator("#workflowProgressLabel")).toHaveText("進捗: 2 / 5 完了");
 
   // 圃場レポート no longer lists the deleted point.
-  await page.getByRole("button", { name: "詳細解析" }).click();
+  await page.getByRole("button", { name: "圃場データ" }).click();
   await page.evaluate(() => {
-    document.querySelectorAll("details[data-workspace='analysis']").forEach((card) => { card.open = true; });
+    document.querySelectorAll("details[data-workspace='fields']").forEach((card) => { card.open = true; });
   });
   await page.locator("#reportFieldSelect").selectOption("paddy-001");
   await page.locator("#reportGenerateButton").click();
@@ -566,13 +566,13 @@ test("observation markers persist after tab switching and after a page reload", 
   await page.getByRole("button", { name: "詳細解析" }).click();
   const stillOnMap = await page.evaluate(() => window.map.hasLayer(window.fieldAnnotationController.layers.observations));
   expect(stillOnMap).toBe(true);
-  await page.getByRole("button", { name: "QZ1測量" }).click();
+  await page.getByRole("button", { name: "圃場データ" }).click();
   await expect(page.locator("#fieldAnnotationSummaryObservations")).toHaveText("1");
 
   await page.reload();
   await expect(page.locator("#fieldRegDialog")).toBeAttached({ timeout: 15_000 });
   await page.evaluate(() => {
-    document.querySelectorAll("details[data-workspace='survey']").forEach((card) => { card.open = true; });
+    document.querySelectorAll("details[data-workspace='fields']").forEach((card) => { card.open = true; });
   });
   await expect(page.locator("#fieldAnnotationSummaryObservations")).toHaveText("1");
   const observation = await page.evaluate(() => window.fieldAnnotationController.fieldObservations[0]);
@@ -708,7 +708,7 @@ function workflowStep(page, id) {
   return page.locator(`.workflow-step:has(button[data-workflow-step="${id}"])`);
 }
 
-test("現地調査ワークフロー panel appears in QZ1測量 with 0/5 progress and step 1 as the next task on a fresh load", async ({ page }) => {
+test("現地調査ワークフロー panel appears in 圃場データ with 0/5 progress and step 1 as the next task on a fresh load", async ({ page }) => {
   await openSurveyWorkspace(page);
   await expect(page.locator("#workflowGuidePanel")).toBeVisible();
   await expect(page.locator("#workflowGuidePanel h2")).toHaveText("現地調査ワークフロー");
@@ -835,7 +835,7 @@ test("step 5 follows step 4 directly in normal document flow, and no survey card
   await page.locator("#fieldRegConfirmButton").click();
 
   const gaps = await page.evaluate(() => {
-    const cards = [...document.querySelectorAll("[data-workspace='survey']")]
+    const cards = [...document.querySelectorAll("[data-workspace='fields']")]
       .filter((card) => !card.hidden && card.getBoundingClientRect().height > 0);
     return cards.slice(1).map((card, index) => ({
       afterId: cards[index].id || cards[index].className,

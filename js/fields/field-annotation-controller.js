@@ -32,6 +32,7 @@ import {
   UPLOAD_CLOSE_WARNING_MESSAGE,
   WATER_CONTROL_STYLES,
   WATER_CONTROL_TYPE_LABELS,
+  basicClosureWarningText,
   buildBoundaryTrack,
   buildField,
   buildFieldObservation,
@@ -44,6 +45,7 @@ import {
   isPointInsideBoundary,
   isWaterControlType,
   makeSurveySessionId,
+  nextAvailableFieldDefaults,
   nextBoundaryTrackId,
   nextFieldDefaults,
   nextObservationName,
@@ -108,7 +110,14 @@ const ELEMENT_IDS = [
   "fieldAnnotationSummaryPoints", "fieldAnnotationSummaryObservations",
   // Basic-mode single "current field" control (index.html mode shell) — reuses
   // this same populate function, never a second one.
-  "basicActiveFieldSelect"
+  "basicActiveFieldSelect",
+  // Stage-1 (Basic mode) field-only registration dialog. Deliberately has no
+  // measurement-type choice and no 境界トラック escape hatch — both remain
+  // available on the Settings dialog above.
+  "basicFieldRegDialog", "basicFieldRegSummary", "basicFieldRegNameInput", "basicFieldRegIdInput",
+  "basicFieldRegMemoInput", "basicFieldRegConfirmButton", "basicFieldRegCancelButton", "basicFieldRegMessage",
+  "basicFieldRegCloseWarning", "basicFieldRegCloseWarningText",
+  "basicFieldRegForceCloseButton", "basicFieldRegReselectButton"
 ];
 
 export class FieldAnnotationController {
@@ -128,6 +137,13 @@ export class FieldAnnotationController {
     // its own -- it reads this.fields/basicActiveFieldSelect after every
     // renderAll(), the same point every other target-field select refreshes.
     this.onFieldsChanged = options.onFieldsChanged || (() => {});
+    // Stage-1 only: index.html owns the START/END markers on the map, so it
+    // asks to be told when the farmer chooses 選び直す from the closure
+    // warning (or cancels) and the selection UI has to come back.
+    this.onBasicReselect = options.onBasicReselect || (() => {});
+    // Stage-1 success path: lets index.html clear the START/END markers and
+    // the trimming panel once the field actually exists.
+    this.onBasicRegistered = options.onBasicRegistered || (() => {});
 
     this.fields = [];
     this.boundaryTracks = [];
@@ -139,6 +155,7 @@ export class FieldAnnotationController {
     this.selected = null; // { kind: "field" | "track" | "point" | "observation", record }
     this.pendingUploadRegistration = null; // gathered inputs awaiting a closure decision
     this.pendingManualClosure = null; // same, for the advanced/manual card
+    this.pendingBasicRegistration = null; // Stage-1 field-only registration
     this.pendingWaterPointType = null; // internal type key awaiting a position
     this.pendingObservationType = null; // internal observation type key awaiting a position
     this.mapClickAddActiveObservation = false;
@@ -212,6 +229,12 @@ export class FieldAnnotationController {
     el.fieldRegForceCloseButton?.addEventListener("click", () => this.resolvePendingClosure(this.pendingUploadRegistration, "force-close"));
     el.fieldRegSaveAsTrackButton?.addEventListener("click", () => this.resolvePendingClosure(this.pendingUploadRegistration, "save-as-track"));
     el.fieldRegCancelCloseButton?.addEventListener("click", () => this.resolvePendingClosure(this.pendingUploadRegistration, "cancel"));
+
+    // Stage-1 field-only registration dialog (Basic mode).
+    el.basicFieldRegConfirmButton?.addEventListener("click", () => this.confirmBasicFieldRegistration());
+    el.basicFieldRegCancelButton?.addEventListener("click", () => this.cancelBasicFieldRegistration());
+    el.basicFieldRegForceCloseButton?.addEventListener("click", () => this.resolveBasicClosure("force-close"));
+    el.basicFieldRegReselectButton?.addEventListener("click", () => this.resolveBasicClosure("reselect"));
 
     // Water-management points.
     el.wcpTargetFieldSelect?.addEventListener("change", () => {
@@ -477,6 +500,146 @@ export class FieldAnnotationController {
     this.setFieldRegMessage("");
   }
 
+  // -------------------------------------------------------------------------
+  // Stage-1 (Basic mode) field-only registration
+  //
+  // Deliberately narrower than confirmUploadRegistration() above: no
+  // measurement-type choice, no 境界トラック outcome, no farmer-entered id.
+  // A farmer who has just walked a paddy is registering a paddy — asking
+  // them to first classify their walk as a polygon / a boundary track / a
+  // set of water-control points is a data-model question, not a field
+  // question. Those choices all still exist on the Settings dialog.
+  //
+  // Geometry is NOT reimplemented here: the START/END range arrives already
+  // trimmed from boundary-selection.js, and closure/area/persistence go
+  // through the same evaluateClosure() + registerFieldPolygon() path the
+  // legacy dialog uses.
+  // -------------------------------------------------------------------------
+
+  /** Only ever returns an id that is free, so the farmer never sees a collision error. */
+  resolveBasicFieldId(candidate) {
+    const taken = this.fields.map((field) => String(field.id));
+    const trimmed = String(candidate || "").trim();
+    if (trimmed && !taken.includes(trimmed)) {
+      return trimmed;
+    }
+    return nextAvailableFieldDefaults(taken).id;
+  }
+
+  /**
+   * Opens the Stage-1 dialog for an already-trimmed START..END range.
+   * `coordinates` comes from selectBoundaryPoints() — this method never
+   * re-derives, re-orders, or re-filters the range itself.
+   */
+  beginBasicFieldRegistration({ rawPoints = [], coordinates = [], fileName = null, rawText = null, selection = null } = {}) {
+    const el = this.elements;
+    if (!el.basicFieldRegDialog) {
+      return false;
+    }
+    const defaults = nextAvailableFieldDefaults(this.fields.map((field) => field.id));
+    el.basicFieldRegNameInput.value = defaults.name;
+    el.basicFieldRegIdInput.value = defaults.id;
+    el.basicFieldRegMemoInput.value = "";
+    const summary = summarizeFixQuality(rawPoints);
+    el.basicFieldRegSummary.textContent =
+      `選択範囲: ${rawPoints.length}点 / DGPS fix: ${summary.byFixQuality["2"] || 0} / GPS単独: ${summary.byFixQuality["1"] || 0}`;
+    this.setBasicFieldRegMessage("");
+    this.hidePendingClosureUi(el.basicFieldRegCloseWarning);
+    el.basicFieldRegDialog.hidden = false;
+    scrollWithinPanel(el.basicFieldRegDialog, { block: "nearest" });
+    this.pendingBasicRegistration = { rawPoints, coordinates, fileName, rawText, selection };
+    return true;
+  }
+
+  confirmBasicFieldRegistration() {
+    const pending = this.pendingBasicRegistration;
+    if (!pending) {
+      return;
+    }
+    const el = this.elements;
+    const name = el.basicFieldRegNameInput.value.trim();
+    if (!name) {
+      this.setBasicFieldRegMessage("圃場名を入力してください。");
+      return;
+    }
+    // Auto-repairs rather than rejects: an edited-but-taken id silently
+    // becomes the next free one, which is then shown back under 詳細.
+    const id = this.resolveBasicFieldId(el.basicFieldRegIdInput.value);
+    el.basicFieldRegIdInput.value = id;
+
+    const context = {
+      name, id, memo: el.basicFieldRegMemoInput.value,
+      rawPoints: pending.rawPoints, coordinates: pending.coordinates,
+      fileName: pending.fileName, rawNmeaText: pending.rawText,
+      measurementType: "field_polygon", dialog: "basic"
+    };
+    const closure = evaluateClosure(pending.coordinates, DEFAULT_AUTO_CLOSE_THRESHOLD_M);
+    if (!closure.canClose) {
+      this.setBasicFieldRegMessage(closure.warnings.join(" "));
+      return;
+    }
+    if (closure.autoClose) {
+      this.registerFieldPolygon({ ...context, gapM: closure.gapM, closedManually: false });
+      return;
+    }
+    this.pendingBasicRegistration = { ...pending, context, gapM: closure.gapM };
+    el.basicFieldRegCloseWarningText.textContent = basicClosureWarningText(closure.gapM);
+    el.basicFieldRegCloseWarning.hidden = false;
+  }
+
+  /**
+   * The Stage-1 closure warning offers two outcomes, not three: build the
+   * field anyway, or go back and re-pick START/END. 境界トラックとして保存
+   * is intentionally absent — see the section comment above.
+   */
+  resolveBasicClosure(action) {
+    const pending = this.pendingBasicRegistration;
+    if (!pending || !pending.context) {
+      return;
+    }
+    if (action === "force-close") {
+      this.registerFieldPolygon({ ...pending.context, gapM: pending.gapM, closedManually: true });
+      return;
+    }
+    this.cancelBasicFieldRegistration();
+  }
+
+  /** Tears the dialog down without creating anything, and hands the map back. */
+  cancelBasicFieldRegistration() {
+    this.pendingBasicRegistration = null;
+    this.hidePendingClosureUi(this.elements.basicFieldRegCloseWarning);
+    if (this.elements.basicFieldRegDialog) {
+      this.elements.basicFieldRegDialog.hidden = true;
+    }
+    this.setBasicFieldRegMessage("");
+    this.onBasicReselect();
+  }
+
+  /**
+   * Success-path teardown, called from registerFieldPolygon(). Separate from
+   * cancelBasicFieldRegistration() so a completed registration never fires
+   * onBasicReselect() and drops the farmer back into point-picking mode.
+   * No-ops for the legacy dialogs, which leave pendingBasicRegistration null.
+   */
+  finishBasicRegistration(field) {
+    if (!this.pendingBasicRegistration) {
+      return;
+    }
+    this.pendingBasicRegistration = null;
+    this.hidePendingClosureUi(this.elements.basicFieldRegCloseWarning);
+    if (this.elements.basicFieldRegDialog) {
+      this.elements.basicFieldRegDialog.hidden = true;
+    }
+    this.setBasicFieldRegMessage("");
+    this.onBasicRegistered(field);
+  }
+
+  setBasicFieldRegMessage(message) {
+    if (this.elements.basicFieldRegMessage) {
+      this.elements.basicFieldRegMessage.textContent = message;
+    }
+  }
+
   /**
    * Shared by both the upload dialog and the manual/advanced card: resolves
    * the three-way choice offered when a path's start/end points are too far
@@ -546,6 +709,7 @@ export class FieldAnnotationController {
     this.setFieldCreateMessage(message);
     this.cancelUploadRegistration();
     this.cancelManualClosure();
+    this.finishBasicRegistration(field);
     this.selectFeature("field", field);
     this.renderAll();
   }

@@ -14,7 +14,10 @@ test("bare root is Basic and normal mode navigation owns the URL, refresh, and h
   await expect(page).toHaveURL(/\/$/);
   await expect(page.locator('[data-mode-target="basic"]')).toHaveAttribute("aria-selected", "true");
   await expect(page.locator(".engineering-nav")).toBeHidden();
-  await expect(page.locator(".survey-tools")).toBeVisible();
+  // Basic gets the compact Stage-1 card; .survey-tools is the Settings-only
+  // power-user surface it replaced.
+  await expect(page.locator("#basicStage1Card")).toBeVisible();
+  await expect(page.locator(".survey-tools")).toBeHidden();
   await expect(page.locator("#basicFieldSummaryCard")).toBeVisible();
 
   await page.locator('[data-mode-target="drone"]').click();
@@ -63,13 +66,16 @@ test("aerial basemap keeps center and every existing overlay while enforcing fie
   await expect(page.locator(".leaflet-control-attribution")).toContainText("OpenStreetMap");
   await expect(page.locator(".leaflet-control-attribution")).not.toContainText("国土地理院");
 
-  await page.locator("#fileInput").setInputFiles({
+  // Register through Basic mode's own Stage-1 flow: the legacy #fileInput /
+  // #fieldRegDialog pair is Settings-only now.
+  await page.locator("#basicNmeaInput").setInputFiles({
     name: "walk.txt",
     mimeType: "text/plain",
     buffer: Buffer.from(TIGHT_LOOP_NMEA)
   });
-  await expect(page.locator("#fieldRegDialog")).toBeVisible();
-  await page.locator("#fieldRegConfirmButton").click();
+  await expect(page.locator("#basicBoundaryControls")).toBeVisible();
+  await page.locator("#basicCreateFieldButton").click();
+  await page.locator("#basicFieldRegConfirmButton").click();
   await expect(page.locator("#fieldAnnotationSummaryFields")).toHaveText("1");
 
   const before = await page.evaluate(() => {

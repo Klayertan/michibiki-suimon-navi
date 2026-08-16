@@ -34,7 +34,9 @@ import {
   isWaterControlType,
   makeSurveySessionId,
   nextBoundaryTrackId,
+  nextAvailableFieldDefaults,
   nextFieldDefaults,
+  basicClosureWarningText,
   nextObservationName,
   nextWaterControlName,
   normalizeObservationType,
@@ -59,6 +61,29 @@ test("nextFieldDefaults sequences 圃場N / paddy-00N based on existing count", 
   assert.deepEqual(nextFieldDefaults(0), { name: "圃場1", id: "paddy-001" });
   assert.deepEqual(nextFieldDefaults(1), { name: "圃場2", id: "paddy-002" });
   assert.deepEqual(nextFieldDefaults(11), { name: "圃場12", id: "paddy-012" });
+});
+
+test("nextAvailableFieldDefaults never suggests an id that is already taken", () => {
+  assert.deepEqual(nextAvailableFieldDefaults([]), { name: "田圃1", id: "paddy-001" });
+  assert.deepEqual(nextAvailableFieldDefaults(["paddy-001"]), { name: "田圃2", id: "paddy-002" });
+
+  // The exact Stage-1 failure this replaces: nextFieldDefaults() numbers by
+  // count alone, so deleting 圃場2 of 5 hands back an id 圃場5 already owns
+  // and the farmer is shown `ID "paddy-005" は既に使用されています。`.
+  const afterDeletion = ["paddy-001", "paddy-003", "paddy-004", "paddy-005"];
+  assert.equal(nextFieldDefaults(afterDeletion.length).id, "paddy-005"); // collides
+  assert.deepEqual(nextAvailableFieldDefaults(afterDeletion), { name: "田圃6", id: "paddy-006" });
+
+  // Non-sequential / hand-edited ids are skipped over rather than reused.
+  assert.deepEqual(nextAvailableFieldDefaults(["paddy-002", "north-plot"]), { name: "田圃3", id: "paddy-003" });
+});
+
+test("basicClosureWarningText names the two chosen points and asks one question", () => {
+  const text = basicClosureWarningText(26.54);
+  assert.equal(text, "開始点と終了点は約26.5m離れています。\n\nこの2点を結んで圃場を作りますか？");
+  // Stage-1 wording never mentions the 境界トラック storage concept.
+  assert.ok(!text.includes("境界トラック"));
+  assert.ok(basicClosureWarningText(NaN).includes("約—m"));
 });
 
 test("nextBoundaryTrackId and makeSurveySessionId produce stable, distinguishable ids", () => {

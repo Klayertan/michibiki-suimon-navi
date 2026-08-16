@@ -75,10 +75,10 @@ test("uploaded NMEA field data renders normally alongside the still-empty demo s
     "$GNGGA,120040.00,3439.2879,N,13549.7895,E,2,9,0.9,45.0,M,30.0,M,,*74"
   ].join("\r\n");
 
-  await page.goto("/#survey");
+  await page.goto("/#settings/fields");
   await expect(page.locator("#fieldRegDialog")).toBeAttached({ timeout: 15_000 });
   await page.evaluate(() => {
-    document.querySelectorAll("details[data-workspace='survey']").forEach((card) => { card.open = true; });
+    document.querySelectorAll("details[data-workspace='fields']").forEach((card) => { card.open = true; });
   });
   await page.locator("#fileInput").setInputFiles({ name: "walk.txt", mimeType: "text/plain", buffer: Buffer.from(nmea) });
   await page.locator("#fieldRegConfirmButton").click();

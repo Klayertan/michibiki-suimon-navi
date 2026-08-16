@@ -17,19 +17,20 @@ const OPEN_L_SHAPE_NMEA = [
   "$GNGGA,193912.00,3439.2664,N,13549.8162,E,1,8,1.1,45.0,M,30.0,M,,*75"
 ].join("\r\n");
 
-async function openAnalysisWorkspace(page) {
-  await page.getByRole("button", { name: "詳細解析" }).click();
+/** 圃場レポート lives in 圃場データ alongside the rest of the field panels. */
+async function openFieldsWorkspace(page) {
+  await page.getByRole("button", { name: "圃場データ" }).click();
   await page.evaluate(() => {
-    document.querySelectorAll("details[data-workspace='analysis']").forEach((card) => { card.open = true; });
+    document.querySelectorAll("details[data-workspace='fields']").forEach((card) => { card.open = true; });
   });
 }
 
-/** Registers a field in QZ1測量 with one water-control point and one observation, then opens 詳細解析. */
+/** Registers a field in 圃場データ with one water-control point and one observation, then opens the report panel. */
 async function registerFieldWithData(page) {
-  await page.goto("/#survey");
+  await page.goto("/#settings/fields");
   await expect(page.locator("#fieldRegDialog")).toBeAttached({ timeout: 15_000 });
   await page.evaluate(() => {
-    document.querySelectorAll("details[data-workspace='survey']").forEach((card) => { card.open = true; });
+    document.querySelectorAll("details[data-workspace='fields']").forEach((card) => { card.open = true; });
   });
   await page.locator("#fileInput").setInputFiles({ name: "walk.txt", mimeType: "text/plain", buffer: Buffer.from(TIGHT_LOOP_NMEA) });
   await page.locator("#fieldRegConfirmButton").click();
@@ -45,19 +46,19 @@ async function registerFieldWithData(page) {
   await page.locator("#selFeatureMemoInput").fill("畦道側に雑草が多い");
   await page.locator("#selFeatureSaveButton").click();
 
-  await openAnalysisWorkspace(page);
+  await openFieldsWorkspace(page);
 }
 
 test("圃場レポート panel appears with an empty state when no fields exist", async ({ page }) => {
-  await page.goto("/#analysis");
+  await page.goto("/#settings/fields");
   await expect(page.locator("#fieldReportPanel")).toBeAttached({ timeout: 15_000 });
   await page.evaluate(() => {
-    document.querySelectorAll("details[data-workspace='analysis']").forEach((card) => { card.open = true; });
+    document.querySelectorAll("details[data-workspace='fields']").forEach((card) => { card.open = true; });
   });
   await expect(page.locator("#fieldReportPanel .details-title")).toContainText("圃場レポート");
   await expect(page.locator("#reportEmptyState")).toBeVisible();
   await expect(page.locator("#reportEmptyState")).toHaveText(
-    "まだ圃場データがありません。QZ1測量でNMEAログをアップロードし、圃場を登録してください。"
+    "まだ圃場データがありません。NMEAログをアップロードし、圃場を登録してください。"
   );
   await expect(page.locator("#reportGenerateButton")).toBeDisabled();
 });
@@ -112,16 +113,16 @@ test("registered fields appear in the 対象圃場 selector, and レポートを
 });
 
 test("a boundary-track-only registration is reported as LineString with the exact 境界トラック note", async ({ page }) => {
-  await page.goto("/#survey");
+  await page.goto("/#settings/fields");
   await expect(page.locator("#fieldRegDialog")).toBeAttached({ timeout: 15_000 });
   await page.evaluate(() => {
-    document.querySelectorAll("details[data-workspace='survey']").forEach((card) => { card.open = true; });
+    document.querySelectorAll("details[data-workspace='fields']").forEach((card) => { card.open = true; });
   });
   await page.locator("#fileInput").setInputFiles({ name: "open-walk.txt", mimeType: "text/plain", buffer: Buffer.from(OPEN_L_SHAPE_NMEA) });
   await page.locator("#fieldRegTypeTrack").check();
   await page.locator("#fieldRegConfirmButton").click();
 
-  await openAnalysisWorkspace(page);
+  await openFieldsWorkspace(page);
   await page.locator("#reportFieldSelect").selectOption("paddy-001");
   await page.locator("#reportGenerateButton").click();
 

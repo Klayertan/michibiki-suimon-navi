@@ -202,6 +202,28 @@ export function nextFieldDefaults(existingFieldCount) {
   return { name: `圃場${n}`, id: `paddy-${String(n).padStart(3, "0")}` };
 }
 
+/**
+ * Stage-1 (Basic mode) field defaults. Unlike nextFieldDefaults() above,
+ * which numbers purely by how many fields exist and therefore hands back an
+ * already-taken id once a field has been deleted or manually renamed, this
+ * skips past every id already in use so the farmer never has to read
+ * `ID "paddy-005" は既に使用されています。` and invent one by hand.
+ *
+ * The id format is unchanged (`paddy-NNN`) so Basic-registered fields stay
+ * indistinguishable from existing stored ones. Only the suggested *name*
+ * differs (田圃N), matching how Stage-1 users refer to their paddies.
+ */
+export function nextAvailableFieldDefaults(existingFieldIds = []) {
+  const taken = new Set((existingFieldIds || []).map((id) => String(id)));
+  let n = taken.size + 1;
+  let id = `paddy-${String(n).padStart(3, "0")}`;
+  while (taken.has(id)) {
+    n += 1;
+    id = `paddy-${String(n).padStart(3, "0")}`;
+  }
+  return { name: `田圃${n}`, id };
+}
+
 export function nextBoundaryTrackId(fieldId, existingTrackCountForField) {
   return `${fieldId}-track-${String(existingTrackCountForField + 1).padStart(3, "0")}`;
 }
@@ -218,6 +240,18 @@ export function makeSurveySessionId(nowMs = Date.now()) {
 export const CLOSE_WARNING_MESSAGE = "始点と終点が離れています。圃場ポリゴンを閉じますか？";
 export const UPLOAD_CLOSE_WARNING_MESSAGE = "始点と終点が離れています。このログを圃場ポリゴンとして閉じますか？";
 export const OUTSIDE_FIELD_WARNING_MESSAGE = "選択した地点は圃場の範囲外です。このまま記録しますか？";
+
+/**
+ * Stage-1 wording for the same situation the two messages above cover.
+ * The legacy copy talks about 始点/終点 of "this log" because the whole
+ * recording was the candidate; in Stage 1 the farmer picked the two points
+ * themselves, so the warning names exactly what they chose and asks a single
+ * yes/no question about joining them.
+ */
+export function basicClosureWarningText(gapM) {
+  const gap = Number.isFinite(gapM) ? gapM.toFixed(1) : "—";
+  return `開始点と終了点は約${gap}m離れています。\n\nこの2点を結んで圃場を作りますか？`;
+}
 
 /**
  * Simple ray-casting point-in-polygon test on raw [lat, lon] pairs — good

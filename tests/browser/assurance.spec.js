@@ -22,12 +22,12 @@ async function openAssuranceWorkspace(page) {
   });
 }
 
-/** Registers a field in QZ1測量 (the primary workflow) without ever touching 測量チェック. */
-async function registerFieldInSurveyTab(page) {
-  await page.goto("/#survey");
+/** Registers a field in 圃場データ (the primary workflow) without ever touching 測量チェック. */
+async function registerFieldInFieldsTab(page) {
+  await page.goto("/#settings/fields");
   await expect(page.locator("#fieldRegDialog")).toBeAttached({ timeout: 15_000 });
   await page.evaluate(() => {
-    document.querySelectorAll("details[data-workspace='survey']").forEach((card) => { card.open = true; });
+    document.querySelectorAll("details[data-workspace='fields']").forEach((card) => { card.open = true; });
   });
   await page.locator("#fileInput").setInputFiles({ name: "walk.txt", mimeType: "text/plain", buffer: Buffer.from(TIGHT_LOOP_NMEA) });
   await page.locator("#fieldRegConfirmButton").click();
@@ -96,7 +96,7 @@ test("advanced settings and the SIMULATED dev-tools box are both collapsed by de
 });
 
 test("QZ1-only mode: without a comparison GPS log, the result is never blank and shows the exact Mode A notice", async ({ page }) => {
-  await registerFieldInSurveyTab(page);
+  await registerFieldInFieldsTab(page);
   await page.getByRole("button", { name: "測量チェック" }).click();
   await page.evaluate(() => {
     document.querySelectorAll("details[data-workspace='assurance']").forEach((card) => { card.open = true; });
@@ -129,7 +129,7 @@ test("QZ1-only mode: without a comparison GPS log, the result is never blank and
 });
 
 test("registered QZ1測量 survey sessions and fields are available in 測量チェック without re-uploading", async ({ page }) => {
-  await registerFieldInSurveyTab(page);
+  await registerFieldInFieldsTab(page);
   await page.getByRole("button", { name: "測量チェック" }).click();
   await page.evaluate(() => {
     document.querySelectorAll("details[data-workspace='assurance']").forEach((card) => { card.open = true; });
@@ -140,7 +140,7 @@ test("registered QZ1測量 survey sessions and fields are available in 測量チ
 });
 
 test("測量チェックを実行 updates the summary cards, and 詳細設定/開発・テスト用 stay out of the way", async ({ page }) => {
-  await registerFieldInSurveyTab(page);
+  await registerFieldInFieldsTab(page);
   await page.getByRole("button", { name: "測量チェック" }).click();
   await page.evaluate(() => {
     document.querySelectorAll("details[data-workspace='assurance']").forEach((card) => { card.open = true; });
@@ -186,7 +186,7 @@ test("なぜこの判定？ panel shows farmer-friendly 判定/理由/おすす�
 });
 
 test("測量チェックJSONを書き出す still works for both QZ1-only and comparison results", async ({ page }) => {
-  await registerFieldInSurveyTab(page);
+  await registerFieldInFieldsTab(page);
   await page.getByRole("button", { name: "測量チェック" }).click();
   await page.evaluate(() => {
     document.querySelectorAll("details[data-workspace='assurance']").forEach((card) => { card.open = true; });
