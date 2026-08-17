@@ -335,6 +335,7 @@ body.auth-screen-open {
   display: inline-flex;
   font-size: 0.76rem;
   font-weight: 600;
+  gap: 4px;
   padding: 5px 10px;
   white-space: nowrap;
 }

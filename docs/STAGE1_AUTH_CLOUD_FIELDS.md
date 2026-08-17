@@ -439,7 +439,9 @@ nobody is left believing everything syncs.
 ```bash
 npm test
 ```
-**324 passed, 0 failed.** 71 of those are new here, across five files; the remaining 253 are the pre-existing suite plus 11 from the concurrent iPhone-UX session (see §16).
+**314 passed, 0 failed.** 71 of those are new here, across five files; the
+remaining 243 are the pre-existing suite plus 11 from the concurrent
+iPhone-UX session (see §16).
 
 ```bash
 npx playwright test --workers=1
