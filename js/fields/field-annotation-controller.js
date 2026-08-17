@@ -2039,22 +2039,36 @@ function setText(element, value) {
 }
 
 /**
- * Scrolls `element` into view within its nearest .panel ancestor only.
- * Never delegates to the native Element.scrollIntoView() for panel
- * content: that method walks every scrollable ancestor including
+ * Scrolls `element` into view within its nearest actually-scrolling
+ * ancestor only. Never delegates to the native Element.scrollIntoView() for
+ * panel content: that method walks every scrollable ancestor including
  * `documentElement`, and — despite `body { overflow: hidden }` — still
  * moves `documentElement.scrollTop` as a side effect in this app's layout.
- * Since `.panel` is the only container meant to scroll (the map/header sit
- * in a fixed 100vh grid), that side effect desyncs the outer page from
- * .panel's own scroll position and renders as a large blank gap. Computing
- * the offset against .panel directly and calling panel.scrollTo() avoids
- * touching any ancestor outside .panel.
+ * Since the panel is the only container meant to scroll (the map/header sit
+ * in a fixed 100vh grid), that side effect desyncs the outer page from the
+ * panel's own scroll position and renders as a large blank gap. Computing
+ * the offset against the panel directly and calling panel.scrollTo() avoids
+ * touching any ancestor outside it.
+ *
+ * "The panel" is .panel-left/.panel-right on desktop 基本モード (where they
+ * are real, independently-scrolling boxes and .panel itself goes
+ * `display: contents`), and plain .panel everywhere else (設定/ドローン/
+ * mobile, where .panel-left/.panel-right are the boxless `display: contents`
+ * ones instead) -- see the .panel-left, .panel-right CSS. A `display:
+ * contents` element has no box, so scrollTo()/getBoundingClientRect() on it
+ * are no-ops; walk past it to find whichever wrapper is the real box.
  */
 function scrollWithinPanel(element, { block = "start" } = {}) {
   if (!element) {
     return;
   }
-  const panel = element.closest(".panel");
+  let panel = element.closest(".panel-left, .panel-right");
+  if (panel && getComputedStyle(panel).display === "contents") {
+    panel = null;
+  }
+  if (!panel) {
+    panel = element.closest(".panel");
+  }
   if (!panel) {
     element.scrollIntoView({ block });
     return;

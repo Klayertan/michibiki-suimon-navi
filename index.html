@@ -376,6 +376,16 @@
       padding: 16px;
     }
 
+    /* Boxless by default -- .panel-left/.panel-right's own children render as
+       direct grid items of .panel, so 設定/ドローン/mobile see the exact same
+       flat single-scroll-area layout as before this wrapper existed. Only the
+       body[data-mode="basic"] desktop rule (near the other basic-mode-only
+       overrides) turns them into real, independently laid-out boxes. */
+    .panel-left,
+    .panel-right {
+      display: contents;
+    }
+
     .card {
       background: #fff;
       border: 1px solid var(--line);
@@ -1623,6 +1633,52 @@
       padding: 18px;
     }
 
+    /* Desktop-only 基本モード layout: 圃場の管理/今日の水門判断 on the left,
+       the map centred, NMEA upload/測量ログ/水管理/観察 action cards on the
+       right. Scoped to body[data-mode="basic"] and >=981px so 設定/ドローン
+       keep the existing 2-column shell (map + single .panel, both above) and
+       mobile basic-mode is untouched -- see the max-width:980px blocks,
+       which this never overlaps. Higher-specificity attribute selectors here
+       win over the plain `.panel`/`.panel-left` rules regardless of source
+       order. */
+    @media (min-width: 981px) {
+      body[data-mode="basic"] main {
+        grid-template-columns: 320px minmax(0, 1fr) minmax(380px, 430px);
+      }
+
+      body[data-mode="basic"] .map-wrap {
+        grid-column: 2;
+      }
+
+      /* .panel itself goes boxless so .panel-left/.panel-right -- promoted
+         to main's own grid items by display: contents above -- become the
+         real, independently scrolling left/right columns. */
+      body[data-mode="basic"] .panel {
+        display: contents;
+      }
+
+      body[data-mode="basic"] .panel-left,
+      body[data-mode="basic"] .panel-right {
+        align-content: start;
+        background: var(--bg);
+        display: grid;
+        gap: 12px;
+        min-height: 0;
+        overflow-y: auto;
+        padding: 18px;
+      }
+
+      body[data-mode="basic"] .panel-left {
+        grid-column: 1;
+        border-right: 1px solid var(--line);
+      }
+
+      body[data-mode="basic"] .panel-right {
+        grid-column: 3;
+        border-left: 1px solid var(--line);
+      }
+    }
+
     .card {
       background: var(--panel);
       border-color: var(--line);
@@ -2354,6 +2410,22 @@
              and so does the データを選ぶ card below: in 基本モード the ONE
              active field is #basicFieldSummaryCard, immediately above. -->
 
+        <!-- .panel-left / .panel-right are plain wrappers, `display: contents`
+             by default (see the .panel-left, .panel-right rule) so every card
+             below still lays out as ONE flat list of direct grid children of
+             .panel, exactly as before this split -- unchanged in 設定/ドローン
+             and on mobile. Only body[data-mode="basic"] at >=981px turns them
+             into real boxes and promotes them to main's own grid columns
+             (desktop 3-column basic layout: 圃場管理/今日の水門判断 on the
+             left, map centre, upload/action cards on the right). The cut
+             point below (right after .gate-card) is the ONLY reordering:
+             everything before it keeps its exact relative DOM order inside
+             .panel-left, everything after keeps its exact relative order
+             inside .panel-right, so 設定/ドローン's visual order (driven by
+             plain DOM order once both wrappers collapse via display:contents)
+             is byte-for-byte the same as before this change. -->
+        <div class="panel-left">
+
         <!-- First sign-in on a device that already has locally registered
              paddies. Neither uploading them silently nor discarding them is
              acceptable, so the farmer is asked once, and the answer is
@@ -2501,6 +2573,9 @@
 
           <p class="disclaimer">※ 本アプリは判断支援です。最終判断と水門の操作は必ず人が行ってください。必要水量は圃場面積と水深から算出した目安で、浸透・漏水・蒸発・通水ロスは考慮していません。</p>
         </section>
+
+        </div>
+        <div class="panel-right">
 
         <!-- みちびき活用の実証 / QZ1-DGNSS 測位品質 used to sit here, in
              基本モード. It answers "how far can I trust this QZ1 measurement?",
@@ -3860,6 +3935,8 @@
           <summary><span class="details-title">手動操縦（開発者向け）<span class="en">Manual Control</span></span></summary>
           <div id="pilotRoot" class="details-content"></div>
         </details>
+
+        </div>
       </aside>
     </main>
   </div>
