@@ -1642,12 +1642,21 @@
        win over the plain `.panel`/`.panel-left` rules regardless of source
        order. */
     @media (min-width: 981px) {
+      /* grid-template-rows is pinned to one explicit row, and every item
+         below gets grid-row: 1 pinned alongside its column -- without this,
+         three items with definite (but different) columns and NO definite
+         row do not reliably auto-place into the same implicit row across
+         browsers; observed behaviour split them across two implicit rows
+         (0px + full-height), collapsing .map-wrap's height:100% to 0 since
+         its row was the 0px one. */
       body[data-mode="basic"] main {
         grid-template-columns: 320px minmax(0, 1fr) minmax(380px, 430px);
+        grid-template-rows: minmax(0, 1fr);
       }
 
       body[data-mode="basic"] .map-wrap {
         grid-column: 2;
+        grid-row: 1;
       }
 
       /* .panel itself goes boxless so .panel-left/.panel-right -- promoted
@@ -1660,9 +1669,14 @@
       body[data-mode="basic"] .panel-left,
       body[data-mode="basic"] .panel-right {
         align-content: start;
-        background: var(--bg);
+        /* Frosted-glass, not solid var(--bg): the map stays visible
+           underneath the columns instead of being fully hidden behind them. */
+        background: rgba(251, 250, 245, 0.82);
+        backdrop-filter: blur(6px);
+        -webkit-backdrop-filter: blur(6px);
         display: grid;
         gap: 12px;
+        grid-row: 1;
         min-height: 0;
         overflow-y: auto;
         padding: 18px;
