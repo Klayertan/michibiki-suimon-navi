@@ -18,7 +18,7 @@ test("bare root is Basic and normal mode navigation owns the URL, refresh, and h
   // power-user surface it replaced.
   await expect(page.locator("#basicStage1Card")).toBeVisible();
   await expect(page.locator(".survey-tools")).toBeHidden();
-  await expect(page.locator("#basicFieldSummaryCard")).toBeVisible();
+  await expect(page.locator("#basicFieldManagementCard")).toBeVisible();
 
   await page.locator('[data-mode-target="drone"]').click();
   await expect(page).toHaveURL(/#drone$/);

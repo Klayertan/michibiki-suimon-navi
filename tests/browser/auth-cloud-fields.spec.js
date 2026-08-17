@@ -253,10 +253,12 @@ test("あなたの圃場 lists the signed-in farmer's paddies with their area", 
   await registerField(page, "北田");
 
   await expect(page.locator("#accountFieldsCard")).toBeVisible();
-  await expect(page.locator("#accountFieldsCard")).toContainText("あなたの圃場");
+  await expect(page.locator("#accountFieldsCard")).toContainText("登録済みの圃場");
   expect(await accountFieldNames(page)).toEqual(["北田"]);
   await expect(page.locator("#accountFieldsCard .account-field-area")).toContainText("m²");
-  await expect(page.locator("#accountFieldsNewButton")).toContainText("新しい圃場を測る");
+  // あなたの圃場's own "＋ 新しい圃場を測る" button was folded into 圃場の管理's
+  // single register entry point (§3/§21 of the field-water-dashboard spec).
+  await expect(page.locator("#basicMeasureFieldButton")).toContainText("新しい圃場を測る");
 });
 
 test("selecting a paddy from あなたの圃場 drives the existing active field, not a second one", async ({ page }) => {
@@ -448,9 +450,13 @@ test("user B never sees user A's fields after a switch on the same browser", asy
   await signIn(page, USER_B);
 
   // Nothing of A's is on screen, in the active-field selector, or in the
-  // registered-fields panel.
+  // registered-fields panel. With zero fields, 圃場の管理's own
+  // #basicFieldEmptyState is what a farmer sees -- #accountFieldsCard (and
+  // its nested #accountFieldsEmpty) now stays hidden entirely rather than
+  // showing a second, redundant "no fields" message underneath it.
   expect(await accountFieldNames(page)).toEqual([]);
-  await expect(page.locator("#accountFieldsEmpty")).toBeVisible();
+  await expect(page.locator("#accountFieldsCard")).toBeHidden();
+  await expect(page.locator("#basicFieldEmptyState")).toBeVisible();
   const selectorOptions = await page.locator("#basicActiveFieldSelect option").allTextContents();
   expect(selectorOptions.join(" ")).not.toContain("A1");
   expect(selectorOptions.join(" ")).not.toContain("A2");

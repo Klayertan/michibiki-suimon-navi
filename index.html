@@ -879,6 +879,15 @@
         height: 100%;
         min-height: 0;
       }
+
+      /* 今日の水門判断 is the farmer's headline answer (§9/§25 of the
+         field-water-dashboard spec) -- on a phone, where the map already
+         claims the top 45dvh, it should be the first thing in the scrollable
+         panel below it, ahead of 圃場の管理's own DOM position. .panel is a
+         CSS grid, so `order` reorders without touching markup. */
+      .gate-card {
+        order: -1;
+      }
     }
 
     @media (max-width: 760px) {
@@ -1564,6 +1573,155 @@
       background: #68766e;
     }
 
+    /* --------------------------------------------------------------------
+       今日の水門判断: quantitative hero (field-water-dashboard)
+       -------------------------------------------------------------------- */
+
+    .water-hero-carousel {
+      display: flex;
+      gap: 8px;
+      margin: 0 -2px;
+      overflow-x: auto;
+      padding: 2px;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .water-hero-mini-card {
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      cursor: pointer;
+      display: grid;
+      flex: 0 0 auto;
+      gap: 2px;
+      min-width: 96px;
+      padding: 8px 10px;
+      text-align: left;
+    }
+
+    .water-hero-mini-card.is-active {
+      border-color: var(--green);
+      box-shadow: inset 3px 0 0 var(--green);
+    }
+
+    .water-hero-mini-card strong {
+      font-size: 0.85rem;
+    }
+
+    .water-hero-mini-delta {
+      color: var(--text);
+      font-size: 1rem;
+      font-weight: 800;
+    }
+
+    .water-hero-mini-volume {
+      color: var(--muted);
+      font-size: 0.75rem;
+    }
+
+    .water-hero-field-label {
+      color: var(--muted);
+      font-size: 0.85rem;
+      font-weight: 700;
+      margin: 0;
+    }
+
+    .water-hero-primary {
+      background: #214e57;
+      border-radius: 12px;
+      color: #fff;
+      font-size: 1.35rem;
+      font-weight: 800;
+      line-height: 1.35;
+      padding: 18px 16px;
+      text-align: center;
+    }
+
+    .water-hero-stale {
+      background: #fff7ed;
+      border: 1px solid #fb923c;
+      border-radius: 8px;
+      color: #9a3412;
+      font-size: 0.8rem;
+      line-height: 1.5;
+      margin: 0;
+      padding: 8px 10px;
+    }
+
+    .water-hero-stats {
+      display: grid;
+      gap: 8px;
+      grid-template-columns: repeat(3, 1fr);
+    }
+
+    .water-hero-stat {
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      display: grid;
+      gap: 2px;
+      padding: 8px;
+      text-align: center;
+    }
+
+    .water-hero-stat span {
+      color: var(--muted);
+      font-size: 0.72rem;
+    }
+
+    .water-hero-stat strong {
+      font-size: 0.98rem;
+    }
+
+    .water-hero-secondary {
+      border-top: 1px dashed var(--line);
+      display: grid;
+      gap: 6px;
+      padding-top: 10px;
+    }
+
+    .water-hero-secondary-label {
+      color: var(--muted);
+      font-size: 0.76rem;
+      font-weight: 700;
+    }
+
+    /* Smaller than the standalone .verdict (§1548) now that it is the
+       secondary line under the quantitative primary message. */
+    .water-hero-secondary .verdict {
+      font-size: 1.15rem;
+      padding: 10px;
+    }
+
+    .water-hero-forecast {
+      display: grid;
+      gap: 8px;
+      grid-template-columns: repeat(3, 1fr);
+    }
+
+    .water-hero-forecast-day {
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      display: grid;
+      gap: 2px;
+      padding: 8px;
+      text-align: center;
+    }
+
+    .water-hero-forecast-label {
+      color: var(--muted);
+      font-size: 0.75rem;
+    }
+
+    .water-hero-forecast-icon {
+      font-size: 1.2rem;
+    }
+
+    .water-hero-forecast-prob {
+      font-size: 0.72rem;
+    }
+
     .disclaimer {
       background: #eceee6;
       border-radius: 8px;
@@ -1674,6 +1832,10 @@
 
       .header-actions .data-status {
         display: none;
+      }
+
+      .gate-card {
+        order: -1;
       }
     }
 
@@ -1786,6 +1948,21 @@
          it deserves. */
       .gate-card {
         gap: 10px;
+      }
+
+      /* The quantitative message is now the phone's headline element, so it
+         takes the large treatment .verdict used to have on its own. The
+         secondary verdict badge underneath still needs its own phone bump
+         (smaller than the primary message, but still bigger than its
+         desktop-panel size) or it would stop growing on mobile entirely. */
+      .water-hero-primary {
+        font-size: clamp(1.5rem, 8vw, 2rem);
+        padding: 20px 16px;
+      }
+
+      .water-hero-secondary .verdict {
+        font-size: clamp(1.3rem, 6vw, 1.6rem);
+        padding: 12px;
       }
 
       .verdict {
@@ -2045,54 +2222,65 @@
           </div>
         </section>
 
-        <!-- あなたの圃場: the signed-in home. It is a VIEW over the same
-             fields the local repository already holds, not a second store and
-             not a second selector -- tapping a tile drives
-             #basicActiveFieldSelect, which remains the one authoritative
-             active field for the map, the area, the water context and the
-             水門判断. Hidden for guests, who already have 現在の田圃 below. -->
-        <section id="accountFieldsCard" class="card account-fields-card" data-mode="basic" hidden>
-          <span class="eyebrow">あなたの圃場</span>
-          <div id="accountFieldsList" class="account-fields-list"></div>
-          <p id="accountFieldsEmpty" class="field-annotation-empty" hidden>
-            まだ圃場がありません<br>
-            QZ1を持って圃場の外周を歩くと、面積を自動で計算できます。
-          </p>
-          <div class="veg-actions">
-            <button id="accountFieldsNewButton" class="panel-button primary" type="button">＋ 新しい圃場を測る</button>
-          </div>
-          <p id="localImportMessage" class="meta" role="status" aria-live="polite" hidden></p>
-        </section>
+        <!-- 圃場の管理: 基本モード's single field-management card. Merges what
+             used to be three separate surfaces -- あなたの圃場 (the tile
+             list), 現在の田圃 (the one active-field context) and the
+             register-a-field entry point -- into one, so a farmer answers
+             "which paddy, and can I trust it?" without visiting three cards.
+             #basicActiveFieldSelect remains the one authoritative active
+             field; the list below drives it exactly the same way the old
+             account tiles did (data source and selection state are
+             unchanged, only the layout is). Registered-field list is shown
+             for guests and signed-in farmers alike -- both read the same
+             fieldAnnotationController.fields. -->
+        <section id="basicFieldManagementCard" class="card" data-mode="basic">
+          <span class="eyebrow">圃場の管理</span>
+          <p class="meta">登録済みの圃場を確認・選択し、新しい圃場を登録します。</p>
+          <button id="basicMeasureFieldButton" class="panel-button primary basic-field-register-button" type="button">＋ 新しい圃場を測る・登録する</button>
 
-        <!-- 基本モード's single field context. Answers "which paddy am I
-             looking at, and can I trust its measurement?" in one card, so the
-             farmer is never asked to choose the same field twice. The metadata
-             here is the same fieldReportController report that feeds the
-             Settings card below -- read, not duplicated. -->
-        <section id="basicFieldSummaryCard" class="card" data-mode="basic">
-          <span class="eyebrow">現在の田圃</span>
-          <div class="input-row" id="basicFieldSelectRow" hidden>
-            <label for="basicActiveFieldSelect">田圃を選ぶ</label>
-            <select id="basicActiveFieldSelect"></select>
-          </div>
           <div id="basicFieldEmptyState" class="field-annotation-empty">
-            圃場がまだ登録されていません<br>
-            QZ1を持って圃場の外周を歩くと、面積を自動で計算できます。
+            圃場はまだ登録されていません
           </div>
-          <div id="basicFieldSummary" class="decision-field-summary" hidden>
-            <div class="kv"><span>面積</span><strong id="basicFieldArea">—</strong></div>
-            <div class="kv"><span>元NMEA</span><strong id="basicFieldSourceFile">—</strong></div>
-            <div class="kv"><span>測位信頼性</span><strong id="basicFieldReliability">—</strong></div>
-            <div class="kv"><span>有効測位点</span><strong id="basicFieldValidPoints">—</strong></div>
-            <div class="kv"><span>水管理ポイント</span><strong id="basicFieldWaterPoints">—</strong></div>
-            <div class="kv"><span>観察メモ</span><strong id="basicFieldObservations">—</strong></div>
+
+          <div id="basicFieldCurrentGroup" hidden>
+            <span class="basic-field-group-title">現在の圃場</span>
+            <div class="input-row" id="basicFieldSelectRow" hidden>
+              <label for="basicActiveFieldSelect">圃場を選ぶ</label>
+              <select id="basicActiveFieldSelect"></select>
+            </div>
+            <div id="basicFieldSummary" class="basic-field-current" hidden>
+              <div id="basicFieldThumbnail" class="basic-field-thumbnail" role="img" aria-label="選択中の圃場の航空写真"></div>
+              <div class="decision-field-summary">
+                <div class="kv"><span>面積</span><strong id="basicFieldArea">—</strong></div>
+                <div class="kv"><span>登録日</span><strong id="basicFieldRegisteredDate">—</strong></div>
+                <div class="kv"><span>元NMEA</span><strong id="basicFieldSourceFile">—</strong></div>
+                <div class="kv"><span>有効測位点</span><strong id="basicFieldValidPoints">—</strong></div>
+                <div class="kv"><span>測位信頼性</span><strong id="basicFieldReliability">—</strong></div>
+                <div class="kv"><span>水管理ポイント</span><strong id="basicFieldWaterPoints">—</strong></div>
+                <div class="kv"><span>観察メモ</span><strong id="basicFieldObservations">—</strong></div>
+              </div>
+            </div>
+            <div class="veg-actions">
+              <button id="basicRecordWaterButton" class="panel-button" type="button" disabled>水位を記録</button>
+              <button id="basicAddWaterPointButton" class="panel-button" type="button" disabled>水管理ポイントを追加</button>
+              <button id="basicViewResultsButton" class="panel-button basic-field-details-button" type="button" disabled>圃場の詳細を見る</button>
+            </div>
           </div>
-          <div class="veg-actions">
-            <button id="basicMeasureFieldButton" class="panel-button primary" type="button">圃場を測る</button>
-            <button id="basicRecordWaterButton" class="panel-button" type="button" disabled>水位を記録</button>
-            <button id="basicAddWaterPointButton" class="panel-button" type="button" disabled>水管理ポイントを追加</button>
-            <button id="basicViewResultsButton" class="panel-button" type="button" disabled>結果を見る</button>
-          </div>
+
+          <!-- id/child ids unchanged from the old, signed-in-only あなたの
+               圃場 card: AuthController's renderAccountFields() binds to
+               these exactly as before and now simply always shows this
+               section (see js/auth/auth-controller.js) instead of gating it
+               on sign-in, so guests get the same 登録済みの圃場 list. -->
+          <section id="accountFieldsCard" class="account-fields-card" hidden>
+            <span class="basic-field-group-title">登録済みの圃場</span>
+            <div id="accountFieldsList" class="account-fields-list"></div>
+            <p id="accountFieldsEmpty" class="field-annotation-empty" hidden>
+              まだ圃場がありません<br>
+              QZ1を持って圃場の外周を歩くと、面積を自動で計算できます。
+            </p>
+            <p id="localImportMessage" class="meta" role="status" aria-live="polite" hidden></p>
+          </section>
         </section>
 
         <section id="decisionFieldCard" class="card" data-workspace="decision" data-mode="settings">
@@ -2130,11 +2318,42 @@
 
         <section class="card gate-card" data-workspace="decision" data-mode="basic settings">
           <span class="eyebrow">今日の水門判断</span>
-          <h2>気象と圃場位置からの推奨</h2>
+          <h2>気象と圃場の状況からの推奨</h2>
           <p id="decisionDataWarning" class="data-source-warning" role="status" aria-live="polite" hidden></p>
-          <div id="verdictBadge" class="verdict hold">様子見</div>
-          <p id="verdictReason" class="verdict-reason"></p>
-          <p class="disclaimer">※ 本アプリは判断支援です。最終判断と水門の操作は必ず人が行ってください。</p>
+
+          <!-- One mini-card per registered field (§18): "圃場2 / +2.3cm /
+               98.6m³". Clicking one drives the SAME #basicActiveFieldSelect
+               as the left card's list and dropdown -- no separate selection
+               state. Hidden entirely with 0-1 fields, per spec. -->
+          <div id="waterHeroCarousel" class="water-hero-carousel" hidden></div>
+
+          <div id="waterHeroEmptyState" class="field-annotation-empty" hidden>
+            圃場を登録すると、その圃場の水管理情報を表示できます。
+          </div>
+
+          <div id="waterHeroContent" hidden>
+            <p id="waterHeroFieldLabel" class="water-hero-field-label"></p>
+            <div id="waterHeroPrimary" class="water-hero-primary"></div>
+            <p id="waterHeroStaleWarning" class="water-hero-stale" role="status" aria-live="polite" hidden></p>
+
+            <div class="water-hero-stats">
+              <div class="water-hero-stat"><span>必要水量（目安）</span><strong id="waterHeroVolume">—</strong></div>
+              <div class="water-hero-stat"><span>実施目安</span><strong id="waterHeroTiming">—</strong></div>
+              <div class="water-hero-stat"><span>信頼度</span><strong id="waterHeroConfidence">—</strong></div>
+            </div>
+
+            <div class="water-hero-secondary">
+              <span class="water-hero-secondary-label">推奨操作</span>
+              <div id="verdictBadge" class="verdict hold">様子見</div>
+              <p id="verdictReason" class="verdict-reason"></p>
+            </div>
+
+            <div id="waterHeroForecast" class="water-hero-forecast"></div>
+
+            <button id="waterHeroRecordButton" class="panel-button primary" type="button">水位を記録する</button>
+          </div>
+
+          <p class="disclaimer">※ 本アプリは判断支援です。最終判断と水門の操作は必ず人が行ってください。必要水量は圃場面積と水深から算出した目安で、浸透・漏水・蒸発・通水ロスは考慮していません。</p>
         </section>
 
         <!-- みちびき活用の実証 / QZ1-DGNSS 測位品質 used to sit here, in
@@ -4042,6 +4261,13 @@
       userId: null
     };
 
+    // Pure water-depth/volume calculation for 今日の水門判断's quantitative
+    // hero (js/water/water-need.js) -- loaded once, near init's other lazy
+    // modules. renderWaterHero() no-ops until this resolves, which in
+    // practice is well before the first field/report render (local file,
+    // no network).
+    let computeWaterNeed = null;
+
     // Local MAVLink backend. Override before load (e.g. from the console or a
     // future settings panel) if the backend runs on a different port.
     const DRONE_BACKEND_URL = window.SUISUI_DRONE_BACKEND_URL || "http://127.0.0.1:8787";
@@ -4337,23 +4563,94 @@
         daysSinceRain += 1;
       }
 
+      // Today + the next 2 days (matches forecast_days=3 below -- Open-Meteo
+      // counts today as day 1 of forecast_days), each day's worst-case rain
+      // probability and total -- the raw material for the hero's 今日/明日/
+      // 明後日 row. A day with no hours in the response yet (the tail end of
+      // forecast_days) is simply omitted rather than shown as 0%.
+      const dailyProb = new Map();
+      times.forEach((time, i) => {
+        const day = time.slice(0, 10);
+        const p = Number.isFinite(prob[i]) ? prob[i] : 0;
+        dailyProb.set(day, Math.max(dailyProb.get(day) ?? 0, p));
+      });
+      const todayStr = times[nowIndex]?.slice(0, 10);
+      const todayPos = sortedDays.indexOf(todayStr);
+      const dailyForecast = todayPos === -1 ? [] : sortedDays.slice(todayPos, todayPos + 3).map((day) => ({
+        date: day,
+        totalPrecipMm: Math.round((dailyTotals.get(day) ?? 0) * 10) / 10,
+        maxProbPct: Math.round(dailyProb.get(day) ?? 0)
+      }));
+
       return {
         rain24hMm: Math.round(rain24hMm * 10) / 10,
         daysSinceRain,
-        forecastRainProbPct: Math.round(forecastRainProbPct)
+        forecastRainProbPct: Math.round(forecastRainProbPct),
+        dailyForecast
       };
     }
 
-    async function fetchLiveWeather() {
+    // 圃場の重心 -- a plain vertex average is enough for a weather lookup
+    // (not a precision requirement); it is not reused for area/geometry math.
+    function computeFieldCentroid(field) {
+      const coords = field?.coordinates;
+      if (!Array.isArray(coords) || coords.length === 0) {
+        return null;
+      }
+      const sum = coords.reduce((acc, [lat, lon]) => ({
+        lat: acc.lat + (Number.isFinite(lat) ? lat : 0),
+        lon: acc.lon + (Number.isFinite(lon) ? lon : 0)
+      }), { lat: 0, lon: 0 });
+      const lat = sum.lat / coords.length;
+      const lon = sum.lon / coords.length;
+      return Number.isFinite(lat) && Number.isFinite(lon) ? { lat, lon } : null;
+    }
+
+    // 今日の水門判断 follows the selected 圃場, not a fixed point (§14/15 of
+    // the field-water-dashboard spec) -- so weather now prefers the active
+    // field's centroid over the registered gate. A field without a polygon
+    // yet (or no field at all) falls back to the gate, then the Nara demo
+    // constant, exactly as before this existed.
+    function activeWeatherLocation() {
+      const select = document.getElementById("basicActiveFieldSelect");
+      const field = (fieldAnnotationController?.fields || []).find((candidate) => candidate.id === select?.value);
+      const centroid = field ? computeFieldCentroid(field) : null;
+      if (centroid) {
+        return { ...centroid, fieldId: field.id, source: "field" };
+      }
       const gate = activeGate();
       const lat = gate ? gate.lat : finiteOr(fieldData?.gate?.lat, 34.65481);
       const lon = gate ? gate.lon : finiteOr(fieldData?.gate?.lon, 135.83022);
+      return { lat, lon, fieldId: null, source: gate ? "gate" : "default" };
+    }
+
+    // Toggling between a few registered fields should not re-hit Open-Meteo
+    // on every click -- one short-lived entry per field (or per fallback
+    // location) is enough to make that free. Not persisted: this is purely a
+    // same-session network-avoidance cache, matching fetchLiveWeather()'s
+    // pre-existing no-localStorage behavior.
+    const WEATHER_CACHE_TTL_MS = 10 * 60 * 1000;
+    const weatherCache = new Map();
+
+    async function fetchLiveWeather({ force = false } = {}) {
+      const location = activeWeatherLocation();
+      const cacheKey = location.fieldId || `${location.lat.toFixed(4)},${location.lon.toFixed(4)}`;
+      const { lat, lon } = location;
+
+      const cached = weatherCache.get(cacheKey);
+      if (!force && cached && Date.now() - cached.fetchedAt < WEATHER_CACHE_TTL_MS) {
+        weatherData = cached.data;
+        populateDecisionInputs();
+        updateDecision();
+        setWeatherFetchStatus("取得成功（キャッシュ）", "connected");
+        return;
+      }
 
       weatherFetchButton.disabled = true;
       setWeatherFetchStatus("取得中…", "");
 
       try {
-        const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=precipitation,precipitation_probability&past_days=8&forecast_days=2&timezone=Asia%2FTokyo`;
+        const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=precipitation,precipitation_probability&past_days=8&forecast_days=3&timezone=Asia%2FTokyo`;
         const response = await fetch(url, { cache: "no-store" });
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}`);
@@ -4366,6 +4663,7 @@
           updatedAt: new Date().toISOString().slice(0, 16).replace("T", " ") + " UTC",
           source: `Open-Meteo自動取得（${lat.toFixed(5)}, ${lon.toFixed(5)}）`
         };
+        weatherCache.set(cacheKey, { data: weatherData, fetchedAt: Date.now() });
 
         populateDecisionInputs();
         updateDecision();
@@ -4374,6 +4672,7 @@
         setWeatherFetchStatus(`取得失敗: ${error.message}`, "error");
       } finally {
         weatherFetchButton.disabled = false;
+        renderWaterHero();
       }
     }
 
@@ -4777,13 +5076,28 @@
      * duplicated, so the two can never disagree. Everything raw
      * (GPS単独/DGPS split, 判断プロファイル, data-kind) stays in Settings.
      */
+    function formatRegisteredDate(isoString) {
+      if (!isoString) {
+        return "—";
+      }
+      const date = new Date(isoString);
+      if (Number.isNaN(date.getTime())) {
+        return "—";
+      }
+      const y = date.getFullYear();
+      const m = String(date.getMonth() + 1).padStart(2, "0");
+      const d = String(date.getDate()).padStart(2, "0");
+      return `${y}/${m}/${d}`;
+    }
+
     function renderBasicFieldSummary() {
       const select = document.getElementById("basicActiveFieldSelect");
       const selectRow = document.getElementById("basicFieldSelectRow");
       const emptyState = document.getElementById("basicFieldEmptyState");
+      const currentGroup = document.getElementById("basicFieldCurrentGroup");
       const summary = document.getElementById("basicFieldSummary");
       const areaLabel = document.getElementById("basicFieldArea");
-      if (!select || !selectRow || !emptyState || !summary || !areaLabel) {
+      if (!select || !selectRow || !emptyState || !currentGroup || !summary || !areaLabel) {
         return;
       }
       const fields = fieldAnnotationController?.fields || [];
@@ -4800,12 +5114,18 @@
       });
       if (!field) {
         emptyState.hidden = fields.length > 0;
+        currentGroup.hidden = true;
         summary.hidden = true;
+        renderRegisteredFieldThumbnail(null);
+        renderWaterHero();
         return;
       }
       emptyState.hidden = true;
+      currentGroup.hidden = false;
       summary.hidden = false;
       areaLabel.textContent = formatAreaBasic(field.properties?.areaM2);
+      document.getElementById("basicFieldRegisteredDate").textContent = formatRegisteredDate(field.properties?.createdAt);
+      renderRegisteredFieldThumbnail(field);
 
       const setText = (id, value) => {
         const element = document.getElementById(id);
@@ -4818,6 +5138,7 @@
       if (!report) {
         ["basicFieldSourceFile", "basicFieldReliability", "basicFieldValidPoints",
           "basicFieldWaterPoints", "basicFieldObservations"].forEach((id) => setText(id, "—"));
+        renderWaterHero();
         return;
       }
       setText("basicFieldSourceFile", report.surveyLog.found ? (report.surveyLog.sourceFileName || "—") : "—");
@@ -4825,7 +5146,274 @@
       setText("basicFieldValidPoints", report.surveyLog.found ? `${report.surveyLog.validCount}点` : "—");
       setText("basicFieldWaterPoints", `${report.waterControlPoints.length}件`);
       setText("basicFieldObservations", `${report.observations.length}件`);
+      renderWaterHero();
     }
+
+    // Small, mostly non-interactive Leaflet instance showing the selected
+    // 圃場 on GSI aerial imagery -- the same seamlessphoto tile source the
+    // main map's 航空写真 toggle already uses (index.html's `aerial` layer),
+    // so there is exactly one imagery source in the app, not two. Built once
+    // and re-fit on field change rather than torn down/rebuilt, to keep this
+    // cheap when toggling between a farmer's few registered fields.
+    let fieldThumbnailMap = null;
+    let fieldThumbnailPolygon = null;
+    let fieldThumbnailFieldId = null;
+
+    function renderRegisteredFieldThumbnail(field) {
+      const container = document.getElementById("basicFieldThumbnail");
+      if (!container) {
+        return;
+      }
+      if (!field || !Array.isArray(field.coordinates) || field.coordinates.length < 3) {
+        fieldThumbnailFieldId = null;
+        return;
+      }
+      if (String(field.id) === String(fieldThumbnailFieldId)) {
+        return;
+      }
+      fieldThumbnailFieldId = field.id;
+
+      if (!fieldThumbnailMap) {
+        fieldThumbnailMap = L.map(container, {
+          attributionControl: false,
+          zoomControl: false,
+          dragging: false,
+          scrollWheelZoom: false,
+          doubleClickZoom: false,
+          boxZoom: false,
+          touchZoom: false,
+          keyboard: false,
+          tap: false
+        });
+        L.tileLayer("https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg", {
+          maxZoom: 18
+        }).addTo(fieldThumbnailMap);
+      }
+
+      if (fieldThumbnailPolygon) {
+        fieldThumbnailPolygon.remove();
+      }
+      fieldThumbnailPolygon = L.polygon(field.coordinates, {
+        color: "#38bdf8",
+        weight: 2,
+        fillColor: "#38bdf8",
+        fillOpacity: 0.18
+      }).addTo(fieldThumbnailMap);
+
+      // The thumbnail sits inside a card that can be hidden/re-shown
+      // (mobile's disclosure toggle) or resized before its layout settles,
+      // so both invalidateSize() and fitBounds() run on the next frame.
+      requestAnimationFrame(() => {
+        fieldThumbnailMap?.invalidateSize();
+        if (fieldThumbnailPolygon) {
+          fieldThumbnailMap.fitBounds(fieldThumbnailPolygon.getBounds(), { padding: [8, 8] });
+        }
+      });
+    }
+
+    // ---------------------------------------------------------------------
+    // 今日の水門判断 quantitative hero.
+    //
+    // computeWaterNeed() (js/water/water-need.js) is the ONLY place depth/
+    // volume arithmetic happens; everything here is presentation. It reads
+    // the two real, persisted per-field numbers this app has --
+    // readCurrentWaterLevelForField() and readTargetWaterLevels() -- plus
+    // field.properties.areaM2, and never fabricates a value that is missing.
+    // ---------------------------------------------------------------------
+
+    function fieldWaterNeed(field) {
+      if (!computeWaterNeed || !field) {
+        return null;
+      }
+      const currentEntry = readCurrentWaterLevelForField(field.id);
+      const targetValue = readTargetWaterLevels()[field.id];
+      return computeWaterNeed({
+        fieldId: field.id,
+        areaM2: Number.isFinite(field.properties?.areaM2) ? field.properties.areaM2 : undefined,
+        currentWaterLevelCm: currentEntry ? currentEntry.valueCm : undefined,
+        currentLevelRecordedAt: currentEntry ? currentEntry.recordedAt : undefined,
+        targetWaterLevelCm: Number.isFinite(targetValue) ? targetValue : undefined
+      });
+    }
+
+    function waterNeedMiniLabel(need) {
+      if (!need || need.direction === "unknown") {
+        return "水位未記録";
+      }
+      if (need.direction === "hold") {
+        return "維持";
+      }
+      const sign = need.direction === "add" ? "+" : "−";
+      return `${sign}${Math.abs(need.deltaWaterDepthCm).toFixed(1)}cm`;
+    }
+
+    function renderWaterHeroCarousel(fields, activeFieldId) {
+      const carousel = document.getElementById("waterHeroCarousel");
+      if (!carousel) {
+        return;
+      }
+      if (fields.length <= 1) {
+        carousel.hidden = true;
+        carousel.replaceChildren();
+        return;
+      }
+      carousel.hidden = false;
+      carousel.replaceChildren();
+      fields.forEach((field) => {
+        const need = fieldWaterNeed(field);
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "water-hero-mini-card";
+        button.dataset.waterHeroFieldId = field.id;
+        if (String(field.id) === String(activeFieldId)) {
+          button.classList.add("is-active");
+          button.setAttribute("aria-current", "true");
+        }
+        const name = document.createElement("strong");
+        name.textContent = field.name || field.id;
+        const delta = document.createElement("span");
+        delta.className = "water-hero-mini-delta";
+        delta.textContent = waterNeedMiniLabel(need);
+        const volume = document.createElement("span");
+        volume.className = "water-hero-mini-volume";
+        volume.textContent = need && Number.isFinite(need.volumeM3) && need.volumeM3 > 0
+          ? `${need.volumeM3.toFixed(1)}m³`
+          : "";
+        button.append(name, delta, volume);
+        carousel.append(button);
+      });
+    }
+
+    function waterHeroPrimaryMessage(need) {
+      if (!need || need.direction === "unknown") {
+        return "現在の水位を記録すると、必要な入水量を計算できます。";
+      }
+      if (need.direction === "hold") {
+        return "現在の水位を維持してください";
+      }
+      const depth = Math.abs(need.deltaWaterDepthCm).toFixed(1);
+      return need.direction === "add" ? `水を ${depth} cm 入れてください` : `水位を約 ${depth} cm 下げてください`;
+    }
+
+    function waterHeroTimingLabel(need, decision) {
+      if (!need || need.direction === "unknown") {
+        return "—";
+      }
+      if (need.direction === "hold") {
+        return "不要";
+      }
+      return decision?.verdict === "open" ? "今日〜明日" : "現地で確認";
+    }
+
+    const FORECAST_DAY_LABELS = ["今日", "明日", "明後日"];
+
+    function forecastIcon(day) {
+      if (day.maxProbPct >= 50 || day.totalPrecipMm >= 5) return "☂";
+      if (day.maxProbPct >= 20 || day.totalPrecipMm >= 1) return "☁";
+      return "☀";
+    }
+
+    function renderWaterHeroForecast() {
+      const container = document.getElementById("waterHeroForecast");
+      if (!container) {
+        return;
+      }
+      const days = Array.isArray(weatherData?.dailyForecast) ? weatherData.dailyForecast : [];
+      container.replaceChildren();
+      days.slice(0, 3).forEach((day, index) => {
+        const cell = document.createElement("div");
+        cell.className = "water-hero-forecast-day";
+        const label = document.createElement("span");
+        label.className = "water-hero-forecast-label";
+        label.textContent = FORECAST_DAY_LABELS[index] || day.date;
+        const icon = document.createElement("span");
+        icon.className = "water-hero-forecast-icon";
+        icon.textContent = forecastIcon(day);
+        const prob = document.createElement("span");
+        prob.className = "water-hero-forecast-prob";
+        prob.textContent = `降水確率 ${day.maxProbPct}%`;
+        cell.append(label, icon, prob);
+        container.append(cell);
+      });
+    }
+
+    function renderWaterHero() {
+      const carousel = document.getElementById("waterHeroCarousel");
+      const emptyState = document.getElementById("waterHeroEmptyState");
+      const content = document.getElementById("waterHeroContent");
+      if (!carousel || !emptyState || !content) {
+        return;
+      }
+      const fields = fieldAnnotationController?.fields || [];
+      const activeFieldId = document.getElementById("basicActiveFieldSelect")?.value || "";
+      const activeField = fields.find((candidate) => candidate.id === activeFieldId);
+
+      renderWaterHeroCarousel(fields, activeFieldId);
+
+      if (fields.length === 0 || !activeField || !computeWaterNeed) {
+        emptyState.hidden = fields.length !== 0;
+        content.hidden = true;
+        return;
+      }
+      emptyState.hidden = true;
+      content.hidden = false;
+
+      const need = fieldWaterNeed(activeField);
+      document.getElementById("waterHeroFieldLabel").textContent = `${activeField.name || activeField.id} の推奨`;
+      document.getElementById("waterHeroPrimary").textContent = waterHeroPrimaryMessage(need);
+
+      const staleWarning = document.getElementById("waterHeroStaleWarning");
+      if (need?.isStale) {
+        staleWarning.hidden = false;
+        staleWarning.textContent = `最終水位記録: ${need.staleDays}日前 — この水位記録は古い可能性があります。現地で確認してください。`;
+      } else {
+        staleWarning.hidden = true;
+      }
+
+      document.getElementById("waterHeroVolume").textContent = need && Number.isFinite(need.volumeM3)
+        ? (need.volumeM3 > 0 ? `約 ${need.volumeM3.toFixed(1)} m³` : "—")
+        : "—";
+      document.getElementById("waterHeroConfidence").textContent = !need || need.direction === "unknown"
+        ? "—"
+        : (need.isStale ? "低" : "高");
+
+      // Mirrors updateDecision()'s own threshold resolution exactly (settings
+      // overrides over the profile defaults) so this label never disagrees
+      // with the 推奨操作 badge sitting right underneath it.
+      const th = thresholds();
+      const weather = {
+        rain24hMm: readNumberInput(weatherInputs.rain24hMm, 0),
+        daysSinceRain: readNumberInput(weatherInputs.daysSinceRain, 0),
+        forecastRainProbPct: readNumberInput(weatherInputs.forecastRainProbPct, 0)
+      };
+      const activeThresholds = {
+        heavyRain24hMm: readNumberInput(thresholdInputs.heavyRain24hMm, th.heavyRain24hMm),
+        lightRain24hMm: readNumberInput(thresholdInputs.lightRain24hMm, th.lightRain24hMm),
+        forecastRainProbPct: readNumberInput(thresholdInputs.forecastRainProbPct, th.forecastRainProbPct),
+        drySpellDays: readNumberInput(thresholdInputs.drySpellDays, th.drySpellDays)
+      };
+      const decision = evaluateGate(weather, activeThresholds);
+      document.getElementById("waterHeroTiming").textContent = waterHeroTimingLabel(need, decision);
+
+      renderWaterHeroForecast();
+    }
+
+    document.getElementById("waterHeroCarousel")?.addEventListener("click", (event) => {
+      const button = event.target.closest("button[data-water-hero-field-id]");
+      if (!button) {
+        return;
+      }
+      const select = document.getElementById("basicActiveFieldSelect");
+      const fieldId = button.dataset.waterHeroFieldId;
+      if (select && [...select.options].some((option) => option.value === fieldId)) {
+        select.value = fieldId;
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    });
+
+    document.getElementById("waterHeroRecordButton")?.addEventListener("click", () => {
+      document.getElementById("basicRecordWaterButton")?.click();
+    });
 
     /**
      * Stage 2 must never run without a Stage 1 field. Reuses the exact same
@@ -4912,7 +5500,16 @@
       }
       const value = readTargetWaterLevels()[fieldSelect.value];
       targetInput.value = Number.isFinite(value) ? value : "";
+      // Same active-field switch also has to refresh the persisted *current*
+      // reading -- otherwise switching from 圃場2 to 圃場1 would leave 圃場2's
+      // water level sitting in the input.
+      const currentInput = document.getElementById("recObsWaterLevelInput");
+      if (currentInput) {
+        const currentEntry = readCurrentWaterLevelForField(fieldSelect.value);
+        currentInput.value = currentEntry ? currentEntry.valueCm : "";
+      }
       updateWaterLevelVerdict();
+      renderWaterHero();
     }
 
     function updateWaterLevelVerdict() {
@@ -4932,6 +5529,59 @@
       const isAdequate = current >= target;
       verdict.textContent = isAdequate ? "✓ 適正" : "⚠ 水位が低めです";
       verdict.classList.toggle("water-level-verdict-warning", !isAdequate);
+    }
+
+    // Current water level, per field, timestamped. Until this existed the
+    // "水位 (cm・任意)" input was typed and immediately forgotten -- nothing
+    // else in the app could ever ask "what did we last measure here, and
+    // when?". 今日の水門判断's quantitative hero (requiredDepth = target -
+    // current) needs exactly that, so this persists it the moment the farmer
+    // types it, the same accountScopedStorage-namespaced way
+    // TARGET_WATER_LEVEL_STORAGE_KEY already does. Does not change the shape
+    // of the existing free-text observation record -- this is an additional,
+    // dedicated store for fast, structured access.
+    const CURRENT_WATER_LEVEL_STORAGE_KEY = "suimonNaviCurrentWaterLevelV1";
+
+    function readCurrentWaterLevels() {
+      try {
+        const raw = accountScopedStorage.getItem(CURRENT_WATER_LEVEL_STORAGE_KEY);
+        return raw ? JSON.parse(raw) : {};
+      } catch {
+        return {};
+      }
+    }
+
+    function writeCurrentWaterLevels(all) {
+      try {
+        accountScopedStorage.setItem(CURRENT_WATER_LEVEL_STORAGE_KEY, JSON.stringify(all));
+      } catch {
+        // Storage full/unavailable -- the reading simply won't persist across reloads.
+      }
+    }
+
+    function writeCurrentWaterLevel(fieldId, valueCm, recordedAt = Date.now()) {
+      if (!fieldId) {
+        return;
+      }
+      const all = readCurrentWaterLevels();
+      if (Number.isFinite(valueCm)) {
+        all[fieldId] = { valueCm, recordedAt };
+      } else {
+        delete all[fieldId];
+      }
+      writeCurrentWaterLevels(all);
+      authController?.notifyLocalChange();
+    }
+
+    function readCurrentWaterLevelForField(fieldId) {
+      if (!fieldId) {
+        return null;
+      }
+      const entry = readCurrentWaterLevels()[fieldId];
+      if (!entry || !Number.isFinite(entry.valueCm) || !Number.isFinite(entry.recordedAt)) {
+        return null;
+      }
+      return entry;
     }
 
     function formatAreaShort(area) {
@@ -7347,14 +7997,22 @@
       renderBasicFieldSummary();
       renderDroneModeGate();
       loadTargetWaterLevelForActiveField();
+      fetchLiveWeather();
     });
     document.getElementById("recTargetWaterLevelInput")?.addEventListener("input", (event) => {
       const fieldId = document.getElementById("basicActiveFieldSelect")?.value;
       const value = event.target.value === "" ? NaN : Number(event.target.value);
       writeTargetWaterLevel(fieldId, value);
       updateWaterLevelVerdict();
+      renderWaterHero();
     });
-    document.getElementById("recObsWaterLevelInput")?.addEventListener("input", updateWaterLevelVerdict);
+    document.getElementById("recObsWaterLevelInput")?.addEventListener("input", (event) => {
+      const fieldId = document.getElementById("basicActiveFieldSelect")?.value;
+      const value = event.target.value === "" ? NaN : Number(event.target.value);
+      writeCurrentWaterLevel(fieldId, value);
+      updateWaterLevelVerdict();
+      renderWaterHero();
+    });
     // Points at Stage-1's own card now that the technical recording surface
     // is Settings-only: in Basic mode "圃場を測る" means "load the walk you
     // recorded and turn it into a field", not "open a WebSerial console".
@@ -7512,6 +8170,11 @@
     (async function init() {
       initSerialCard();
       try {
+        ({ computeWaterNeed } = await import("./js/water/water-need.js"));
+      } catch (error) {
+        console.error("Water-need helper initialization failed", error);
+      }
+      try {
         // Must land BEFORE FieldAnnotationController is constructed: the
         // controller captures `options.storage` once, and that object is what
         // AuthController later re-points at a signed-in farmer's namespace.
@@ -7618,6 +8281,13 @@
         // the merged metadata.
         ensureActiveFieldSelected();
         renderBasicFieldSummary();
+        // NOT covered by ensureActiveFieldSelected()'s own "change" dispatch:
+        // that only fires when the restored value differs from the select's
+        // current one, which on a plain reload it usually does not (the
+        // option list was just populated with the same value already
+        // selected). Water-level restore has to run unconditionally here, or
+        // a reload silently drops both the target and the current reading.
+        loadTargetWaterLevelForActiveField();
       } catch (error) {
         console.error("Field report initialization failed", error);
         const warning = document.getElementById("reportMessage");

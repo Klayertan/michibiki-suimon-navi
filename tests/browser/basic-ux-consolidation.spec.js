@@ -154,12 +154,17 @@ test("no workspace leaves the document scrolled or overflowing sideways on deskt
 // ---------------------------------------------------------------------------
 
 test("Basic has exactly one farmer verdict, in the polished card", async ({ page }) => {
+  // #verdictBadge sits inside the quantitative hero's content, shown only
+  // with an active field (spec §24: zero fields shows the "圃場を登録する
+  // と..." prompt instead of a meaningless 様子見), so this needs one first.
+  await openSettingsFields(page);
+  await registerField(page, { nmea: LOOP_A, fileName: "one-verdict.nmea" });
   await page.goto("/");
 
   const card = page.locator(".gate-card");
   await expect(card).toBeVisible();
   await expect(card).toContainText("今日の水門判断");
-  await expect(card).toContainText("気象と圃場位置からの推奨");
+  await expect(card).toContainText("気象と圃場の状況からの推奨");
   await expect(card.locator("#verdictBadge")).toBeVisible();
   await expect(card.locator("#verdictReason")).not.toBeEmpty();
   await expect(card.locator(".disclaimer")).toContainText("最終判断と水門の操作は必ず人が行ってください");
@@ -202,6 +207,12 @@ test("threshold tuning stays out of Basic", async ({ page }) => {
 });
 
 test("the verdict is compact in the desktop panel and large on an iPhone", async ({ page }) => {
+  // #verdictBadge now lives inside the quantitative hero's content, which
+  // (per the field-water-dashboard spec §24) only renders with an active
+  // field -- a farmer with zero fields sees the "圃場を登録すると..." prompt
+  // instead of a meaningless 様子見, so this needs a registered field first.
+  await openSettingsFields(page);
+  await registerField(page, { nmea: LOOP_A, fileName: "verdict-size.nmea" });
   await page.goto("/");
   const badge = page.locator("#verdictBadge");
   const desktopFont = await badge.evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
@@ -224,7 +235,7 @@ test("Basic shows one field selector and no second field card", async ({ page })
   await registerField(page, { nmea: LOOP_A, fileName: "4th.nmea" });
   await page.goto("/#basic");
 
-  await expect(page.locator("#basicFieldSummaryCard")).toBeVisible();
+  await expect(page.locator("#basicFieldManagementCard")).toBeVisible();
   await expect(page.locator("#basicActiveFieldSelect")).toBeVisible();
   // The old second selector is Settings-only now.
   await expect(page.locator("#decisionFieldCard")).toBeHidden();
@@ -249,8 +260,8 @@ test("現在の田圃 carries the metadata 対象圃場 / 使用データ used t
   await registerField(page, { nmea: LOOP_A, fileName: "4th.nmea" });
   await page.goto("/#basic");
 
-  const card = page.locator("#basicFieldSummaryCard");
-  await expect(card).toContainText("現在の田圃");
+  const card = page.locator("#basicFieldManagementCard");
+  await expect(card).toContainText("現在の圃場");
   await expect(card.locator("#basicFieldArea")).toContainText("m²");
   await expect(card.locator("#basicFieldSourceFile")).toHaveText("4th.nmea");
   await expect(card.locator("#basicFieldReliability")).not.toHaveText("—");

@@ -823,14 +823,18 @@ export class AuthController extends EventTarget {
     if (!el.accountFieldsCard) {
       return;
     }
-    const authenticated = isAuthenticated(this.state);
-    el.accountFieldsCard.hidden = !authenticated;
-    if (!authenticated) {
-      return;
-    }
+    // Was signed-in-only ("あなたの圃場"); the Basic-mode field-water
+    // dashboard folded this list into 圃場の管理 for guests and signed-in
+    // farmers alike, both reading the same fieldAnnotationController.fields
+    // through accountScopedStorage, so there is no longer an authenticated
+    // gate here. Hidden with zero fields instead: 圃場の管理's own
+    // #basicFieldEmptyState already says "圃場はまだ登録されていません", so a
+    // second, redundant "まだ圃場がありません" directly under it would just
+    // be clutter for a brand-new farmer.
     const controller = this.getFieldController();
     const fields = controller?.fields || [];
     const activeId = document.getElementById("basicActiveFieldSelect")?.value || null;
+    el.accountFieldsCard.hidden = fields.length === 0;
 
     if (el.accountFieldsEmpty) {
       el.accountFieldsEmpty.hidden = fields.length > 0;

@@ -322,6 +322,74 @@
   white-space: pre-line;
 }
 
+/* --------------------------------------------------------------------
+   圃場の管理 (merged field-management card)
+   -------------------------------------------------------------------- */
+
+.basic-field-register-button {
+  min-height: 46px;
+  width: 100%;
+}
+
+.basic-field-group-title {
+  color: var(--muted, #607069);
+  display: block;
+  font-size: 0.82rem;
+  font-weight: 750;
+  margin-top: 4px;
+}
+
+#basicFieldCurrentGroup {
+  border-top: 1px solid var(--line, #d8d8ca);
+  display: grid;
+  gap: 8px;
+  padding-top: 12px;
+}
+
+.basic-field-current {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 190px 1fr;
+}
+
+.basic-field-thumbnail {
+  background: #eef1e9;
+  border: 1px solid var(--line, #d8d8ca);
+  border-radius: 10px;
+  height: 130px;
+  overflow: hidden;
+  width: 100%;
+}
+
+/* Leaflet's own CSS otherwise leaves attribution/zoom chrome that this
+   read-only thumbnail has no room for and no use for (zoomControl/
+   attributionControl are already disabled at construction; this only
+   guards against anything Leaflet adds later, e.g. its focus outline). */
+.basic-field-thumbnail .leaflet-control-container {
+  display: none;
+}
+
+.basic-field-details-button {
+  grid-column: 1 / -1;
+}
+
+#accountFieldsCard {
+  border-top: 1px solid var(--line, #d8d8ca);
+  display: grid;
+  gap: 4px;
+  padding-top: 12px;
+}
+
+@media (max-width: 520px) {
+  .basic-field-current {
+    grid-template-columns: 1fr;
+  }
+
+  .basic-field-thumbnail {
+    height: 160px;
+  }
+}
+
 @media (max-width: 720px) {
   .basic-boundary-row {
     grid-template-columns: 4.5em 1fr;
