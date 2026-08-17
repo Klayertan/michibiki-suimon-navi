@@ -269,6 +269,102 @@
       color: #fff;
     }
 
+    /* Compact 今日の水門判断 read, upper-left of the main map -- the space
+       freed up by moving the zoom control to bottom-right. Desktop only:
+       hidden outright below the app's existing 980px breakpoint so mobile
+       (already reviewed and accepted) renders exactly as it did before this
+       existed, regardless of the JS-toggled [hidden] state. */
+    .map-water-summary {
+      background: rgba(255, 255, 255, 0.97);
+      border: 1px solid rgba(24, 49, 40, 0.22);
+      border-radius: 12px;
+      box-shadow: 0 2px 10px rgba(24, 49, 40, 0.16);
+      display: grid;
+      gap: 6px;
+      left: 12px;
+      max-width: 320px;
+      padding: 12px 14px;
+      /* A marker popup near the top-left of the map can otherwise render
+         underneath this card and lose its own clicks to it. The card is
+         read-only except its one button, so it lets clicks pass through to
+         whatever is actually on the map beneath it; the button opts back
+         in explicitly. */
+      pointer-events: none;
+      position: absolute;
+      top: 12px;
+      z-index: 440;
+    }
+
+    .map-water-summary[hidden] {
+      display: none;
+    }
+
+    #mapWaterSummaryButton {
+      pointer-events: auto;
+    }
+
+    /* Stepped aside while a marker popup is open (see the map.on("popupopen"
+       ...) listener) -- a popup's own controls must never lose a click to
+       this card, however the two happen to overlap on screen. display:none
+       (not just pointer-events) so the card's own button -- which opts back
+       into pointer-events above -- is removed from hit-testing too, not
+       just the card's background. */
+    .map-water-summary.map-water-summary-yield {
+      display: none !important;
+    }
+
+    @media (max-width: 980px) {
+      .map-water-summary {
+        display: none !important;
+      }
+    }
+
+    .map-water-summary-head {
+      align-items: baseline;
+      display: flex;
+      gap: 8px;
+      justify-content: space-between;
+    }
+
+    .map-water-summary-head .eyebrow {
+      margin: 0;
+    }
+
+    .map-water-summary-head strong {
+      color: var(--green);
+      font-size: 0.85rem;
+      font-weight: 750;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .map-water-summary-state {
+      color: var(--muted);
+      font-size: 0.78rem;
+      font-weight: 700;
+      margin: 0;
+    }
+
+    .map-water-summary-primary {
+      color: var(--text);
+      font-size: 1.05rem;
+      font-weight: 800;
+      line-height: 1.3;
+      margin: 0;
+    }
+
+    .map-water-summary-detail {
+      color: var(--muted);
+      font-size: 0.8rem;
+      line-height: 1.5;
+      margin: 0;
+    }
+
+    #mapWaterSummaryButton {
+      min-height: 40px;
+    }
+
     .panel {
       align-content: start;
       background: var(--panel);
@@ -286,6 +382,15 @@
       border-radius: 10px;
       display: grid;
       gap: 10px;
+      /* CSS Grid items default to min-width: auto, which refuses to shrink
+         below the intrinsic width of their content. A wide child (the
+         mini-card carousel, a long NMEA filename, ...) then forces this
+         card -- and .panel above it -- wider than the viewport instead of
+         wrapping or scrolling internally. This is the actual root cause of
+         the Basic-mode panel becoming horizontally draggable; it is not
+         fixed by overflow-x: hidden anywhere, only by letting grid items
+         shrink to their track's real width. */
+      min-width: 0;
       padding: 14px;
     }
 
@@ -1619,6 +1724,28 @@
       font-size: 0.75rem;
     }
 
+    /* Desktop only (matches the app's existing >980px breakpoint, e.g.
+       index.html:860/1828's `main` column switch): a horizontally-scrolling
+       carousel is reasonable touch UX on a phone, but on a mouse-driven
+       desktop panel it reads as broken drag-scrolling. Above 980px the
+       cards wrap into a responsive grid instead and the scrollbar goes
+       away entirely. Left untouched at <=980px -- mobile keeps the exact
+       same flex/overflow-x:auto carousel it already had. */
+    @media (min-width: 981px) {
+      .water-hero-carousel {
+        display: grid;
+        gap: 8px;
+        grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+        margin: 0;
+        overflow-x: visible;
+        padding: 0;
+      }
+
+      .water-hero-mini-card {
+        min-width: 0;
+      }
+    }
+
     .water-hero-field-label {
       color: var(--muted);
       font-size: 0.85rem;
@@ -2173,6 +2300,25 @@
     <main>
       <div class="map-wrap">
         <div id="map"></div>
+        <!-- Desktop-only (see .map-water-summary's max-width:980px rule):
+             a compact READ of 今日の水門判断, not a second decision engine.
+             Every value here comes from the same renderWaterHero() render
+             pass that builds the full hero card below -- see
+             renderMapWaterSummary(), called from inside renderWaterHero()
+             with the same `need`/`decision`/`activeField` it already
+             computed. There is no independent calculation and no separate
+             active-field state; changing the field anywhere updates both
+             surfaces from the one render. -->
+        <div id="mapWaterSummary" class="map-water-summary" hidden>
+          <div class="map-water-summary-head">
+            <span class="eyebrow">今日の水門判断</span>
+            <strong id="mapWaterSummaryField"></strong>
+          </div>
+          <p id="mapWaterSummaryState" class="map-water-summary-state"></p>
+          <p id="mapWaterSummaryPrimary" class="map-water-summary-primary"></p>
+          <p id="mapWaterSummaryDetail" class="map-water-summary-detail"></p>
+          <button id="mapWaterSummaryButton" class="panel-button" type="button"></button>
+        </div>
         <div class="basemap-toggle" role="group" aria-label="背景地図">
           <button id="basemapMapButton" class="active" type="button" data-basemap="map" aria-pressed="true">地図</button>
           <button id="basemapAerialButton" type="button" data-basemap="aerial" aria-pressed="false">航空写真</button>
@@ -4020,8 +4166,34 @@
       ]
     };
 
-    const map = L.map("map", { zoomControl: true }).setView([34.65, 135.83], 14);
+    const map = L.map("map", { zoomControl: false }).setView([34.65, 135.83], 14);
     window.map = map;
+    // Desktop wants the +/- zoom control bottom-right, out of the way of the
+    // new map-corner water summary (upper-left) and the 地図/航空写真 toggle
+    // (upper-right). Mobile keeps Leaflet's default top-left, unchanged from
+    // before this existed. One control, repositioned via Leaflet's own API
+    // (control.setPosition) rather than relocated with absolute CSS, and
+    // kept in sync if the window is resized across the breakpoint.
+    const desktopViewportQuery = window.matchMedia("(min-width: 981px)");
+    const zoomControl = L.control.zoom({
+      position: desktopViewportQuery.matches ? "bottomright" : "topleft"
+    }).addTo(map);
+    desktopViewportQuery.addEventListener("change", (event) => {
+      zoomControl.setPosition(event.matches ? "bottomright" : "topleft");
+    });
+    // A marker popup can open directly under the map-corner water summary
+    // (e.g. a 水管理ポイント near the upper-left of the field). pointer-
+    // events: none on the card already lets clicks on its plain text pass
+    // through, but the card's own button opts back into pointer-events and
+    // can still sit exactly where a popup's button is. Simplest correct
+    // fix: step the summary aside while any popup is open, rather than
+    // fighting it pixel-for-pixel with z-index/pointer-events.
+    map.on("popupopen", () => {
+      document.getElementById("mapWaterSummary")?.classList.add("map-water-summary-yield");
+    });
+    map.on("popupclose", () => {
+      document.getElementById("mapWaterSummary")?.classList.remove("map-water-summary-yield");
+    });
     const baseLayers = {
       map: L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
@@ -5353,6 +5525,7 @@
       if (fields.length === 0 || !activeField || !computeWaterNeed) {
         emptyState.hidden = fields.length !== 0;
         content.hidden = true;
+        renderMapWaterSummary(null, null, null);
         return;
       }
       emptyState.hidden = true;
@@ -5396,7 +5569,61 @@
       document.getElementById("waterHeroTiming").textContent = waterHeroTimingLabel(need, decision);
 
       renderWaterHeroForecast();
+      renderMapWaterSummary(activeField, need, decision);
     }
+
+    /**
+     * Compact map-corner read of the same `need`/`decision` renderWaterHero()
+     * just computed -- passed in, never recomputed, so there is exactly one
+     * calculation per render and the two surfaces cannot disagree. CSS keeps
+     * this hidden entirely below the desktop breakpoint (map-water-summary
+     * [max-width:980px] rule); the early-return here only handles the
+     * zero-field/no-active-field case so a stale field name never lingers
+     * once fields are cleared.
+     */
+    function renderMapWaterSummary(field, need, decision) {
+      const card = document.getElementById("mapWaterSummary");
+      if (!card) {
+        return;
+      }
+      if (!field) {
+        card.hidden = true;
+        return;
+      }
+      card.hidden = false;
+
+      document.getElementById("mapWaterSummaryField").textContent = field.name || field.id;
+      document.getElementById("mapWaterSummaryState").textContent = waterNeedMiniLabel(need);
+      document.getElementById("mapWaterSummaryPrimary").textContent = waterHeroPrimaryMessage(need);
+
+      const detailEl = document.getElementById("mapWaterSummaryDetail");
+      const button = document.getElementById("mapWaterSummaryButton");
+      const hasQuantity = need && need.direction !== "unknown";
+      if (hasQuantity) {
+        const volumeText = Number.isFinite(need.volumeM3) && need.volumeM3 > 0
+          ? `約 ${need.volumeM3.toFixed(1)} m³ / `
+          : "";
+        const probToday = weatherData?.dailyForecast?.[0]?.maxProbPct;
+        const probText = Number.isFinite(probToday) ? ` / 降水確率 ${probToday}%` : "";
+        detailEl.textContent = `${volumeText}推奨操作: ${decision?.label ?? "—"}${probText}`;
+        button.textContent = "詳細を見る";
+      } else {
+        detailEl.textContent = "";
+        button.textContent = "水位を記録";
+      }
+    }
+
+    document.getElementById("mapWaterSummaryButton")?.addEventListener("click", () => {
+      const field = (fieldAnnotationController?.fields || [])
+        .find((candidate) => candidate.id === document.getElementById("basicActiveFieldSelect")?.value);
+      const need = field ? fieldWaterNeed(field) : null;
+      if (!need || need.direction === "unknown") {
+        // Same destination as the full hero's own 水位を記録する button.
+        document.getElementById("waterHeroRecordButton")?.click();
+      } else {
+        document.querySelector(".gate-card")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    });
 
     document.getElementById("waterHeroCarousel")?.addEventListener("click", (event) => {
       const button = event.target.closest("button[data-water-hero-field-id]");

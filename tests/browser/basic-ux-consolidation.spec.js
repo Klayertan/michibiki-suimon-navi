@@ -169,10 +169,15 @@ test("Basic has exactly one farmer verdict, in the polished card", async ({ page
   await expect(card.locator("#verdictReason")).not.toBeEmpty();
   await expect(card.locator(".disclaimer")).toContainText("最終判断と水門の操作は必ず人が行ってください");
 
-  // One verdict element, one reason element, in the whole document.
+  // One verdict element, one reason element, in the whole document -- the
+  // desktop map-corner summary (#mapWaterSummary) intentionally repeats the
+  // "今日の水門判断" heading as a compact READ of this same card's data (see
+  // docs/STAGE1_BASIC_MAP_LAYOUT_POLISH.md), so the heading text itself can
+  // legitimately appear twice; what must stay singular is the actual
+  // verdict badge/reason, which live only in .gate-card.
   await expect(page.locator(".verdict")).toHaveCount(1);
   await expect(page.locator(".verdict-reason")).toHaveCount(1);
-  await expect(page.locator("text=今日の水門判断")).toHaveCount(1);
+  await expect(page.locator(".gate-card").locator("text=今日の水門判断")).toHaveCount(1);
 });
 
 test("the verdict class and reason follow the decision state through open/hold/close", async ({ page }) => {
