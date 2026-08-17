@@ -192,10 +192,11 @@ not to warrant a second interaction just to see the imagery.
   or hydraulic delivery losses, and the hero's own disclaimer says so.
 - The 3-day-stale threshold and the 実施目安 timing label ("今日〜明日" /
   "現地で確認") are presentation heuristics, not agronomic thresholds.
-- The desktop layout keeps the existing map + single-panel shell rather than
-  a literal 3-column-with-map-below layout; the mobile ordering follows the
-  same constraint (hero is first in the panel, but the panel still sits
-  below the map's fixed 45dvh slot, not above it).
+- **Superseded 2026-08-18** by docs/STAGE1_BASIC_3COL_DESKTOP_LAYOUT.md: the
+  desktop layout now IS a literal 3-column grid (圃場管理/今日の水門判断 left,
+  map centre, NMEA upload/action cards right). Mobile is unaffected by that
+  change and keeps the ordering described here (hero first in the panel,
+  panel below the map's fixed 45dvh slot).
 - The known session-id collision when two fields are registered inside the
   same second (documented separately, pre-existing) can still cause a
   freshly registered field to briefly show the previous field's source-file
