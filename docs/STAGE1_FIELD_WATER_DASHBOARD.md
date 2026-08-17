@@ -211,4 +211,5 @@ carousel + quantitative hero + satellite thumbnail) and 390×844/393×852
 
 - Starting commit: `1e187f5` ("fix(auth): correct sync-chip spacing and
   reported unit test count").
-- See the session's final commit for the exact SHA and push result.
+- This work: `0ccd062` ("feat(stage1): add field water management
+  dashboard"), on `main`.
