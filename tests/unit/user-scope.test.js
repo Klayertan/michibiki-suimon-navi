@@ -95,12 +95,13 @@ test("only the listed keys are namespaced; everything else stays global", () => 
   assert.equal(backing.getItem("suimonNaviFieldMode::u:user-a"), null);
 });
 
-test("all three user-data keys are covered", () => {
+test("every user-data key is covered", () => {
   // A key added to the app but forgotten here is a cross-user leak, so the
   // list is asserted rather than assumed.
   assert.deepEqual(SCOPED_STORAGE_KEYS, [
     "suimonNaviFieldAnnotationsV2",
     "suimonNaviTargetWaterLevelV1",
+    "suimonNaviFieldGrowthStageV1",
     "suimonNaviCloudSyncV1"
   ]);
 });

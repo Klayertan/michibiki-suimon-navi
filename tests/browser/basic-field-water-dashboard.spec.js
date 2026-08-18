@@ -37,25 +37,63 @@ function walkNmea({ latBase = "3439.2880", lonBase = "13549.7892", timePrefix = 
 const START_INDEX = 3;
 const END_INDEX = 7; // ~1m from START -> auto-closes
 
-/** Deterministic Open-Meteo response: dry today, then two rainy days. */
+// Mirrors the past_days=8&forecast_days=3 the app actually requests, plus two
+// spare tail days. FORECAST_DAYS counts today as its first day, exactly as
+// Open-Meteo does.
+const MOCK_PAST_DAYS = 8;
+const MOCK_FORECAST_DAYS = 5;
+const MOCK_TODAY_INDEX = MOCK_PAST_DAYS;
+
+/**
+ * "YYYY-MM-DDTHH:00" in LOCAL time -- the shape Open-Meteo returns for
+ * timezone=Asia/Tokyo (no offset suffix), and the shape
+ * deriveWeatherFromOpenMeteo() feeds to `new Date(...)`, which reads an
+ * offsetless stamp as local. Building the labels locally is what keeps the
+ * fixture's "today" bucket the same calendar day the browser under test is on.
+ */
+function localHourStamp(date) {
+  const pad = (value) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+    + `T${pad(date.getHours())}:00`;
+}
+
+/**
+ * Deterministic Open-Meteo response: dry today, then two rainy days.
+ *
+ * The window is built RELATIVE to the day the test runs, never from a fixed
+ * calendar date. A hard-coded start expires silently: once the real clock
+ * passes it the response stops containing today + two future days, and the
+ * 3-day forecast assertion below fails for a reason that has nothing to do
+ * with the app. Days are emitted one calendar day at a time (24 labelled hours
+ * each) rather than by adding 3600000ms, so a DST boundary cannot shift a
+ * label into the neighbouring day and shear the day buckets.
+ */
 function mockOpenMeteoResponse() {
   const hours = [];
   const precip = [];
   const prob = [];
-  const start = new Date("2026-08-10T00:00:00Z"); // 8 days before "today"
-  for (let h = 0; h < 24 * 11; h += 1) {
-    const t = new Date(start.getTime() + h * 3600000);
-    hours.push(t.toISOString().slice(0, 13) + ":00");
-    const dayIndex = Math.floor(h / 24); // 0-7 = past, 8 = today, 9-10 = forecast
-    if (dayIndex === 9) {
-      precip.push(2.5);
-      prob.push(70);
-    } else if (dayIndex === 10) {
-      precip.push(0.5);
-      prob.push(30);
-    } else {
-      precip.push(0);
-      prob.push(5);
+  // Local midnight MOCK_PAST_DAYS before today, so day index MOCK_TODAY_INDEX
+  // is today.
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  start.setDate(start.getDate() - MOCK_PAST_DAYS);
+  const totalDays = MOCK_PAST_DAYS + MOCK_FORECAST_DAYS;
+  for (let dayIndex = 0; dayIndex < totalDays; dayIndex += 1) {
+    for (let hour = 0; hour < 24; hour += 1) {
+      const t = new Date(start);
+      t.setDate(t.getDate() + dayIndex);
+      t.setHours(hour, 0, 0, 0);
+      hours.push(localHourStamp(t));
+      if (dayIndex === MOCK_TODAY_INDEX + 1) {
+        precip.push(2.5);
+        prob.push(70);
+      } else if (dayIndex === MOCK_TODAY_INDEX + 2) {
+        precip.push(0.5);
+        prob.push(30);
+      } else {
+        precip.push(0);
+        prob.push(5);
+      }
     }
   }
   return {

@@ -35,6 +35,14 @@ export const SCOPED_STORAGE_KEYS = [
   "suimonNaviFieldAnnotationsV2",
   // Per-field target water level (基本モード water card).
   "suimonNaviTargetWaterLevelV1",
+  // Per-field growth stage (生育ステージ) driving the water recommendation.
+  // New key, so namespacing it costs nothing: there is no pre-existing
+  // unprefixed value for a signed-in farmer to lose. (The older
+  // suimonNaviCurrentWaterLevelV1 readings store is deliberately NOT added
+  // here — it already has unprefixed values on real installs, and listing it
+  // now would make those readings unreachable for a signed-in user without a
+  // migration step. See docs/PADDY_WATER_MANAGEMENT.md.)
+  "suimonNaviFieldGrowthStageV1",
   // Cloud sync bookkeeping (cloud ids, last-synced stamps, pending queue).
   "suimonNaviCloudSyncV1"
 ];

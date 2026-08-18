@@ -343,13 +343,22 @@
   border-top: 1px solid var(--line, #d8d8ca);
   display: grid;
   gap: 8px;
+  /* Lets the group shrink inside a fixed-width panel instead of being sized
+     by its widest descendant (the 圃場を選ぶ <select> and its longest
+     option) -- see the .input-row min-width note in index.html. */
+  min-width: 0;
   padding-top: 12px;
 }
 
 .basic-field-current {
   display: grid;
   gap: 12px;
-  grid-template-columns: 190px 1fr;
+  /* minmax(0, ...) on BOTH tracks, not a rigid `190px 1fr`: the rigid form
+     was sized for the old ~380-430px panel and cannot shrink, so in the
+     320px floating left rail (minus its scrollbar) the thumbnail column
+     alone forced the card ~27px past the rail. Both tracks still take their
+     preferred 190px / remainder whenever the space is there. */
+  grid-template-columns: minmax(0, 190px) minmax(0, 1fr);
 }
 
 .basic-field-thumbnail {

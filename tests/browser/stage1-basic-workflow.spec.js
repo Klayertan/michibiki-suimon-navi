@@ -562,7 +562,10 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 393, height: 852 }
         noHorizontalScroll: document.documentElement.scrollWidth <= window.innerWidth,
         mapHeight: box("#map").height,
         help: box("#basicHelpButton").height,
-        upload: box(".basic-upload-button").height,
+        // On phones the NMEA upload lives in the header, immediately left of
+        // 使い方, and the card's own button stands down -- so the touch
+        // target to measure is the header one. Still asserted at >=44px.
+        upload: box("#headerNmeaUploadButton").height,
         recordWater: box("#basicRecordWaterButton").height
       };
     });
