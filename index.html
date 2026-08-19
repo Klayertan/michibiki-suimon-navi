@@ -781,6 +781,72 @@
       width: 100%;
     }
 
+    /* 境界を直線化's floating "done bar" — bottom-center over the map,
+       distinct from .map-quick-toolbar's bottom-left card so the two never
+       fight for the same corner. Sized against #map-wrap's own width (its
+       `position: relative` positioning parent), not the viewport — in
+       Basic mode's 3-column desktop layout the map is only the center
+       column, often much narrower than 100vw, and a viewport-sized bar
+       there would run under Leaflet's bottom-right zoom control. Wraps to
+       two lines by default (not just <640px) for the same reason. */
+    .map-edit-bar {
+      align-items: center;
+      background: rgba(255, 255, 255, 0.97);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      bottom: 14px;
+      box-shadow: var(--shadow);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px 12px;
+      justify-content: center;
+      left: 50%;
+      max-width: calc(100% - 24px);
+      padding: 10px 14px;
+      position: absolute;
+      transform: translateX(-50%);
+      z-index: 470;
+    }
+
+    .map-edit-bar-status {
+      color: var(--text);
+      flex: 1 1 auto;
+      font-size: 0.8rem;
+      font-weight: 700;
+      text-align: center;
+    }
+
+    .map-edit-bar-actions {
+      display: flex;
+      flex-shrink: 0;
+      gap: 6px;
+    }
+
+    .map-edit-bar-button {
+      background: #f5f6f1;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      color: var(--text);
+      cursor: pointer;
+      font-size: 0.78rem;
+      font-weight: 700;
+      padding: 8px 14px;
+      white-space: nowrap;
+    }
+
+    .map-edit-bar-button.primary {
+      background: var(--green);
+      border-color: var(--green);
+      color: #fff;
+    }
+
+    .map-edit-bar-button.primary:disabled {
+      background: #a8b3a0;
+      border-color: #a8b3a0;
+      color: #fff;
+      cursor: not-allowed;
+    }
+
     @media (max-width: 760px) {
       /* A 2-row button grid ate too much of the map's already-limited
          mobile height — collapse to one horizontally-scrollable row
@@ -1686,9 +1752,15 @@
         /* Vertical band the pinned 水管理ポイント toolbar owns in the
            bottom-left corner. The left rail is shortened by exactly this while
            the toolbar is visible, so the two can never overlap at any scroll
-           position. Sized for the toolbar's tallest state (title + note +
-           five buttons in a 2-column grid + cancel). */
-        --basic-quick-toolbar-reserve: 280px;
+           position. Sized for the toolbar's tallest real state: armed
+           (status line + キャンセル button showing) AND with 2+ registered
+           fields (#waterQuickFieldRow's field picker also showing) --
+           measured at 304px live in that combined state, which the previous
+           280px did not cover (280px was sized for "armed OR multi-field",
+           not both at once) and produced a real, measured overlap with the
+           left rail under exactly that condition. 340px leaves a ~36px
+           margin above the measured worst case. */
+        --basic-quick-toolbar-reserve: 340px;
         --basic-rail-left-clear: calc(var(--basic-rail-left-width) + var(--basic-rail-inset) + 12px);
         --basic-rail-right-clear: calc(var(--basic-rail-right-width) + var(--basic-rail-inset) + 12px);
         /* Height of the top band reserved for #mapWaterSummary. Read back by
@@ -1856,6 +1928,24 @@
          this only insets the corner, it does not relocate or duplicate it. */
       body[data-mode="basic"] .leaflet-bottom.leaflet-right {
         margin-right: calc(var(--basic-rail-right-width) + var(--basic-rail-inset));
+      }
+
+      /* Same reasoning as .empty-state just above: .map-edit-bar's base rule
+         centers on #map-wrap, which is full-bleed here -- viewport-centred
+         it would drift under the right rail instead of the actual free
+         canvas between the two floating rails. Unlike .empty-state (pinned
+         near the top), this bar shares the bottom-right corner with
+         Leaflet's zoom control, which is only inset to clear the right
+         RAIL card, not this bar -- so the free-canvas math also reserves
+         the control's own ~44px footprint on the right, or a narrow window
+         (rails wide relative to viewport) lets the two overlap. */
+      body[data-mode="basic"] .map-edit-bar {
+        --map-edit-bar-right-clear: calc(var(--basic-rail-right-clear) + 48px);
+        left: calc(
+          var(--basic-rail-left-clear) +
+          (100% - var(--basic-rail-left-clear) - var(--map-edit-bar-right-clear)) / 2
+        );
+        max-width: calc(100% - var(--basic-rail-left-clear) - var(--map-edit-bar-right-clear) - 16px);
       }
     }
 
@@ -2841,6 +2931,26 @@
           <p id="waterQuickStatus" class="map-quick-toolbar-status" role="status" aria-live="polite" hidden></p>
           <button id="waterQuickCancelButton" class="map-quick-toolbar-cancel" type="button" hidden>キャンセル</button>
         </div>
+        <!-- 境界を直線化 (straighten boundary): a bottom-center floating bar
+             over the map itself, not a side-panel card -- the farmer is
+             tapping corner points on the map while this is open, so the
+             status/完了 controls have to be visible without looking away
+             from what they're tapping. data-workspace intentionally
+             omitted, same reasoning as #droneModeGateCard: this only ever
+             opens as a direct reaction to the registered-fields card's
+             境界を直線化 button, in whichever mode/workspace the farmer
+             already has open, so it must not be reset by
+             switchWorkspace()'s blanket `section.hidden = ...` pass over
+             every `[data-workspace]` element. Visibility is owned entirely
+             by beginBoundaryStraighten()/endBoundaryStraighten(). -->
+        <div id="boundaryStraightenBar" class="map-edit-bar" data-mode="basic settings" hidden>
+          <span id="boundaryStraightenStatus" class="map-edit-bar-status" role="status" aria-live="polite"></span>
+          <div class="map-edit-bar-actions">
+            <button id="boundaryStraightenResetButton" class="map-edit-bar-button" type="button">選び直す</button>
+            <button id="boundaryStraightenCancelButton" class="map-edit-bar-button" type="button">キャンセル</button>
+            <button id="boundaryStraightenConfirmButton" class="map-edit-bar-button primary" type="button" disabled>完了</button>
+          </div>
+        </div>
       </div>
 
       <aside class="panel">
@@ -3406,47 +3516,36 @@
           </div>
         </details>
 
-        <!-- data-workspace intentionally omitted, same reasoning as
-             #droneModeGateCard: this only ever opens as a direct reaction to
-             the registered-fields card's 境界を直線化 button, in whichever
-             mode/workspace the farmer already has open, so it must not be
-             reset by switchWorkspace()'s blanket `section.hidden = ...` pass
-             over every `[data-workspace]` element. Visibility is owned
-             entirely by beginBoundaryStraighten()/endBoundaryStraighten(). -->
-        <section id="boundaryStraightenPanel" class="card" data-mode="basic settings" hidden>
-          <span class="eyebrow">境界を直線化</span>
-          <p class="meta">歩いた跡が波打っているとき、角になる測位点を地図上で順にクリックしてください（3点以上）。角と角の間は自動で平均直線に補正されます。</p>
-          <p id="boundaryStraightenStatus" class="meta" role="status" aria-live="polite">選択した角: 0点</p>
-          <div class="input-row">
-            <button id="boundaryStraightenConfirmButton" class="panel-button primary" type="button" disabled>直線化して更新</button>
-          </div>
-          <div class="input-row">
-            <button id="boundaryStraightenResetButton" class="panel-button" type="button">選び直す</button>
-            <button id="boundaryStraightenCancelButton" class="panel-button" type="button">キャンセル</button>
-          </div>
-        </section>
+        <!-- The visible 水管理ポイント card was removed: it duplicated the
+             on-map #waterQuickToolbar (left side of the map, always visible
+             in 基本モード), and its "現在のQZ1位置に追加" live-position mode had
+             no equivalent there -- a deliberate, informed loss, not an
+             oversight (see docs/STAGE1_BASIC_FLOATING_MAP_DASHBOARD.md).
 
-        <details id="waterControlPanel" class="card paddy-collapsible" data-workspace="fields" data-mode="basic settings" hidden>
-          <summary><span class="details-title">水管理ポイント<span class="en">Water management points</span></span></summary>
-          <div class="details-content">
-            <div class="input-row">
-              <label for="wcpTargetFieldSelect">対象圃場</label>
-              <select id="wcpTargetFieldSelect"></select>
-            </div>
-            <div class="wcp-type-buttons">
-              <button id="wcpAddGateButton" class="panel-button" type="button" disabled>水門を追加</button>
-              <button id="wcpAddInletButton" class="panel-button" type="button" disabled>給水口を追加</button>
-              <button id="wcpAddOutletButton" class="panel-button" type="button" disabled>排水口を追加</button>
-              <button id="wcpAddSensorButton" class="panel-button" type="button" disabled>水位センサ位置を追加</button>
-              <button id="wcpAddPhotoButton" class="panel-button" type="button" disabled>撮影地点を追加</button>
-            </div>
-            <div class="veg-actions">
-              <button id="wcpPositionCurrentButton" class="panel-button primary" type="button" disabled>現在のQZ1位置に追加</button>
-              <button id="wcpPositionMapClickButton" class="panel-button" type="button" disabled>地図をクリックして追加</button>
-            </div>
-            <p id="wcpAddMessage" class="meta" role="status" aria-live="polite"></p>
-          </div>
-        </details>
+             This #waterControlPanel id is kept on a genuinely hidden holder,
+             NOT deleted outright, because #wcpTargetFieldSelect and
+             #wcpAddMessage are load-bearing shared state/feedback for the
+             SURVIVING #waterQuickToolbar, not leftovers from the deleted UI:
+               - #wcpTargetFieldSelect is the canonical target-field value —
+                 #basicActiveFieldSelect's change handler cascades into it,
+                 and it two-way-syncs with #waterQuickFieldSelect. Deleting it
+                 throws in that sync handler (`el.wcpTargetFieldSelect.value =
+                 ...` has no optional-chaining guard on the assignment target).
+               - #wcpAddMessage is where setWcpMessage() writes for BOTH
+                 placement paths, including the "◯◯を追加しました" success
+                 confirmation createWaterControlPoint() shows after every
+                 successful placement, on-map-toolbar included.
+             Two Settings-only entry points (現地調査ワークフロー step 3, 判断
+             デモ's 水管理ポイントを追加する button) still try to .open/scroll
+             this id and focus the deleted #wcpAddGateButton; both degrade to
+             a harmless no-op (the id exists, `.open` on a <div> is inert,
+             `?.focus()` on a missing button is a no-op) rather than a crash.
+             基本モード's own equivalent, #basicAddWaterPointButton, was
+             rewired to the surviving toolbar instead of left broken. -->
+        <div id="waterControlPanel" hidden>
+          <select id="wcpTargetFieldSelect"></select>
+          <p id="wcpAddMessage" role="status" aria-live="polite"></p>
+        </div>
 
         <!-- Moved verbatim out of the Field Recording card (#recPanel) by the
              Stage-1 simplification so Basic mode keeps its water workflow
@@ -9440,26 +9539,20 @@
       renderWaterHero();
       renderWaterManagementCard();
     });
-    // 水管理ポイントを追加, from the farmer's own field card. Same destination
-    // as Settings' 水管理ポイントを追加する, minus the field-picking step: the
-    // active field is already chosen, so it is simply carried across.
+    // 水管理ポイントを追加, from the farmer's own field card. Stays in 基本モード
+    // entirely now: the on-map #waterQuickToolbar (left side of the map) is
+    // already visible there, so this no longer switches to Settings' 圃場
+    // データ workspace to reach the (now-removed) side-panel version of this
+    // workflow -- it just syncs the target field and hands off to the
+    // surviving toolbar's own 水門 button.
     document.getElementById("basicAddWaterPointButton")?.addEventListener("click", () => {
       const targetFieldId = document.getElementById("basicActiveFieldSelect")?.value;
-      switchWorkspace("fields");
-      window.setTimeout(() => {
-        const waterPanel = document.getElementById("waterControlPanel");
-        const wcpSelect = document.getElementById("wcpTargetFieldSelect");
-        if (targetFieldId && wcpSelect && [...wcpSelect.options].some((option) => option.value === targetFieldId)) {
-          wcpSelect.value = targetFieldId;
-          wcpSelect.dispatchEvent(new Event("change", { bubbles: true }));
-        }
-        if (waterPanel) {
-          waterPanel.open = true;
-          waterPanel.hidden = false;
-          scrollElementWithinPanel(waterPanel, { block: "start" });
-        }
-        document.getElementById("wcpAddGateButton")?.focus();
-      }, 100);
+      const wcpSelect = document.getElementById("wcpTargetFieldSelect");
+      if (targetFieldId && wcpSelect && [...wcpSelect.options].some((option) => option.value === targetFieldId)) {
+        wcpSelect.value = targetFieldId;
+        wcpSelect.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+      document.querySelector('#waterQuickToolbar button[data-water-quick-type="gate"]')?.focus();
     });
     document.getElementById("basicRecordWaterButton")?.addEventListener("click", () => {
       switchWorkspace("fields");

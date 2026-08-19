@@ -88,15 +88,17 @@ const ELEMENT_IDS = [
   "registeredFieldsContainer", "registeredListMessage", "registeredFieldsPanel",
   // 境界を直線化 (straighten a noisy walked boundary into best-fit straight
   // edges between farmer-picked corner points).
-  "boundaryStraightenPanel", "boundaryStraightenStatus", "boundaryStraightenConfirmButton",
+  "boundaryStraightenBar", "boundaryStraightenStatus", "boundaryStraightenConfirmButton",
   "boundaryStraightenResetButton", "boundaryStraightenCancelButton",
   // 現地調査ワークフロー guide panel.
   "workflowGuidePanel", "workflowProgressLabel", "workflowNextTask", "workflowStepsContainer",
   "fileInput", "exportAnalysisButton", "waterControlPanel", "fieldObservationsPanel",
-  // Water-management-point add workflow.
-  "wcpTargetFieldSelect", "wcpAddGateButton", "wcpAddInletButton", "wcpAddOutletButton",
-  "wcpAddSensorButton", "wcpAddPhotoButton", "wcpPositionCurrentButton", "wcpPositionMapClickButton",
-  "wcpAddMessage",
+  // Water-management-point add workflow. The visible panel (and its type/
+  // position buttons) was removed in favor of the on-map quick-toolbar
+  // below; wcpTargetFieldSelect/wcpAddMessage remain as shared state/
+  // feedback the surviving toolbar depends on -- see the comment on
+  // #waterControlPanel in index.html.
+  "wcpTargetFieldSelect", "wcpAddMessage",
   // Floating map quick-toolbar for water-management points (QZ1測量, fullscreen-friendly).
   "waterQuickToolbar", "waterQuickActiveField", "waterQuickFieldRow", "waterQuickFieldSelect",
   "waterQuickNoFieldMessage", "waterQuickStatus", "waterQuickCancelButton",
@@ -278,13 +280,6 @@ export class FieldAnnotationController {
       this.updateWaterPointButtonStates();
       this.renderQuickToolbar();
     });
-    el.wcpAddGateButton?.addEventListener("click", () => this.beginAddWaterPoint("gate"));
-    el.wcpAddInletButton?.addEventListener("click", () => this.beginAddWaterPoint("inlet"));
-    el.wcpAddOutletButton?.addEventListener("click", () => this.beginAddWaterPoint("outlet"));
-    el.wcpAddSensorButton?.addEventListener("click", () => this.beginAddWaterPoint("sensor"));
-    el.wcpAddPhotoButton?.addEventListener("click", () => this.beginAddWaterPoint("photo"));
-    el.wcpPositionCurrentButton?.addEventListener("click", () => this.addWaterControlPointAtCurrentPosition());
-    el.wcpPositionMapClickButton?.addEventListener("click", () => this.toggleMapClickAddMode());
 
     // Floating map quick-toolbar (mirrors the water-management panel above, but reachable without hunting the side panel in fullscreen).
     el.waterQuickFieldSelect?.addEventListener("change", () => {
@@ -912,53 +907,14 @@ export class FieldAnnotationController {
     return { lat: Number(last.lat), lon: Number(last.lon) };
   }
 
-  beginAddWaterPoint(internalType) {
-    if (this.fields.length === 0) {
-      this.setWcpMessage("先に圃場を登録してください。");
-      return;
-    }
-    if (!this.elements.wcpTargetFieldSelect.value) {
-      this.setWcpMessage("対象の圃場を選択してください。");
-      return;
-    }
-    this.pendingWaterPointType = internalType;
-    this.setWcpMessage(`${WATER_CONTROL_TYPE_LABELS[internalType]}を追加する位置を選んでください。`);
-    this.updateWaterPointButtonStates();
-  }
-
-  addWaterControlPointAtCurrentPosition() {
-    if (!this.pendingWaterPointType) {
-      return;
-    }
-    const position = this.latestQz1Position();
-    if (!position) {
-      this.setWcpMessage("現在のQZ1位置がありません。QZ1データを読み込むか、ライブ接続してください。");
-      return;
-    }
-    this.createWaterControlPoint(position.lat, position.lon, "qz1_current_position");
-  }
-
-  toggleMapClickAddMode() {
-    if (!this.pendingWaterPointType) {
-      return;
-    }
-    if (this.mapClickAddActive) {
-      this.mapClickAddActive = false;
-      this.setWcpMessage("");
-      this.render();
-      return;
-    }
-    this.mapClickAddActive = true;
-    this.setWcpMessage(`地図をクリックして${WATER_CONTROL_TYPE_LABELS[this.pendingWaterPointType]}を配置してください。`);
-    this.render();
-  }
-
   /**
-   * Floating map-toolbar equivalent of beginAddWaterPoint() + toggleMapClickAddMode()
-   * combined into one click: a farmer working in fullscreen shouldn't need to
-   * find the side panel just to add a water point. Reuses the same
-   * pendingWaterPointType/mapClickAddActive flags handleMapClick() already
-   * watches, so placement/creation logic isn't duplicated.
+   * The map-click-armed entry point for adding a water-control point: a
+   * farmer working fullscreen on the map shouldn't need a side panel for
+   * this. This is now the ONLY placement path (the panel-based
+   * beginAddWaterPoint()/toggleMapClickAddMode() and the "現在のQZ1位置に追加"
+   * live-position shortcut were removed with the panel itself). Sets the
+   * same pendingWaterPointType/mapClickAddActive flags handleMapClick()
+   * already watches, so placement/creation logic isn't duplicated.
    */
   beginQuickAddWaterPoint(internalType) {
     if (this.fields.length === 0) {
@@ -1516,8 +1472,8 @@ export class FieldAnnotationController {
       return;
     }
     this.cornerPicker = { kind, id: record.id, selected: new Set() };
-    if (this.elements.boundaryStraightenPanel) {
-      this.elements.boundaryStraightenPanel.hidden = false;
+    if (this.elements.boundaryStraightenBar) {
+      this.elements.boundaryStraightenBar.hidden = false;
     }
     this.updateBoundaryStraightenStatus();
     this.renderMapLayers();
@@ -1526,8 +1482,8 @@ export class FieldAnnotationController {
   endBoundaryStraighten() {
     this.cornerPicker = null;
     this.layers.cornerPicker.clearLayers();
-    if (this.elements.boundaryStraightenPanel) {
-      this.elements.boundaryStraightenPanel.hidden = true;
+    if (this.elements.boundaryStraightenBar) {
+      this.elements.boundaryStraightenBar.hidden = true;
     }
   }
 
@@ -1559,9 +1515,11 @@ export class FieldAnnotationController {
       return;
     }
     const count = this.cornerPicker?.selected.size || 0;
-    setText(el.boundaryStraightenStatus, count < 3
-      ? `選択した角: ${count}点（あと${3 - count}点必要）`
-      : `選択した角: ${count}点`);
+    setText(el.boundaryStraightenStatus, count === 0
+      ? "角になる点を地図でタップ（3点以上）"
+      : count < 3
+        ? `角を選択: ${count}点（あと${3 - count}点）`
+        : `角を選択: ${count}点`);
     if (el.boundaryStraightenConfirmButton) {
       el.boundaryStraightenConfirmButton.disabled = count < 3;
     }
