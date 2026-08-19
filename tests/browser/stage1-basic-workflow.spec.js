@@ -411,16 +411,16 @@ test("water management still works in Basic mode after the cleanup", async ({ pa
   await page.locator("#recObsWaterLevelInput").fill("55");
   await expect(page.locator("#recWaterLevelVerdict")).toContainText("適正");
 
-  // Water-management points still register against the field.
-  await expect(page.locator("#waterControlPanel")).toBeVisible();
+  // Water-management points still register against the field, via the
+  // on-map quick toolbar -- the only placement path now (the right-rail
+  // #waterControlPanel duplicate was removed; see its comment in index.html).
   const fieldId = await page.evaluate(() => window.fieldAnnotationController.fields[0].id);
-  await page.evaluate(() => {
-    // 水管理ポイント is a collapsed <details> by default.
-    document.getElementById("waterControlPanel").open = true;
-    document.getElementById("wcpTargetFieldSelect").dispatchEvent(new Event("change", { bubbles: true }));
-  });
-  await page.locator("#wcpAddGateButton").click();
-  await page.locator("#wcpPositionCurrentButton").click();
+  await page.locator('#waterQuickToolbar button[data-water-quick-type="gate"]').click();
+  // Basic mode's desktop map is full-bleed under the floating rails, so a
+  // click position that works in Settings mode's narrower map column (e.g.
+  // x:300,y:200) can land on the left rail here instead -- x:600 clears
+  // both rails at this test's 1280px default viewport.
+  await page.locator("#map").click({ position: { x: 600, y: 400 } });
   const points = await page.evaluate(() => window.fieldAnnotationController.waterControlPoints);
   expect(points).toHaveLength(1);
   expect(points[0].relatedFieldId).toBe(fieldId);

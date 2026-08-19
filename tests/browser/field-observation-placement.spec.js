@@ -154,13 +154,13 @@ test("entering observation placement mode cancels an already-active water-manage
   await openSurveyWorkspace(page);
   await registerField(page);
 
-  await page.locator("#wcpTargetFieldSelect").selectOption("paddy-001");
-  await page.locator("#wcpAddGateButton").click();
-  await page.locator("#wcpPositionMapClickButton").click();
-  await expect(page.locator("#wcpPositionMapClickButton")).toHaveClass(/active/);
+  // Single field, on-map toolbar: one click both selects the type and arms
+  // map-click placement (no separate toggle step, unlike the removed panel).
+  await page.locator('#waterQuickToolbar button[data-water-quick-type="gate"]').click();
+  await expect(page.locator('#waterQuickToolbar button[data-water-quick-type="gate"]')).toHaveClass(/active/);
 
   await workflowStep(page, 4).locator("button").click();
-  await expect(page.locator("#wcpPositionMapClickButton")).not.toHaveClass(/active/);
+  await expect(page.locator('#waterQuickToolbar button[data-water-quick-type="gate"]')).not.toHaveClass(/active/);
   const state = await page.evaluate(() => ({
     water: window.fieldAnnotationController.mapClickAddActive,
     observation: window.fieldAnnotationController.mapClickAddActiveObservation

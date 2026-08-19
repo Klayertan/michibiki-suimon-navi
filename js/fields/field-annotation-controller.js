@@ -1636,10 +1636,11 @@ export class FieldAnnotationController {
         scrollWithinPanel(el.registeredFieldsPanel, { block: "start" });
         break;
       case "3":
-        if (el.waterControlPanel) {
-          el.waterControlPanel.open = true;
-          scrollWithinPanel(el.waterControlPanel, { block: "start" });
-        }
+        // Destination is the on-map #waterQuickToolbar now (the removed
+        // #waterControlPanel's replacement -- see the comment on that id in
+        // index.html). It's a fixed-position overlay on the always-visible
+        // map, not a panel card, so there's nothing to scroll into view.
+        el.waterQuickToolbar?.querySelector('button[data-water-quick-type="gate"]')?.focus();
         break;
       case "4":
         if (el.fieldObservationsPanel) {

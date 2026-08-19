@@ -9413,17 +9413,16 @@
       const isRealField = targetFieldId && targetFieldId !== DECISION_SAMPLE_VALUE && targetFieldId !== DECISION_DEMO_VALUE;
       switchWorkspace("fields");
       window.setTimeout(() => {
-        const waterPanel = document.getElementById("waterControlPanel");
         const wcpSelect = document.getElementById("wcpTargetFieldSelect");
         if (isRealField && wcpSelect && [...wcpSelect.options].some((option) => option.value === targetFieldId)) {
           wcpSelect.value = targetFieldId;
           wcpSelect.dispatchEvent(new Event("change", { bubbles: true }));
         }
-        if (waterPanel) {
-          waterPanel.open = true;
-          scrollElementWithinPanel(waterPanel, { block: "start" });
-        }
-        document.getElementById("wcpAddGateButton")?.focus();
+        // Destination is now the on-map #waterQuickToolbar (the removed
+        // #waterControlPanel's replacement) -- see the comment on that id.
+        // It's a fixed-position overlay on the always-visible map, not a
+        // panel card, so there's nothing to scroll into view; only focus.
+        document.querySelector('#waterQuickToolbar button[data-water-quick-type="gate"]')?.focus();
       }, 100);
     });
     document.querySelectorAll("[data-workspace-target]").forEach((tab) => {

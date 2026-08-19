@@ -35,9 +35,9 @@ async function registerFieldWithData(page) {
   await page.locator("#fileInput").setInputFiles({ name: "walk.txt", mimeType: "text/plain", buffer: Buffer.from(TIGHT_LOOP_NMEA) });
   await page.locator("#fieldRegConfirmButton").click();
 
-  await page.locator("#wcpTargetFieldSelect").selectOption("paddy-001");
-  await page.locator("#wcpAddGateButton").click();
-  await page.locator("#wcpPositionCurrentButton").click();
+  // Single field: auto-selected as the target already.
+  await page.locator('#waterQuickToolbar button[data-water-quick-type="gate"]').click();
+  await page.locator("#map").click({ position: { x: 300, y: 200 } });
 
   await page.locator("#obsTargetFieldSelect").selectOption("paddy-001");
   await page.locator("#obsAddWeedButton").click();

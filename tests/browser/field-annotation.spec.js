@@ -209,17 +209,17 @@ test("水門・給水口・排水口 can each be added and linked to a specific 
   await page.locator("#fieldRegConfirmButton").click();
   await expect(page.locator("#fieldAnnotationSummaryFields")).toHaveText("1");
 
-  await page.locator("#wcpTargetFieldSelect").selectOption("paddy-001");
-  await expect(page.locator("#wcpAddGateButton")).toBeEnabled();
+  // Single registered field: auto-selected as the target already.
+  await expect(page.locator('#waterQuickToolbar button[data-water-quick-type="gate"]')).toBeEnabled();
 
-  for (const [button, label] of [
-    ["#wcpAddGateButton", "水門"],
-    ["#wcpAddInletButton", "給水口"],
-    ["#wcpAddOutletButton", "排水口"]
-  ]) {
-    await page.locator(button).click();
-    await expect(page.locator("#wcpPositionCurrentButton")).toBeEnabled();
-    await page.locator("#wcpPositionCurrentButton").click();
+  for (const [i, [dataType, label]] of [
+    ["gate", "水門"],
+    ["inlet", "給水口"],
+    ["outlet", "排水口"]
+  ].entries()) {
+    await page.locator(`#waterQuickToolbar button[data-water-quick-type="${dataType}"]`).click();
+    // Spaced out so each placement lands on open map, not an earlier marker.
+    await page.locator("#map").click({ position: { x: 300 + i * 20, y: 200 } });
     await expect(page.locator("#selFeatureMemoInput")).toBeVisible();
     const last = await page.evaluate(() => window.fieldAnnotationController.waterControlPoints.at(-1));
     expect(last.relatedFieldId).toBe("paddy-001");
@@ -233,32 +233,28 @@ test("map-click placement works for 水位センサ and 撮影地点", async ({ 
   await openSurveyWorkspace(page);
   await uploadNmea(page, TIGHT_LOOP_NMEA);
   await page.locator("#fieldRegConfirmButton").click();
-  await page.locator("#wcpTargetFieldSelect").selectOption("paddy-001");
-
-  await page.locator("#wcpAddSensorButton").click();
-  await page.locator("#wcpPositionMapClickButton").click();
-  await expect(page.locator("#wcpPositionMapClickButton")).toHaveClass(/active/);
+  await page.locator('#waterQuickToolbar button[data-water-quick-type="sensor"]').click();
+  await expect(page.locator('#waterQuickToolbar button[data-water-quick-type="sensor"]')).toHaveClass(/active/);
   await page.locator("#map").click({ position: { x: 300, y: 200 } });
   await expect(page.locator("#fieldAnnotationSummaryPoints")).toHaveText("1");
   const sensor = await page.evaluate(() => window.fieldAnnotationController.waterControlPoints[0]);
   expect(sensor.type).toBe("water_level_sensor");
 
-  await page.locator("#wcpAddPhotoButton").click();
-  await page.locator("#wcpPositionMapClickButton").click();
+  await page.locator('#waterQuickToolbar button[data-water-quick-type="photo"]').click();
   await page.locator("#map").click({ position: { x: 320, y: 220 } });
   await expect(page.locator("#fieldAnnotationSummaryPoints")).toHaveText("2");
 });
 
 test("water-management buttons stay disabled with no field, and auto-select the target once exactly one field is registered", async ({ page }) => {
   await openSurveyWorkspace(page);
-  await expect(page.locator("#wcpAddGateButton")).toBeDisabled();
+  await expect(page.locator('#waterQuickToolbar button[data-water-quick-type="gate"]')).toBeDisabled();
 
   await uploadNmea(page, TIGHT_LOOP_NMEA);
   await page.locator("#fieldRegConfirmButton").click();
   // Exactly one field now exists, so it's auto-selected as the target —
   // the farmer never has to pick it manually in the common single-field case.
   await expect(page.locator("#wcpTargetFieldSelect")).toHaveValue("paddy-001");
-  await expect(page.locator("#wcpAddGateButton")).toBeEnabled();
+  await expect(page.locator('#waterQuickToolbar button[data-water-quick-type="gate"]')).toBeEnabled();
 });
 
 test("with multiple fields, the target field selection is preserved (not reset) and the user can switch explicitly", async ({ page }) => {
@@ -274,9 +270,9 @@ test("with multiple fields, the target field selection is preserved (not reset) 
   // the map quick-toolbar's field picker becomes visible so the user can switch.
   await expect(page.locator("#wcpTargetFieldSelect")).toHaveValue("paddy-001");
   await expect(page.locator("#waterQuickFieldRow")).toBeVisible();
-  await page.locator("#wcpTargetFieldSelect").selectOption("paddy-002");
-  await expect(page.locator("#wcpAddGateButton")).toBeEnabled();
-  await expect(page.locator("#waterQuickFieldSelect")).toHaveValue("paddy-002");
+  await page.locator("#waterQuickFieldSelect").selectOption("paddy-002");
+  await expect(page.locator('#waterQuickToolbar button[data-water-quick-type="gate"]')).toBeEnabled();
+  await expect(page.locator("#wcpTargetFieldSelect")).toHaveValue("paddy-002");
 });
 
 // -------------------------------------------------------------------------
@@ -401,9 +397,8 @@ test("export JSON includes fields, boundaryTracks, waterControlPoints, surveySes
   await openSurveyWorkspace(page);
   await uploadNmea(page, TIGHT_LOOP_NMEA);
   await page.locator("#fieldRegConfirmButton").click();
-  await page.locator("#wcpTargetFieldSelect").selectOption("paddy-001");
-  await page.locator("#wcpAddGateButton").click();
-  await page.locator("#wcpPositionCurrentButton").click();
+  await page.locator('#waterQuickToolbar button[data-water-quick-type="gate"]').click();
+  await page.locator("#map").click({ position: { x: 300, y: 200 } });
 
   await page.getByRole("button", { name: "詳細解析" }).click();
   await page.evaluate(() => {
@@ -728,15 +723,16 @@ test("step 3 and step 4 buttons are disabled with 先に圃場を登録してく
   await expect(workflowStep(page, 4)).toContainText("先に圃場を登録してください。");
 });
 
-test("step 3 button opens and scrolls to 水管理ポイント once a field exists", async ({ page }) => {
+test("step 3 button focuses the 水管理ポイント quick toolbar once a field exists", async ({ page }) => {
   await openSurveyWorkspace(page);
   await uploadNmea(page, TIGHT_LOOP_NMEA);
   await page.locator("#fieldRegConfirmButton").click();
 
   await expect(workflowStep(page, 3).locator("button")).toBeEnabled();
   await workflowStep(page, 3).locator("button").click();
-  await expect(page.locator("#waterControlPanel")).toHaveJSProperty("open", true);
-  await expect(page.locator("#waterControlPanel")).toBeInViewport();
+  // Destination is the always-visible on-map toolbar now, not a scrolled
+  // side panel -- see the #waterControlPanel comment in index.html.
+  await expect(page.locator('#waterQuickToolbar button[data-water-quick-type="gate"]')).toBeFocused();
 });
 
 test("step 4 button opens and scrolls to 現地観察メモ once a field exists", async ({ page }) => {
@@ -766,9 +762,8 @@ test("adding a water-control point marks step 3 done, and adding an observation 
   await uploadNmea(page, TIGHT_LOOP_NMEA);
   await page.locator("#fieldRegConfirmButton").click();
 
-  await page.locator("#wcpTargetFieldSelect").selectOption("paddy-001");
-  await page.locator("#wcpAddGateButton").click();
-  await page.locator("#wcpPositionCurrentButton").click();
+  await page.locator('#waterQuickToolbar button[data-water-quick-type="gate"]').click();
+  await page.locator("#map").click({ position: { x: 300, y: 200 } });
   await expect(page.locator("#workflowProgressLabel")).toHaveText("進捗: 3 / 5 完了");
   await expect(workflowStep(page, 3)).toContainText("✅");
   await expect(page.locator("#workflowNextTask")).toHaveText("次の作業: 雑草・害虫・病気などの観察メモを記録してください。");
@@ -786,9 +781,8 @@ test("exporting marks step 5 done, shows the completion message, persists lastEx
   await openSurveyWorkspace(page);
   await uploadNmea(page, TIGHT_LOOP_NMEA);
   await page.locator("#fieldRegConfirmButton").click();
-  await page.locator("#wcpTargetFieldSelect").selectOption("paddy-001");
-  await page.locator("#wcpAddGateButton").click();
-  await page.locator("#wcpPositionCurrentButton").click();
+  await page.locator('#waterQuickToolbar button[data-water-quick-type="gate"]').click();
+  await page.locator("#map").click({ position: { x: 300, y: 200 } });
   await page.locator("#obsTargetFieldSelect").selectOption("paddy-001");
   await page.locator("#obsAddWeedButton").click();
   await page.locator("#obsPositionQz1Button").click();
