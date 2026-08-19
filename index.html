@@ -3406,6 +3406,26 @@
           </div>
         </details>
 
+        <!-- data-workspace intentionally omitted, same reasoning as
+             #droneModeGateCard: this only ever opens as a direct reaction to
+             the registered-fields card's 境界を直線化 button, in whichever
+             mode/workspace the farmer already has open, so it must not be
+             reset by switchWorkspace()'s blanket `section.hidden = ...` pass
+             over every `[data-workspace]` element. Visibility is owned
+             entirely by beginBoundaryStraighten()/endBoundaryStraighten(). -->
+        <section id="boundaryStraightenPanel" class="card" data-mode="basic settings" hidden>
+          <span class="eyebrow">境界を直線化</span>
+          <p class="meta">歩いた跡が波打っているとき、角になる測位点を地図上で順にクリックしてください（3点以上）。角と角の間は自動で平均直線に補正されます。</p>
+          <p id="boundaryStraightenStatus" class="meta" role="status" aria-live="polite">選択した角: 0点</p>
+          <div class="input-row">
+            <button id="boundaryStraightenConfirmButton" class="panel-button primary" type="button" disabled>直線化して更新</button>
+          </div>
+          <div class="input-row">
+            <button id="boundaryStraightenResetButton" class="panel-button" type="button">選び直す</button>
+            <button id="boundaryStraightenCancelButton" class="panel-button" type="button">キャンセル</button>
+          </div>
+        </section>
+
         <details id="waterControlPanel" class="card paddy-collapsible" data-workspace="fields" data-mode="basic settings" hidden>
           <summary><span class="details-title">水管理ポイント<span class="en">Water management points</span></span></summary>
           <div class="details-content">
@@ -9680,7 +9700,21 @@
           },
           // Registered: the raw track has served its purpose and the field
           // polygon now carries the boundary, so the trimming UI stands down.
-          onBasicRegistered: () => clearBasicBoundarySelection()
+          onBasicRegistered: () => clearBasicBoundarySelection(),
+          // 編集 on the registered-fields card: #selFeatureForm's <details>
+          // is data-mode="settings" only, so from Basic mode the workspace
+          // gate leaves it display:none no matter what the controller just
+          // set .open to (same class of bug basicViewResultsButton above
+          // fixes for 圃場レポート). Switch there and scroll to it so the
+          // click actually shows the farmer something.
+          onRequestEdit: () => {
+            switchMode("settings", { workspace: "fields" });
+            window.setTimeout(() => {
+              const details = document.getElementById("selFeatureForm")?.closest("details");
+              if (details) details.open = true;
+              scrollElementWithinPanel(details, { block: "start" });
+            }, 100);
+          }
         });
         fieldAnnotationController.mount();
         paddyIntelligence.getFieldAnnotationExport = () => fieldAnnotationController.getExportData();

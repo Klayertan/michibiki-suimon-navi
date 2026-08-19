@@ -473,6 +473,91 @@ export function distanceMeters(a, b) {
   return Math.hypot(dx, dy);
 }
 
+function toLocalXY(origin, [lat, lon]) {
+  const metersPerDegreeLat = 111320;
+  const metersPerDegreeLon = 111320 * Math.cos(origin[0] * Math.PI / 180);
+  return [(lon - origin[1]) * metersPerDegreeLon, (lat - origin[0]) * metersPerDegreeLat];
+}
+
+function toLatLon(origin, [x, y]) {
+  const metersPerDegreeLat = 111320;
+  const metersPerDegreeLon = 111320 * Math.cos(origin[0] * Math.PI / 180);
+  return [origin[0] + y / metersPerDegreeLat, origin[1] + x / metersPerDegreeLon];
+}
+
+/**
+ * Total-least-squares best-fit line through a run of noisy points (PCA on
+ * the local covariance, not a y=a+bx regression) — works for near-vertical
+ * runs too, which an ordinary regression would blow up on. Returns a point
+ * on the line plus a unit direction vector.
+ */
+function fitLine(pointsXY) {
+  const n = pointsXY.length;
+  const meanX = pointsXY.reduce((sum, [x]) => sum + x, 0) / n;
+  const meanY = pointsXY.reduce((sum, [, y]) => sum + y, 0) / n;
+  let sxx = 0, sxy = 0, syy = 0;
+  pointsXY.forEach(([x, y]) => {
+    const dx = x - meanX;
+    const dy = y - meanY;
+    sxx += dx * dx;
+    sxy += dx * dy;
+    syy += dy * dy;
+  });
+  const angle = 0.5 * Math.atan2(2 * sxy, sxx - syy);
+  return { point: [meanX, meanY], dir: [Math.cos(angle), Math.sin(angle)] };
+}
+
+function intersectLines(l1, l2, fallback) {
+  const [x1, y1] = l1.point, [dx1, dy1] = l1.dir;
+  const [x2, y2] = l2.point, [dx2, dy2] = l2.dir;
+  const denom = dx1 * dy2 - dy1 * dx2;
+  if (Math.abs(denom) < 1e-9) {
+    return fallback;
+  }
+  const t = ((x2 - x1) * dy2 - (y2 - y1) * dx2) / denom;
+  return [x1 + dx1 * t, y1 + dy1 * t];
+}
+
+/**
+ * Replaces a noisy walked boundary with straight edges: each edge between
+ * two farmer-picked corners is fit as one best-fit line through every raw
+ * point along that run (averaging out GPS wobble), and each output vertex
+ * is the intersection of the two edges meeting there — not just the raw
+ * corner point's own single (possibly noisy) fix.
+ *
+ * `coordinates` is the closed walked path in order; `cornerIndices` are
+ * indices into it that the farmer picked, in any order (sorted here) —
+ * three or more required. Returns a new, shorter [lat, lon][] polygon with
+ * exactly cornerIndices.length vertices.
+ */
+export function straightenBoundary(coordinates, cornerIndices) {
+  const corners = [...new Set(cornerIndices)].sort((a, b) => a - b);
+  if (!Array.isArray(coordinates) || coordinates.length < 3 || corners.length < 3) {
+    return null;
+  }
+  const origin = coordinates[0];
+  const xy = coordinates.map((coord) => toLocalXY(origin, coord));
+  const n = xy.length;
+
+  const edges = corners.map((startIdx, i) => {
+    const endIdx = corners[(i + 1) % corners.length];
+    const run = [];
+    for (let idx = startIdx; ; idx = (idx + 1) % n) {
+      run.push(xy[idx]);
+      if (idx === endIdx) break;
+    }
+    // A single-segment run (adjacent corners) has no noise to average out —
+    // fitLine degenerates on <2 distinct points, so keep the raw endpoints.
+    return run.length >= 3 ? fitLine(run) : { point: run[0], dir: [run[1][0] - run[0][0], run[1][1] - run[0][1]] };
+  });
+
+  return edges.map((edge, i) => {
+    const prevEdge = edges[(i - 1 + edges.length) % edges.length];
+    const vertexXY = intersectLines(prevEdge, edge, xy[corners[i]]);
+    return toLatLon(origin, vertexXY);
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Fix-quality summary (used by both the upload dialog preview and the
 // registered-field/log panel)

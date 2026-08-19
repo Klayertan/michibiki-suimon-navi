@@ -199,6 +199,10 @@
   min-height: 40px;
 }
 
+.rec-recovery-actions .panel-button[aria-pressed="true"] {
+  background: #166534;
+}
+
 .rec-observation-row {
   align-items: center;
   border-bottom: 1px solid var(--line);

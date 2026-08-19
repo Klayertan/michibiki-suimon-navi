@@ -56,6 +56,8 @@ import {
   normalizeSeverity,
   normalizeWaterControlType,
   observationSourceLabel,
+  polygonAreaSquareMeters,
+  straightenBoundary,
   summarizeFixQuality,
   waterControlInternalType,
   WATER_CONTROL_EXPORT_TYPES
@@ -84,6 +86,10 @@ const ELEMENT_IDS = [
   "fieldRegForceCloseButton", "fieldRegSaveAsTrackButton", "fieldRegCancelCloseButton",
   // Registered fields/logs panel.
   "registeredFieldsContainer", "registeredListMessage", "registeredFieldsPanel",
+  // 境界を直線化 (straighten a noisy walked boundary into best-fit straight
+  // edges between farmer-picked corner points).
+  "boundaryStraightenPanel", "boundaryStraightenStatus", "boundaryStraightenConfirmButton",
+  "boundaryStraightenResetButton", "boundaryStraightenCancelButton",
   // 現地調査ワークフロー guide panel.
   "workflowGuidePanel", "workflowProgressLabel", "workflowNextTask", "workflowStepsContainer",
   "fileInput", "exportAnalysisButton", "waterControlPanel", "fieldObservationsPanel",
@@ -149,6 +155,11 @@ export class FieldAnnotationController {
     // Stage-1 success path: lets index.html clear the START/END markers and
     // the trimming panel once the field actually exists.
     this.onBasicRegistered = options.onBasicRegistered || (() => {});
+    // 編集 in the registered-fields card opens #selFeatureForm's <details>,
+    // which is Settings-only (data-mode="settings") even though the card
+    // itself also renders in Basic mode. index.html switches to Settings/
+    // 圃場データ and scrolls there so the click has a visible result.
+    this.onRequestEdit = options.onRequestEdit || (() => {});
 
     this.fields = [];
     this.boundaryTracks = [];
@@ -169,8 +180,20 @@ export class FieldAnnotationController {
     // confirmOutsideFieldObservation()/cancelOutsideFieldObservation().
     this.pendingOutsideFieldObservation = null;
 
-    this.layers = { fields: L.layerGroup(), tracks: L.layerGroup(), waterPoints: L.layerGroup(), observations: L.layerGroup() };
+    this.layers = {
+      fields: L.layerGroup(), tracks: L.layerGroup(), waterPoints: L.layerGroup(),
+      observations: L.layerGroup(), gnssPoints: L.layerGroup(), cornerPicker: L.layerGroup()
+    };
     this.fieldLayerById = new Map();
+    // Field/track ids currently showing their linked survey session's raw
+    // GNSS points on the map (登録済み圃場・測量ログ card's GNSS点を表示 toggle).
+    // Rebuilt from this set on every renderMapLayers() call, the same way
+    // fields/tracks themselves render from this.fields/this.boundaryTracks.
+    this.gnssVisibleIds = new Set();
+    // Active 境界を直線化 (straighten boundary) session, or null when not
+    // picking corners: { kind: "field" | "track", id, selected: Set<number> }
+    // -- selected holds indices into that record's own coordinates array.
+    this.cornerPicker = null;
     this.elements = {};
   }
 
@@ -186,6 +209,11 @@ export class FieldAnnotationController {
     this.layers.tracks.addTo(this.map);
     this.layers.waterPoints.addTo(this.map);
     this.layers.observations.addTo(this.map);
+    this.layers.gnssPoints.addTo(this.map);
+    // Added last so its click-to-toggle vertex markers always sit above the
+    // field/track layers during 境界を直線化 (otherwise the polygon fill
+    // underneath would eat the click first).
+    this.layers.cornerPicker.addTo(this.map);
     this.map.on("click", (event) => this.handleMapClick(event));
     // Bound once here, alongside the single map click listener above — never
     // re-registered per placement-mode toggle, so it can't accumulate either.
@@ -297,6 +325,11 @@ export class FieldAnnotationController {
 
     // Registered fields/logs panel (event delegation — rows are rebuilt on render).
     el.registeredFieldsContainer?.addEventListener("click", (event) => this.handleRegisteredListClick(event));
+
+    // 境界を直線化 (straighten boundary).
+    el.boundaryStraightenConfirmButton?.addEventListener("click", () => this.confirmBoundaryStraighten());
+    el.boundaryStraightenResetButton?.addEventListener("click", () => this.resetBoundaryStraighten());
+    el.boundaryStraightenCancelButton?.addEventListener("click", () => this.endBoundaryStraighten());
 
     // 現地調査ワークフロー guide (event delegation — steps are rebuilt on render).
     el.workflowStepsContainer?.addEventListener("click", (event) => this.handleWorkflowStepClick(event));
@@ -1404,6 +1437,12 @@ export class FieldAnnotationController {
       this.focusRecordOnMap(kind, record);
     } else if (action === "edit") {
       this.selectFeature(kind, record);
+      // #selFeatureForm's <details> is data-mode="settings" only (the
+      // registered-fields card itself is "basic settings", so it renders in
+      // both -- but the editor it opens does not). Without this, 編集 from
+      // Basic mode sets details.open=true on a panel that stays display:none,
+      // so the click has no visible effect at all.
+      this.onRequestEdit();
     } else if (action === "delete") {
       this.selected = { kind, record };
       this.deleteSelectedFeature();
@@ -1411,7 +1450,21 @@ export class FieldAnnotationController {
       this.exportScoped(kind, record);
     } else if (action === "export-nmea") {
       this.exportRawNmea(record);
+    } else if (action === "toggle-gnss") {
+      this.toggleGnssPoints(record);
+    } else if (action === "straighten") {
+      this.beginBoundaryStraighten(kind, record);
     }
+  }
+
+  toggleGnssPoints(record) {
+    if (this.gnssVisibleIds.has(record.id)) {
+      this.gnssVisibleIds.delete(record.id);
+    } else {
+      this.gnssVisibleIds.add(record.id);
+    }
+    this.renderMapLayers();
+    this.renderRegisteredList();
   }
 
   focusRecordOnMap(kind, record) {
@@ -1448,6 +1501,96 @@ export class FieldAnnotationController {
       return;
     }
     downloadText(session.rawNmeaText, session.sourceFileName || `${record.name || record.id}.nmea.txt`);
+  }
+
+  // -------------------------------------------------------------------------
+  // 境界を直線化 (straighten a noisy walked boundary): the farmer picks which
+  // measured points are corners by clicking them on the map; each edge
+  // between two picked corners is replaced with straightenBoundary()'s
+  // best-fit line, so GPS wobble along a straight paddy edge averages out
+  // instead of being traced point-for-point.
+  // -------------------------------------------------------------------------
+
+  beginBoundaryStraighten(kind, record) {
+    if (!Array.isArray(record.coordinates) || record.coordinates.length < 3) {
+      return;
+    }
+    this.cornerPicker = { kind, id: record.id, selected: new Set() };
+    if (this.elements.boundaryStraightenPanel) {
+      this.elements.boundaryStraightenPanel.hidden = false;
+    }
+    this.updateBoundaryStraightenStatus();
+    this.renderMapLayers();
+  }
+
+  endBoundaryStraighten() {
+    this.cornerPicker = null;
+    this.layers.cornerPicker.clearLayers();
+    if (this.elements.boundaryStraightenPanel) {
+      this.elements.boundaryStraightenPanel.hidden = true;
+    }
+  }
+
+  toggleCornerIndex(index) {
+    if (!this.cornerPicker) {
+      return;
+    }
+    if (this.cornerPicker.selected.has(index)) {
+      this.cornerPicker.selected.delete(index);
+    } else {
+      this.cornerPicker.selected.add(index);
+    }
+    this.updateBoundaryStraightenStatus();
+    this.renderMapLayers();
+  }
+
+  resetBoundaryStraighten() {
+    if (!this.cornerPicker) {
+      return;
+    }
+    this.cornerPicker.selected.clear();
+    this.updateBoundaryStraightenStatus();
+    this.renderMapLayers();
+  }
+
+  updateBoundaryStraightenStatus() {
+    const el = this.elements;
+    if (!el.boundaryStraightenStatus) {
+      return;
+    }
+    const count = this.cornerPicker?.selected.size || 0;
+    setText(el.boundaryStraightenStatus, count < 3
+      ? `選択した角: ${count}点（あと${3 - count}点必要）`
+      : `選択した角: ${count}点`);
+    if (el.boundaryStraightenConfirmButton) {
+      el.boundaryStraightenConfirmButton.disabled = count < 3;
+    }
+  }
+
+  confirmBoundaryStraighten() {
+    if (!this.cornerPicker || this.cornerPicker.selected.size < 3) {
+      return;
+    }
+    const { kind, id, selected } = this.cornerPicker;
+    const record = kind === "field"
+      ? this.fields.find((field) => field.id === id)
+      : this.boundaryTracks.find((track) => track.id === id);
+    if (!record) {
+      this.endBoundaryStraighten();
+      return;
+    }
+    const straightened = straightenBoundary(record.coordinates, [...selected]);
+    if (!straightened) {
+      return;
+    }
+    record.coordinates = straightened;
+    if (kind === "field" && record.properties) {
+      record.properties.areaM2 = polygonAreaSquareMeters(straightened);
+      record.properties.updatedAt = new Date().toISOString();
+    }
+    this.persist();
+    this.endBoundaryStraighten();
+    this.renderAll();
   }
 
   // -------------------------------------------------------------------------
@@ -1585,6 +1728,7 @@ export class FieldAnnotationController {
     this.layers.tracks.clearLayers();
     this.layers.waterPoints.clearLayers();
     this.layers.observations.clearLayers();
+    this.layers.gnssPoints.clearLayers();
 
     this.fieldLayerById = new Map();
     const activeFieldId = this.elements.basicActiveFieldSelect?.value || "";
@@ -1638,6 +1782,73 @@ export class FieldAnnotationController {
           this.selectFeature("observation", obs);
         })
         .addTo(this.layers.observations);
+    });
+
+    this.renderGnssPointsLayer();
+    this.renderCornerPickerLayer();
+  }
+
+  /**
+   * Draws the linked survey session's raw measured points for every
+   * field/track id currently toggled on via the registered-list card's
+   * GNSS点を表示 button. Rebuilt from this.gnssVisibleIds on every
+   * renderMapLayers() call, self-healing stale ids (a deleted record simply
+   * yields no match and is dropped from the set).
+   */
+  renderGnssPointsLayer() {
+    if (this.gnssVisibleIds.size === 0) {
+      return;
+    }
+    [...this.gnssVisibleIds].forEach((id) => {
+      const record = this.fields.find((field) => field.id === id)
+        || this.boundaryTracks.find((track) => track.id === id);
+      if (!record) {
+        this.gnssVisibleIds.delete(id);
+        return;
+      }
+      const session = this.linkedSurveySession(record);
+      (session?.rawPoints || []).forEach((point) => {
+        const augmented = point.fixQuality === 2 || point.fixQuality === 4 || point.fixQuality === 5;
+        L.circleMarker([point.lat, point.lon], {
+          radius: 3, weight: 1, color: "#ffffff",
+          fillColor: augmented ? "#15803d" : "#d97706", fillOpacity: 0.9
+        })
+          .bindTooltip(`Fix ${Number.isFinite(point.fixQuality) ? point.fixQuality : "?"}`)
+          .addTo(this.layers.gnssPoints);
+      });
+    });
+  }
+
+  /**
+   * Draws one clickable marker per vertex of the record currently being
+   * straightened (境界を直線化), colored by whether the farmer has picked it
+   * as a corner yet. Clicking toggles membership in this.cornerPicker.selected
+   * — order doesn't matter here, straightenBoundary() sorts by position along
+   * the walked path before pairing up edges.
+   */
+  renderCornerPickerLayer() {
+    if (!this.cornerPicker) {
+      return;
+    }
+    const { kind, id, selected } = this.cornerPicker;
+    const record = kind === "field"
+      ? this.fields.find((field) => field.id === id)
+      : this.boundaryTracks.find((track) => track.id === id);
+    if (!record) {
+      this.endBoundaryStraighten();
+      return;
+    }
+    record.coordinates.forEach((coord, index) => {
+      const isCorner = selected.has(index);
+      L.circleMarker(coord, {
+        radius: isCorner ? 7 : 4, weight: isCorner ? 3 : 1, color: "#ffffff",
+        fillColor: isCorner ? "#b45309" : "#2563eb", fillOpacity: 0.95
+      })
+        .on("click", (event) => {
+          event.originalEvent?.stopPropagation();
+          this.toggleCornerIndex(index);
+        })
+        .addTo(this.layers.cornerPicker);
     });
   }
 
@@ -1820,6 +2031,15 @@ export class FieldAnnotationController {
     if (session?.rawNmeaStored) {
       actionDefs.push(["export-nmea", "元NMEAを書き出し"]);
     }
+    if (session?.rawPoints?.length > 0) {
+      const showingGnss = this.gnssVisibleIds.has(record.id);
+      actionDefs.push(["toggle-gnss", showingGnss ? "GNSS点を隠す" : "GNSS点を表示"]);
+    }
+    // Straightening needs at least a triangle's worth of raw vertices to be
+    // worth doing — a boundary already down to 3-4 points is already straight.
+    if (record.coordinates.length > 4) {
+      actionDefs.push(["straighten", "境界を直線化"]);
+    }
     actionDefs.forEach(([action, label]) => {
       const button = document.createElement("button");
       button.type = "button";
@@ -1828,6 +2048,9 @@ export class FieldAnnotationController {
       button.dataset.action = action;
       button.dataset.kind = kind;
       button.dataset.id = record.id;
+      if (action === "toggle-gnss") {
+        button.setAttribute("aria-pressed", String(this.gnssVisibleIds.has(record.id)));
+      }
       actions.append(button);
     });
     card.append(actions);
