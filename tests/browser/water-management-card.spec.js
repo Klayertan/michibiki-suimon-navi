@@ -123,19 +123,58 @@ test("with no fields the card asks for a field and shows no numbers", async ({ p
 // Unknown stage / missing measurement
 // ---------------------------------------------------------------------------
 
-test("a newly registered field asks for the growth stage instead of guessing one", async ({ page }) => {
+test("a newly registered field gets a calendar-estimated stage, clearly marked as an estimate", async ({ page }) => {
   await openBasic(page);
   await registerField(page, "圃場1");
 
   await expect(page.locator("#waterMgmtContent")).toBeVisible();
-  await expect(page.locator("#waterMgmtStageSelect")).toHaveValue("unknown");
-  await expect(page.locator("#waterMgmtTarget")).toHaveText("数値目標なし");
-  await expect(page.locator("#waterMgmtStatus")).toHaveText("生育ステージ未設定");
-  await expect(page.locator("#waterMgmtRecommendation")).toContainText("生育ステージを選択");
-  await expect(page.locator("#waterMgmtRecommendation")).toContainText("圃場面積からは水深を決められません");
+
+  // The stage is now pre-filled from the regional cultivation calendar rather
+  // than left blank, so the card can recommend a depth without the farmer
+  // picking from an empty dropdown first. It must NEVER be presented as an
+  // observation, so the estimate note is visible and says 推定.
+  await expect(page.locator("#waterMgmtStageSelect")).not.toHaveValue("unknown");
+  await expect(page.locator("#waterMgmtStageEstimateNote")).toBeVisible();
+  await expect(page.locator("#waterMgmtStageEstimateNote")).toContainText("推定");
+
+  // No measurement yet, so no deficit volume is invented -- only the per-10mm
+  // conversion rate, which needs the area alone.
   await expect(page.locator("#waterMgmtVolumeBlock")).toBeHidden();
+  await expect(page.locator("#waterMgmtRateBlock")).toBeVisible();
+  await expect(page.locator("#waterMgmtRateBlock")).toContainText("水深10mmあたり");
+
   // The measured area is still shown -- it is a fact about the field.
   await expect(page.locator("#waterMgmtArea")).toContainText("m²");
+});
+
+test("a manually chosen stage overrides the calendar and drops the 推定 marker", async ({ page }) => {
+  await openBasic(page);
+  await registerField(page, "圃場1");
+  await expect(page.locator("#waterMgmtStageEstimateNote")).toBeVisible();
+
+  await page.locator("#waterMgmtStageSelect").selectOption("tillering");
+  await expect(page.locator("#waterMgmtStageEstimateNote")).toBeHidden();
+  await expect(page.locator("#waterMgmtStageSelect")).toHaveValue("tillering");
+
+  // And it survives a reload: a farmer's correction must not be silently
+  // reverted by the next calendar evaluation.
+  await page.reload();
+  await expect(page.locator("#waterMgmtStageSelect")).toHaveValue("tillering");
+  await expect(page.locator("#waterMgmtStageEstimateNote")).toBeHidden();
+});
+
+test("選択した中干し flips the gate verdict to 閉める, so the two cards never contradict", async ({ page }) => {
+  await openBasic(page);
+  await registerField(page, "圃場1");
+
+  await page.locator("#waterMgmtStageSelect").selectOption("midseason_drainage");
+
+  // The regression this guards: the old rainfall-only gate said 開ける during
+  // 中干し after a few dry days -- telling the farmer to flood a paddy that is
+  // deliberately being dried.
+  await expect(page.locator(".gate-card .verdict")).toContainText("閉める");
+  await expect(page.locator("#verdictReason")).toContainText("中干し");
+  await expect(page.locator("#waterMgmtVolumeBlock")).toBeHidden();
 });
 
 test("stage chosen but nothing measured -> the range is shown, no volume is invented", async ({ page }) => {
@@ -346,7 +385,10 @@ test("stage and measurement are per field, and follow the one active-field selec
 
   await registerField(page, "圃場2", { latBase: "3439.1880", lonBase: "13549.6892", timePrefix: "13" });
   await selectFieldByName(page, "圃場2");
-  await expect(page.locator("#waterMgmtStageSelect")).toHaveValue("unknown");
+  // 圃場2 has no manual stage, so it falls back to the calendar estimate --
+  // which must NOT be 圃場1's manually-chosen tillering, and must be marked
+  // as an estimate. The measurement is still per-field and still empty.
+  await expect(page.locator("#waterMgmtStageEstimateNote")).toBeVisible();
   await expect(page.locator("#waterMgmtDepthInput")).toHaveValue("");
 
   await page.locator("#basicActiveFieldSelect").selectOption(firstId);

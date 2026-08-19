@@ -244,6 +244,39 @@ because the brief for this component asked which literature supports the
 architectural principle that *water-management targets depend on growth stage
 and management strategy, and that no single depth is universally correct.*
 
+### 6b. 華山 謙 (1964)「減水深法の再検討」 ✅ Primary
+
+**Title (EN):** Reconsideration to Estimating Method of Water Requirement of Paddy Field Area
+**Author:** 華山 謙 (HANAYAMA, Yuzuru), Faculty of Agriculture, Tokyo University
+**Journal:** 農業土木研究 (Journal of Agricultural Engineering Research) **32**(1): 15–23 · 1964
+**DOI:** [10.11408/jjsidre1929.32.15](https://doi.org/10.11408/jjsidre1929.32.15)
+**Language:** Japanese (English abstract)
+
+**Source states:** The 減水深 method estimates a paddy area's water requirement
+in four steps — measuring a sample field, estimating the whole area's depth
+from it, converting to gross requirement, and projecting post-consolidation
+demand — and the paper's central complaint is that these steps are *not*
+distinguished in practice: "The mean of measured values on sample fields is too
+often simply regarded as water requirement for the whole area." Analysing them
+statistically, it concludes that an error of about **±3 mm/day is inevitable**
+both when dividing an irrigation period into sub-periods and when estimating the
+whole area's mean from sample data, and that "the conventional method brings
+about too big errors."
+
+**Project interpretation:** This is the error bar on the daily-loss figure. It is
+why `js/water/daily-loss.js` exports `ESTIMATION_ERROR_MM_PER_DAY = 3` **as
+data**, prints it in the UI caveat, and reports daily loss as a *range* that is
+never added into the exact standing-water volume. A 1964 methodological critique
+and NARO's 2019 851-field survey (§6) reach the same conclusion from different
+directions: a sample mean is not a field's water requirement.
+
+**Limitation:** The paper is about estimating requirement for a *region* under
+land-consolidation planning, not about real-time irrigation advice for one
+paddy. Its ±3 mm/day is a floor on estimation error, not a calibrated
+uncertainty for this app's specific calculation.
+
+---
+
 ### 7. Anbumozhi, Yamaji & Tabuchi (1998) ✅ Primary (metadata)
 
 **Title:** Rice crop growth and yield as influenced by changes in ponding water depth, water regime and fertigation level

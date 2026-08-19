@@ -19,10 +19,11 @@ flowchart TD
     Obs --> Boundary["Field boundary polygon"]
     Boundary --> Area["Field area A m2"]
 
-    Stage["Rice growth stage<br/>farmer-selected"] --> Rules["Evidence model<br/>stage to management mode + target range"]
+    Cal["Regional cultivation calendar<br/>field latitude + date"] --> Stage
+    Stage["Rice growth stage<br/>auto-set, farmer override wins"] --> Rules["Evidence model<br/>stage to management mode + target range"]
     Research["NARO / IRRI sources<br/>with verification level"] --> Rules
 
-    Manual["Manual water measurement<br/>signed valueMm, reference, source, measuredAt"] --> Current["Current water level, signed"]
+    Manual["Water measurement OPTIONAL<br/>signed valueMm, reference, source"] --> Current["Current water level, signed"]
     Sensors["RealSense / water-level sensor / drone<br/>PLANNED - same record shape"] -.-> Current
 
     Area --> Engine["Water decision engine<br/>water-recommendation.js"]
@@ -30,12 +31,20 @@ flowchart TD
     Current --> Engine
 
     Engine --> Delta["Depth difference to target range"]
-    Delta --> Volume["Theoretical standing-water volume<br/>V = A x delta h / 1000"]
-    Volume --> Decision["Farmer decision support<br/>with provenance and caveat"]
+    Delta --> Volume["Theoretical standing-water volume<br/>V = A x delta h / 1000  EXACT"]
+    Area --> Rate["Per-10mm rate<br/>shown when no measurement yet"]
 
-    Weather["Open-Meteo rainfall<br/>implemented, rainfall only"] --> Gate["Gate advice<br/>open / close / hold"]
+    ETo["Open-Meteo FAO-56 ETo<br/>live, per field"] --> Loss["Daily loss RANGE<br/>ETc = Kc x ETo + percolation"]
+    Rules --> Loss
+    Loss --> Decision
+    Volume --> Decision["Farmer decision support<br/>with provenance and caveat"]
+    Rate --> Decision
+
+    Weather["Open-Meteo rainfall"] --> GateEng["Gate engine<br/>gate-decision.js"]
+    Stage --> GateEng
+    Current --> GateEng
+    GateEng --> Gate["開ける / 閉める / 様子見<br/>drainage stages never open"]
     Gate --> Decision
-    ET["Evapotranspiration ETc = Kc x ETo<br/>PLANNED - not implemented"] -.-> Engine
     Auto["Automatic gate control<br/>PLANNED - out of scope"] -.-> Decision
 ```
 
@@ -107,6 +116,9 @@ into it.
 | Water model | `js/water/growth-stage-model.js` | Stage → mode → target range (no area) |
 | Water measurement | `js/water/water-measurement.js` | Measurement record + legacy normalisation |
 | Water engine | `js/water/water-recommendation.js` | Target → status → Δh → volume → provenance |
+| Gate engine | `js/water/gate-decision.js` | **The single source of 開ける/閉める/様子見**, from stage + level + weather |
+| Stage calendar | `js/water/growth-calendar.js` | Region (from field latitude) + date → suggested stage; manual always wins |
+| Daily loss | `js/water/daily-loss.js` | `ETc = Kc × ETo` + percolation range, with its error bar |
 | Legacy hero | `js/water/water-need.js` | Pre-existing cm-based 今日の水門判断 calculation |
 | Cloud sync | `js/cloud/` | Supabase sync; records carried verbatim in a `record` column |
 | Auth | `js/auth/` | Account scoping of per-farmer storage keys |
@@ -175,7 +187,10 @@ Determined by reading the repository, not aspiration.
 | **RealSense automatic water-level measurement** | 🗓 Planned — **not implemented**; the record's `source` field is the hook |
 | Signed water levels (soil-surface datum) | ✅ Implemented — see §6 |
 | AWD-specific *recommendations* | 🗓 Planned — measurement only; no AWD agronomy |
-| Weather-aware ET (`ETc = Kc × ETo`) | 🗓 Planned — no ET term exists in any calculation |
+| Weather-aware ET (`ETc = Kc × ETo`) | ✅ Implemented — live FAO-56 ETo from Open-Meteo × FAO 56 rice Kc |
+| Daily-loss estimate (ETc + percolation range) | ✅ Implemented — reported as a RANGE, never merged with the geometric volume |
+| Growth stage auto-set from regional calendar | ✅ Implemented — farmer override always wins |
+| Gate verdict aware of stage + water level | ✅ Implemented — one engine feeds both cards |
 | Automatic water-gate control | 🗓 Planned — deliberately out of scope |
 
 Two deliberate scope exclusions, both for safety rather than difficulty:

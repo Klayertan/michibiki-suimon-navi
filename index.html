@@ -2240,6 +2240,24 @@
       line-height: 1.5;
     }
 
+    /* The stage was inferred from the regional calendar, not observed. Styled
+       as a quiet annotation rather than an alert: it is normal, expected, and
+       correctable -- not an error. */
+    .water-mgmt-estimate-note {
+      color: var(--muted);
+      font-style: italic;
+      margin-top: -4px;
+    }
+
+    /* Daily loss is deliberately set apart from 理論追加水量 above it: one is
+       exact geometry, the other an estimate with an error bar, and the layout
+       should not invite adding them together. */
+    .water-mgmt-loss {
+      border-top: 1px dashed var(--line);
+      margin-top: 4px;
+      padding-top: 8px;
+    }
+
     .water-mgmt-status-cell .water-mgmt-value {
       font-size: 0.95rem;
     }
@@ -3156,6 +3174,10 @@
               <label for="waterMgmtStageSelect">生育ステージ<span class="en">Growth stage</span></label>
               <select id="waterMgmtStageSelect"></select>
             </div>
+            <!-- Shown only while the stage came from the regional calendar
+                 rather than from the farmer. A guess presented as an
+                 observation is the failure this feature must not commit. -->
+            <p id="waterMgmtStageEstimateNote" class="water-mgmt-sub water-mgmt-estimate-note" hidden></p>
 
             <div class="input-row water-mgmt-measure-row">
               <label for="waterMgmtDepthInput">現在の水位 (mm)<span class="en">Current water level</span></label>
@@ -3183,6 +3205,28 @@
               <strong id="waterMgmtVolumeM3" class="water-mgmt-volume-value">—</strong>
               <span id="waterMgmtVolumeLiters" class="water-mgmt-sub"></span>
               <span id="waterMgmtVolumeDirection" class="water-mgmt-sub"></span>
+            </div>
+
+            <!-- Shown INSTEAD of the volume block when no water level has been
+                 recorded. The deficit is unknowable without a measurement, but
+                 the conversion RATE depends only on the QZ1-surveyed area, so
+                 this is real information rather than an assumed reading. -->
+            <div id="waterMgmtRateBlock" class="water-mgmt-volume" hidden>
+              <span class="water-mgmt-label">水深10mmあたり<span class="en">Per 10mm of depth</span></span>
+              <strong id="waterMgmtRateM3" class="water-mgmt-volume-value">—</strong>
+              <span id="waterMgmtRateLiters" class="water-mgmt-sub"></span>
+              <span class="water-mgmt-sub">水位を記録すると、必要な水深差と水量を計算します。</span>
+            </div>
+
+            <!-- The SECOND number, kept visually separate from the first on
+                 purpose. 理論追加水量 is exact geometry; this is an estimate
+                 with a stated error bar. Adding them into one figure would
+                 present a guess with the authority of a measurement. -->
+            <div id="waterMgmtLossBlock" class="water-mgmt-volume water-mgmt-loss" hidden>
+              <span class="water-mgmt-label">1日あたりの減水量（推定）<span class="en">Estimated daily loss</span></span>
+              <strong id="waterMgmtLossRange" class="water-mgmt-volume-value">—</strong>
+              <span id="waterMgmtLossBreakdown" class="water-mgmt-sub"></span>
+              <span id="waterMgmtLossCaveat" class="water-mgmt-sub"></span>
             </div>
 
             <p id="waterMgmtRecommendation" class="water-mgmt-recommendation" role="status" aria-live="polite"></p>
@@ -5324,6 +5368,12 @@
     //                           its legacy-cm normalization
     let waterRecommendation = null;
     let growthStageModel = null;
+    //   gateDecisionModel    -- the single source of the 開ける/閉める/様子見 verdict
+    //   growthCalendarModel  -- regional cultivation calendar -> suggested stage
+    //   dailyLossModel       -- ETc = Kc x ETo + percolation, as a range
+    let gateDecisionModel = null;
+    let growthCalendarModel = null;
+    let dailyLossModel = null;
     let waterMeasurementModel = null;
 
     // Local MAVLink backend. Override before load (e.g. from the console or a
@@ -5640,11 +5690,21 @@
         maxProbPct: Math.round(dailyProb.get(day) ?? 0)
       }));
 
+      // Today's FAO-56 reference evapotranspiration for this location, if the
+      // response carried it. Left as null (never 0) when absent, so
+      // daily-loss.js reports "unknown" rather than "no water is being lost".
+      const etoTimes = data?.daily?.time ?? [];
+      const etoValues = data?.daily?.et0_fao_evapotranspiration ?? [];
+      const etoIndex = etoTimes.indexOf(todayStr);
+      const rawEto = etoIndex >= 0 ? etoValues[etoIndex] : undefined;
+      const etoMmPerDay = Number.isFinite(rawEto) ? rawEto : null;
+
       return {
         rain24hMm: Math.round(rain24hMm * 10) / 10,
         daysSinceRain,
         forecastRainProbPct: Math.round(forecastRainProbPct),
-        dailyForecast
+        dailyForecast,
+        etoMmPerDay
       };
     }
 
@@ -5708,7 +5768,12 @@
       setWeatherFetchStatus("取得中…", "");
 
       try {
-        const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=precipitation,precipitation_probability&past_days=8&forecast_days=3&timezone=Asia%2FTokyo`;
+        // `et0_fao_evapotranspiration` is FAO-56 reference evapotranspiration
+        // (ETo) computed by Open-Meteo for this exact location, so no ETo model
+        // is reimplemented here -- js/water/daily-loss.js only applies the
+        // FAO 56 crop coefficient (ETc = Kc x ETo). Added as a `daily` field;
+        // the existing hourly precipitation parsing is untouched.
+        const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=precipitation,precipitation_probability&daily=et0_fao_evapotranspiration&past_days=8&forecast_days=3&timezone=Asia%2FTokyo`;
         const response = await fetch(url, { cache: "no-store" });
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}`);
@@ -5734,7 +5799,45 @@
       }
     }
 
+    /**
+     * The gate verdict for the ACTIVE field.
+     *
+     * Delegates to js/water/gate-decision.js, which sees the growth stage and
+     * the water measurement as well as the weather. Both surfaces that show a
+     * verdict (.gate-card and the 今日の水門判断 hero) call this one function,
+     * so they cannot contradict each other.
+     *
+     * This replaced a rainfall-only rule that had no idea what the crop was
+     * doing. Its worst failure: during 中干し or 落水期 with a few dry days it
+     * returned 開ける -- telling the farmer to flood a paddy that is being
+     * deliberately dried. decideGate() makes that structurally impossible by
+     * checking drainage stages before it looks at any weather value.
+     *
+     * The rainfall-only reasoning still exists inside decideGate() as its
+     * final fallback, for the case where no water level has been recorded --
+     * and it now says so on screen instead of implying it knew the level.
+     */
     function evaluateGate(weather, th) {
+      if (gateDecisionModel) {
+        const fieldId = document.getElementById("basicActiveFieldSelect")?.value || "";
+        const decision = gateDecisionModel.decideGate({
+          growthStage: resolvedGrowthStageForField(fieldId),
+          measurement: waterMeasurementModel
+            ? waterMeasurementModel.normalizeWaterMeasurement(readCurrentWaterLevels()[fieldId])
+            : null,
+          weather,
+          thresholds: th
+        });
+        // `reason` is the field name the existing .gate-card renderer reads;
+        // the richer fields (basis, timingJa, stageOverride) ride alongside for
+        // callers that want them.
+        return { ...decision, reason: decision.reasonJa };
+      }
+      return legacyRainfallOnlyGate(weather, th);
+    }
+
+    /** Pre-module fallback: the original rainfall-only rule, unchanged. */
+    function legacyRainfallOnlyGate(weather, th) {
       if (weather.rain24hMm >= th.heavyRain24hMm) {
         return {
           verdict: "close",
@@ -6776,10 +6879,42 @@
       return growthStageModel.normalizeGrowthStageRecord(readGrowthStages()[fieldId]);
     }
 
-    /** Stage id for a field, or the explicit unknown stage -- never a guess. */
+    /** Stage id EXACTLY as stored -- no calendar inference. */
     function growthStageIdForField(fieldId) {
       const record = readGrowthStageForField(fieldId);
       return record ? record.stage : (growthStageModel?.UNKNOWN_STAGE_ID || "unknown");
+    }
+
+    /**
+     * The stage actually used for recommendations.
+     *
+     * A farmer should not have to pick from a blank dropdown before the app
+     * will tell them anything, so when nothing has been chosen the regional
+     * cultivation calendar supplies a starting guess from the field's own
+     * latitude and today's date (js/water/growth-calendar.js).
+     *
+     * THE OVERRIDE RULE: a stage the farmer set manually always wins and is
+     * never overwritten by a later calendar evaluation. Their eyes on the crop
+     * beat a regional average, and an app that silently reverts a human
+     * correction teaches farmers to stop trusting it. `resolveGrowthStage()`
+     * owns that rule; this is only the lookup around it.
+     */
+    function resolveGrowthStageForField(fieldId) {
+      const stored = readGrowthStageForField(fieldId);
+      if (!growthCalendarModel) {
+        return {
+          stage: stored ? stored.stage : (growthStageModel?.UNKNOWN_STAGE_ID || "unknown"),
+          source: stored?.source || "manual",
+          isEstimate: false
+        };
+      }
+      const field = (fieldAnnotationController?.fields || []).find((f) => f.id === fieldId) || null;
+      return growthCalendarModel.resolveGrowthStage(stored, field, new Date());
+    }
+
+    /** Just the id, for callers that do not need the provenance. */
+    function resolvedGrowthStageForField(fieldId) {
+      return resolveGrowthStageForField(fieldId).stage;
     }
 
     function writeGrowthStageForField(fieldId, stageId, source = "manual") {
@@ -6948,10 +7083,24 @@
         if (element) element.textContent = value;
       };
 
-      const stageId = growthStageIdForField(field.id);
+      // Resolved, not raw: with nothing chosen the regional calendar supplies a
+      // starting stage so the card can recommend a depth immediately, without
+      // the farmer picking from a blank dropdown first. A manual choice always
+      // wins (see resolveGrowthStageForField).
+      const stageResolution = resolveGrowthStageForField(field.id);
+      const stageId = stageResolution.stage;
       const stageSelect = document.getElementById("waterMgmtStageSelect");
       if (stageSelect && stageSelect.value !== stageId) {
         stageSelect.value = stageId;
+      }
+      // Say so when the stage is inferred. A guess presented as an observation
+      // is the failure mode this whole feature is built to avoid.
+      const stageNote = document.getElementById("waterMgmtStageEstimateNote");
+      if (stageNote) {
+        stageNote.hidden = !stageResolution.isEstimate;
+        stageNote.textContent = stageResolution.isEstimate
+          ? `推定（${stageResolution.regionLabelJa}の標準作期）— 実際の生育に合わせて変更できます`
+          : "";
       }
 
       const result = waterRecommendation.evaluateWaterManagement({
@@ -7009,6 +7158,51 @@
         && (adjustment.direction === "add" || adjustment.direction === "remove");
       if (volumeBlock) {
         volumeBlock.hidden = !showVolume;
+      }
+
+      // ---- Per-10mm conversion rate, when there is no measurement --------
+      // The deficit is unknowable without a reading, but the rate is pure
+      // geometry from the QZ1-surveyed area, so the farmer gets something they
+      // can act on immediately without the app inventing a current level.
+      const rateBlock = document.getElementById("waterMgmtRateBlock");
+      if (rateBlock) {
+        const rate = dailyLossModel && !showVolume
+          ? dailyLossModel.volumePerTenMm(field.properties?.areaM2)
+          : null;
+        rateBlock.hidden = !rate;
+        if (rate) {
+          setText("waterMgmtRateM3", `約 ${rate.m3.toLocaleString("ja-JP", { maximumFractionDigits: 1 })} m³`);
+          setText("waterMgmtRateLiters", `${Math.round(rate.liters).toLocaleString("ja-JP")} L（面積 ${Math.round(rate.areaM2).toLocaleString("ja-JP")} m² × 10 mm）`);
+        }
+      }
+
+      // ---- Daily loss: the SECOND number, never merged with the first ----
+      const lossBlock = document.getElementById("waterMgmtLossBlock");
+      if (lossBlock) {
+        const loss = dailyLossModel
+          ? dailyLossModel.estimateDailyLoss({
+              etoMmPerDay: weatherData?.etoMmPerDay,
+              growthStage: stageId,
+              areaM2: field.properties?.areaM2
+            })
+          : null;
+        const showLoss = Boolean(loss && loss.applicable && loss.minMmPerDay !== null);
+        lossBlock.hidden = !showLoss;
+        if (showLoss) {
+          const mmRange = `${loss.minMmPerDay.toFixed(1)}〜${loss.maxMmPerDay.toFixed(1)} mm/日`;
+          const m3Range = loss.minM3PerDay === null
+            ? ""
+            : `（約 ${loss.minM3PerDay.toFixed(1)}〜${loss.maxM3PerDay.toFixed(1)} m³/日）`;
+          setText("waterMgmtLossRange", `${mmRange} ${m3Range}`);
+          setText("waterMgmtLossBreakdown",
+            `内訳: 蒸発散 ETc ${loss.etcMmPerDay.toFixed(1)} mm/日（ETo ${loss.etoMmPerDay.toFixed(1)} × Kc ${loss.kc.toFixed(2)}、FAO56）`
+            + ` ＋ 浸透 ${loss.percolation.minMm}〜${loss.percolation.maxMm} mm/日`);
+          // The error bar is stated, not implied. 華山(1964) puts the floor on
+          // how well any 減水深-based estimate can be known without measuring
+          // this particular field.
+          setText("waterMgmtLossCaveat",
+            `※ 浸透量は土壌・耕盤で大きく変わるため一般的な範囲です。減水深法による推定には ±${loss.errorMmPerDay} mm/日 程度の誤差が伴います（華山 1964）。上の理論追加水量とは別の数値で、単純に足し合わせないでください。`);
+        }
       }
       if (showVolume) {
         setText("waterMgmtVolumeM3", waterRecommendation.formatVolumeRange(adjustment.minM3, adjustment.maxM3));
@@ -9496,6 +9690,7 @@
       writeCurrentWaterLevel(fieldId, value);
       updateWaterLevelVerdict();
       renderWaterHero(); // also refreshes the 水管理 card (same stored value, mm view)
+      updateDecision();  // ...and the gate, which now reads the same measurement
     });
 
     // ---- 水管理 / Water Management card ---------------------------------
@@ -9507,6 +9702,11 @@
       const fieldId = document.getElementById("basicActiveFieldSelect")?.value;
       writeGrowthStageForField(fieldId, event.target.value, "manual");
       renderWaterManagementCard();
+      // The gate verdict now depends on the growth stage -- switching to 中干し
+      // must flip it to 閉める immediately. Without this the two cards sit on
+      // screen contradicting each other until some other event repaints the
+      // gate, which is the exact failure decideGate() was written to end.
+      updateDecision();
     });
 
     document.getElementById("waterMgmtDepthInput")?.addEventListener("input", (event) => {
@@ -9537,6 +9737,8 @@
       updateWaterLevelVerdict();
       renderWaterHero();
       renderWaterManagementCard();
+      // The gate verdict reads the measurement now, so it must repaint too.
+      updateDecision();
     });
 
     document.getElementById("waterMgmtUpdateButton")?.addEventListener("click", () => {
@@ -9555,6 +9757,7 @@
       input?.blur();
       renderWaterHero();
       renderWaterManagementCard();
+      updateDecision();
     });
 
     document.getElementById("waterMgmtApplyTargetButton")?.addEventListener("click", (event) => {
@@ -9741,11 +9944,18 @@
         // 水管理 card. Imported as namespaces (not destructured) so a new
         // export -- a future stage derivation, another source -- is reachable
         // without editing this call site.
-        [waterRecommendation, growthStageModel, waterMeasurementModel] = await Promise.all([
+        [waterRecommendation, growthStageModel, waterMeasurementModel,
+         gateDecisionModel, growthCalendarModel, dailyLossModel] = await Promise.all([
           import("./js/water/water-recommendation.js"),
           import("./js/water/growth-stage-model.js"),
-          import("./js/water/water-measurement.js")
+          import("./js/water/water-measurement.js"),
+          import("./js/water/gate-decision.js"),
+          import("./js/water/growth-calendar.js"),
+          import("./js/water/daily-loss.js")
         ]);
+        // The gate verdict now depends on the stage and the measurement, so a
+        // first render must happen after these land.
+        updateDecision();
         renderWaterManagementCard();
       } catch (error) {
         console.error("Water-management recommendation initialization failed", error);
