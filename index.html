@@ -1414,20 +1414,6 @@
       margin-top: 8px;
     }
 
-    .engineering-nav > summary {
-      color: var(--muted);
-      cursor: pointer;
-      font-size: 0.78rem;
-      font-weight: 750;
-      min-height: 36px;
-      padding: 8px 2px;
-      width: fit-content;
-    }
-
-    .engineering-nav[open] > summary {
-      margin-bottom: -4px;
-    }
-
     .workspace-tab {
       background: transparent;
       border: 0;
@@ -1750,17 +1736,21 @@
            used by the map overlays/Leaflet controls below to step clear of
            the floating rails. */
         /* Vertical band the pinned 水管理ポイント toolbar owns in the
-           bottom-left corner. The left rail is shortened by exactly this while
-           the toolbar is visible, so the two can never overlap at any scroll
-           position. Sized for the toolbar's tallest real state: armed
-           (status line + キャンセル button showing) AND with 2+ registered
-           fields (#waterQuickFieldRow's field picker also showing) --
-           measured at 304px live in that combined state, which the previous
-           280px did not cover (280px was sized for "armed OR multi-field",
-           not both at once) and produced a real, measured overlap with the
-           left rail under exactly that condition. 340px leaves a ~36px
-           margin above the measured worst case. */
-        --basic-quick-toolbar-reserve: 340px;
+           bottom-left corner. The left rail is shortened by exactly this
+           while the toolbar is visible, so the two can never overlap at any
+           scroll position. A FIXED reserve sized for the toolbar's worst
+           case (armed + 2+ fields, measured 304px) left a large, usually-
+           empty gap whenever the toolbar was actually in a shorter state
+           (idle, single field, ~150-190px) -- which is most of the time.
+           Instead this tracks the toolbar's REAL current height, written
+           onto :root as --basic-quick-toolbar-live-height by a
+           ResizeObserver (see "Floating-rail aware fitBounds" below, same
+           area) every time it changes -- armed/idle, field-row shown or
+           not, anything. +20px is the safety margin over the exact
+           measured height; the 220px fallback covers the brief window
+           before the observer's first measurement lands (close to the
+           idle/single-field case, the common state at first paint). */
+        --basic-quick-toolbar-reserve: calc(var(--basic-quick-toolbar-live-height, 220px) + 20px);
         --basic-rail-left-clear: calc(var(--basic-rail-left-width) + var(--basic-rail-inset) + 12px);
         --basic-rail-right-clear: calc(var(--basic-rail-right-width) + var(--basic-rail-inset) + 12px);
         /* Height of the top band reserved for #mapWaterSummary. Read back by
@@ -2613,9 +2603,6 @@
 
       .engineering-nav {
         margin-top: 2px;
-      }
-
-      .engineering-nav:not([open]) {
         padding-bottom: 3px;
       }
 
@@ -2854,8 +2841,12 @@
           <span class="mode-tab-sub">その他の機能</span>
         </button>
       </nav>
-      <details class="engineering-nav" data-mode="settings">
-        <summary>詳細・開発メニュー</summary>
+      <!-- 詳細・開発メニュー's click-to-expand <details> was removed: the
+           workspace tabs are always shown directly now, no extra click to
+           reveal them. .engineering-nav keeps its name/data-mode gating
+           (still Settings-only, hidden in 基本/ドローン) so nothing else
+           needs to change to find or hide it. -->
+      <div class="engineering-nav" data-mode="settings">
         <nav class="workspace-nav" aria-label="詳細・開発画面">
           <button class="workspace-tab active" type="button" data-workspace-target="decision" aria-selected="true">判断デモ</button>
           <button class="workspace-tab" type="button" data-workspace-target="survey" aria-selected="false">QZ1測量</button>
@@ -2864,7 +2855,7 @@
           <button class="workspace-tab" type="button" data-workspace-target="analysis" aria-selected="false">詳細解析</button>
           <button class="workspace-tab" type="button" data-workspace-target="devtools" aria-selected="false">開発ツール</button>
         </nav>
-      </details>
+      </div>
     </header>
 
     <!-- There is exactly ONE farmer-facing verdict surface: .gate-card in the
@@ -4976,6 +4967,38 @@
         top: Number.isFinite(reserve) && reserve > 0 ? reserve : 12,
         bottom: 12
       };
+    }
+
+    // The toolbar's live height feeds --basic-quick-toolbar-reserve above,
+    // so the left rail's clip boundary always sits just above the toolbar's
+    // ACTUAL current state (idle/armed, field-row shown or not) instead of
+    // a fixed worst-case guess -- closing the gap in the common (shorter)
+    // states while still never overlapping in the tallest one.
+    //
+    // Two triggers, deliberately: fieldAnnotationController's
+    // onWaterQuickToolbarRendered hook calls this SYNCHRONOUSLY, in the same
+    // tick the toolbar's own content just changed (e.g. arming placement
+    // mode reveals a status line + キャンセル) -- a plain ResizeObserver alone
+    // is asynchronous (its callback runs on a later frame), which left a
+    // real, observed window where the rail hadn't shortened yet and could
+    // overlap the now-taller toolbar. The ResizeObserver stays as a backup
+    // for height changes from causes the hook can't see (viewport resize,
+    // async font-load reflow).
+    const quickToolbarEl = document.getElementById("waterQuickToolbar");
+    function syncQuickToolbarReserve() {
+      if (!quickToolbarEl) {
+        return;
+      }
+      const height = quickToolbarEl.getBoundingClientRect().height;
+      if (height > 0) {
+        document.documentElement.style.setProperty(
+          "--basic-quick-toolbar-live-height",
+          `${Math.ceil(height)}px`
+        );
+      }
+    }
+    if (quickToolbarEl && "ResizeObserver" in window) {
+      new ResizeObserver(syncQuickToolbarReserve).observe(quickToolbarEl);
     }
 
     const fitBoundsWithoutChrome = map.fitBounds.bind(map);
@@ -8593,18 +8616,17 @@
     function applyRouteFromLocation() {
       const route = location.hash.slice(1).toLowerCase();
       const nestedSettings = route.match(/^settings\/([a-z]+)$/);
-      const engineeringNav = document.querySelector(".engineering-nav");
+      // .engineering-nav's workspace tabs are always visible now (the
+      // click-to-expand <details> was removed), so there is no open/closed
+      // state left to drive from the route.
       if (nestedSettings) {
-        if (engineeringNav) engineeringNav.open = true;
         switchMode("settings", { updateHash: false, workspace: nestedSettings[1] });
         return;
       }
       if (LEGACY_WORKSPACES.includes(route)) {
-        if (engineeringNav) engineeringNav.open = true;
         switchMode("settings", { updateHash: false, workspace: route });
         return;
       }
-      if (engineeringNav && route !== "settings") engineeringNav.open = false;
       if (PRODUCT_MODES.includes(route) || route === "") {
         switchMode(route || "basic", { updateHash: false });
         return;
@@ -9780,6 +9802,11 @@
           // own live map-click drawing (drone-mission zones / annotations)
           // for the next click — cancel it the moment placement mode starts.
           onEnterPlacementMode: () => paddyIntelligence?.cancelDrawing({ resetMode: true }),
+          // Re-measure #waterQuickToolbar SYNCHRONOUSLY every time its own
+          // content changes (arm/disarm, field-row shown or not) -- see the
+          // long comment next to syncQuickToolbarReserve()'s definition for
+          // why a ResizeObserver alone is not enough here.
+          onWaterQuickToolbarRendered: () => syncQuickToolbarReserve(),
           // Keep every field-selection surface in sync the moment a field is
           // registered, not just Basic mode's summary -- otherwise
           // decisionFieldSelect/reportFieldSelect only pick up new fields

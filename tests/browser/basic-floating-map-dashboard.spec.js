@@ -406,6 +406,45 @@ test("each rail scrolls on its own without scrolling the page", async ({ page })
   expect(scrolled.bodyScrollTop).toBe(0);
 });
 
+// ---------------------------------------------------------------------------
+// The left rail is shortened to clear #waterQuickToolbar's LIVE height (a
+// ResizeObserver keeps --basic-quick-toolbar-live-height in sync), not a
+// fixed worst-case guess -- the fixed guess left a large, usually-empty gap
+// whenever the toolbar was shorter than its worst case (idle, single field).
+// ---------------------------------------------------------------------------
+
+test("the rail sits close above the quick toolbar when idle, and never overlaps it when armed", async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 });
+  await openBasic(page);
+  await registerField(page, "圃場1");
+
+  function gap(page) {
+    return page.evaluate(() => {
+      const t = document.getElementById("waterQuickToolbar").getBoundingClientRect();
+      const l = document.querySelector(".panel-left").getBoundingClientRect();
+      const overlaps = l.left < t.right && l.right > t.left && l.top < t.bottom && l.bottom > t.top;
+      return { overlaps, gapPx: l.bottom <= t.top ? t.top - l.bottom : null };
+    });
+  }
+
+  // Idle, single field: the toolbar is in its shortest real state, so the
+  // rail should sit CLOSE above it -- not the old ~120px+ fixed-reserve gap.
+  const idle = await gap(page);
+  expect(idle.overlaps).toBe(false);
+  expect(idle.gapPx).not.toBeNull();
+  expect(idle.gapPx).toBeLessThan(40);
+
+  // Armed (status line + キャンセル showing): the toolbar grows taller: the
+  // ResizeObserver must catch this and shorten the rail further, still with
+  // no overlap.
+  await page.locator('#waterQuickToolbar button[data-water-quick-type="gate"]').click();
+  await expect(page.locator("#waterQuickCancelButton")).toBeVisible();
+  const armed = await gap(page);
+  expect(armed.overlaps).toBe(false);
+  expect(armed.gapPx).not.toBeNull();
+  expect(armed.gapPx).toBeLessThan(40);
+});
+
 for (const viewport of DESKTOP_VIEWPORTS) {
   test(`four fields plus long names never break the floating layout at ${viewport.width}x${viewport.height}`, async ({ page }) => {
     await page.setViewportSize(viewport);

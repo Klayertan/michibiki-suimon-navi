@@ -150,6 +150,18 @@ export class FieldAnnotationController {
     // its own -- it reads this.fields/basicActiveFieldSelect after every
     // renderAll(), the same point every other target-field select refreshes.
     this.onFieldsChanged = options.onFieldsChanged || (() => {});
+    // Fires synchronously at the end of every renderQuickToolbar() call, so
+    // index.html can re-measure #waterQuickToolbar's height and update the
+    // left rail's clip boundary (--basic-quick-toolbar-live-height) in the
+    // SAME tick the toolbar's own height might have changed -- e.g. arming
+    // placement mode reveals a status line + キャンセル, growing the toolbar.
+    // A ResizeObserver alone is not enough here: it is asynchronous (fires
+    // on a later frame), so relying on it alone leaves a real, observed
+    // window where the rail hasn't shortened yet and can overlap the
+    // now-taller toolbar. This hook closes that window; the ResizeObserver
+    // remains as a backup for height changes from other causes (viewport
+    // resize, font-load reflow).
+    this.onWaterQuickToolbarRendered = options.onWaterQuickToolbarRendered || (() => {});
     // Stage-1 only: index.html owns the START/END markers on the map, so it
     // asks to be told when the farmer chooses 選び直す from the closure
     // warning (or cancels) and the selection UI has to come back.
@@ -983,6 +995,7 @@ export class FieldAnnotationController {
         el.waterQuickCancelButton.hidden = true;
       }
     }
+    this.onWaterQuickToolbarRendered();
   }
 
   handleMapClick(event) {
