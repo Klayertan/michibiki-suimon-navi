@@ -4915,6 +4915,27 @@
       zoomControl.setPosition(event.matches ? "bottomright" : "topleft");
     });
 
+    // Recenter on the farmer's current GPS position on every load, instead
+    // of always opening on the fixed Nara-area default above -- most useful
+    // when they're standing in or near the field itself. Fire-and-forget:
+    // denial, timeout, or no geolocation support (desktop without GPS, HTTP
+    // instead of HTTPS) just leaves the default view in place, same as
+    // before this existed -- this is a convenience, never a hard requirement
+    // to use the app, so it never surfaces an error of its own.
+    if (globalThis.navigator?.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const lat = Number(position.coords.latitude);
+          const lon = Number(position.coords.longitude);
+          if (Number.isFinite(lat) && Number.isFinite(lon)) {
+            map.setView([lat, lon], 16);
+          }
+        },
+        () => {},
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+      );
+    }
+
     // --- Floating-rail aware fitBounds -------------------------------------
     // In desktop 基本モード the map runs full-bleed UNDERNEATH the floating
     // 圃場の管理/NMEA rails, so the container's centre is no longer the centre
