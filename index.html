@@ -2815,8 +2815,13 @@
           <button id="basemapAerialButton" type="button" data-basemap="aerial" aria-pressed="false">航空写真</button>
         </div>
         <div id="emptyState" class="empty-state">
-          <strong id="emptyStateTitle">QZ1ログが未読込です</strong>
-          <span id="emptyStateDetail">NMEAファイル（.nmea）をアップロードするか、測量JSONを読み込むと測位点が表示されます。</span>
+          <!-- Matches body's own default data-mode="basic" (see <body> below)
+               so first paint -- before switchMode()/resetEmptyState() run --
+               is already correct for the common case. Deep-linking straight
+               into 設定/ドローン is corrected immediately by switchMode()
+               calling resetEmptyState(). -->
+          <strong id="emptyStateTitle">圃場はまだ登録されていません</strong>
+          <span id="emptyStateDetail">NMEAをアップロードしてください</span>
         </div>
         <div id="waterQuickToolbar" class="map-quick-toolbar" data-workspace="fields" data-mode="basic settings" hidden>
           <p class="map-quick-toolbar-title">水管理ポイント</p>
@@ -2889,8 +2894,12 @@
         <section id="basicFieldManagementCard" class="card" data-mode="basic">
           <span class="eyebrow">圃場の管理</span>
           <p class="meta">登録済みの圃場を確認・選択し、新しい圃場を登録します。</p>
-          <button id="basicMeasureFieldButton" class="panel-button primary basic-field-register-button" type="button">＋ 新しい圃場を測る・登録する</button>
 
+          <!-- ＋ 新しい圃場を測る・登録する used to live here. It only ever
+               scrolled to #basicStage1Card's NMEA upload -- now directly
+               visible in the right rail (desktop) and in the header
+               (mobile), so a second entry point that just jumped to the
+               first was redundant. Do not reintroduce it. -->
           <div id="basicFieldEmptyState" class="field-annotation-empty">
             圃場はまだ登録されていません
           </div>
@@ -4917,18 +4926,49 @@
     const emptyState = document.getElementById("emptyState");
     const emptyStateTitle = document.getElementById("emptyStateTitle");
     const emptyStateDetail = document.getElementById("emptyStateDetail");
+    // 基本モード gets the farmer-facing wording (圃場の有無 is the concept
+    // that matters there); 設定/ドローン keep the fuller technical copy,
+    // since 現地測量ワークフロー also offers 測量JSON as an equally valid
+    // entry point that 基本モード does not expose.
     const DEFAULT_EMPTY_STATE = {
-      title: "QZ1ログが未読込です",
-      detail: "NMEAファイル（.nmea）をアップロードするか、測量JSONを読み込むと測位点が表示されます。"
+      basic: {
+        title: "圃場はまだ登録されていません",
+        detail: "NMEAをアップロードしてください"
+      },
+      other: {
+        title: "QZ1ログが未読込です",
+        detail: "NMEAファイル（.nmea）をアップロードするか、測量JSONを読み込むと測位点が表示されます。"
+      }
     };
 
     function setEmptyState(title, detail) {
       emptyStateTitle.textContent = title;
       emptyStateDetail.textContent = detail;
+      // A caller reaching for setEmptyState() always has something specific
+      // to tell the farmer (a parse failure, a rejected upload) -- it must
+      // surface regardless of whatever updateEmptyStateVisibility() last
+      // decided from field/point counts.
+      emptyState.hidden = false;
     }
 
     function resetEmptyState() {
-      setEmptyState(DEFAULT_EMPTY_STATE.title, DEFAULT_EMPTY_STATE.detail);
+      const defaults = document.body.dataset.mode === "basic"
+        ? DEFAULT_EMPTY_STATE.basic
+        : DEFAULT_EMPTY_STATE.other;
+      setEmptyState(defaults.title, defaults.detail);
+    }
+
+    // Shown only when there is truly nothing to look at: no track parsed
+    // this session, no phone-GPS points, and -- the actual bug this fixes --
+    // no already-registered 圃場 either. Registered fields persist across
+    // reloads and draw their own polygons independently of parsedPoints, so
+    // without this a returning farmer with real data saw "QZ1ログが未読込
+    // です" over their own field. Called after every renderPoints()/phone
+    // render AND from onFieldsChanged (registration, deletion, import, and
+    // the initial mount) so it never goes stale in either direction.
+    function updateEmptyStateVisibility() {
+      const hasFields = (fieldAnnotationController?.fields?.length ?? 0) > 0;
+      emptyState.hidden = parsedPoints.length > 0 || phonePoints.length > 0 || hasFields;
     }
     const gpsMessage = document.getElementById("gpsMessage");
     const comparisonSummary = document.getElementById("comparisonSummary");
@@ -7354,7 +7394,7 @@
       }
 
       renderBasicBoundaryOverlay();
-      emptyState.hidden = parsedPoints.length > 0 || phonePoints.length > 0;
+      updateEmptyStateVisibility();
       exportButton.disabled = parsedPoints.length === 0;
       syncLayerVisibility();
       updateComparisonSummary();
@@ -7625,7 +7665,7 @@
       });
 
       clearPhoneButton.disabled = phonePoints.length === 0;
-      emptyState.hidden = parsedPoints.length > 0 || phonePoints.length > 0;
+      updateEmptyStateVisibility();
       syncLayerVisibility();
       updateComparisonSummary();
 
@@ -8331,6 +8371,14 @@
         tab.classList.toggle("active", selected);
         tab.setAttribute("aria-selected", String(selected));
       });
+      // The map's #emptyState default wording is mode-specific (基本モード's
+      // simplified 圃場-centric copy vs 設定/ドローン's fuller technical
+      // copy). resetEmptyState() also forces it visible as a side effect of
+      // setEmptyState(), so updateEmptyStateVisibility() runs right after,
+      // synchronously, to re-derive the correct hidden state from the
+      // actual field/point counts before anything paints.
+      resetEmptyState();
+      updateEmptyStateVisibility();
       const defaultWorkspace = workspace ?? (mode === "settings" ? "decision" : "survey");
       switchWorkspace(defaultWorkspace, { updateHash: false });
       if (updateHash) {
@@ -9348,17 +9396,6 @@
       renderWaterHero();
       renderWaterManagementCard();
     });
-    // Points at Stage-1's own card now that the technical recording surface
-    // is Settings-only: in Basic mode "圃場を測る" means "load the walk you
-    // recorded and turn it into a field", not "open a WebSerial console".
-    document.getElementById("basicMeasureFieldButton")?.addEventListener("click", () => {
-      switchWorkspace("survey");
-      window.setTimeout(() => {
-        const card = document.getElementById("basicStage1Card");
-        scrollElementWithinPanel(card, { block: "start" });
-        document.getElementById(parsedPoints.length > 0 ? "basicPickStartButton" : "basicNmeaInput")?.focus();
-      }, 100);
-    });
     // 水管理ポイントを追加, from the farmer's own field card. Same destination
     // as Settings' 水管理ポイントを追加する, minus the field-picking step: the
     // active field is already chosen, so it is simply carried across.
@@ -9600,6 +9637,10 @@
             renderBasicFieldSummary();
             renderDroneModeGate();
             populateDecisionFieldOptions();
+            // Covers mount (existing fields on a fresh load), registration
+            // and deletion alike -- renderAll() calls onFieldsChanged() at
+            // the end of every one of those, so this never goes stale.
+            updateEmptyStateVisibility();
             // Local write already happened (the controller persists before it
             // notifies). This only queues the cloud copy, and is a no-op for
             // a guest or an unconfigured install -- a registration is never
@@ -9684,9 +9725,6 @@
               select.dispatchEvent(new Event("change", { bubbles: true }));
             }
           },
-          // ＋ 新しい圃場を測る is the same journey as 圃場を測る, so it reuses
-          // that button rather than forking a second registration entry point.
-          onRequestNewField: () => document.getElementById("basicMeasureFieldButton")?.click(),
           getWaterTargets: () => readTargetWaterLevels(),
           setWaterTargets: (values) => {
             writeTargetWaterLevels(values);

@@ -73,6 +73,9 @@ export function normalizeWaterControlType(type) {
 // Single style source for both the map layer and the legend — colors are
 // never hard-coded a second time in the controller or CSS.
 export const FIELD_POLYGON_STYLE = { color: "#166534", fillColor: "#4ade80", fillOpacity: 0.12, weight: 3 };
+// Applied to whichever field currently matches #basicActiveFieldSelect, so a map click gives
+// the same visible feedback as picking it from the 圃場を選ぶ dropdown.
+export const FIELD_POLYGON_SELECTED_STYLE = { color: "#166534", fillColor: "#22c55e", fillOpacity: 0.38, weight: 4 };
 export const BOUNDARY_TRACK_STYLE = { color: "#b45309", weight: 3, dashArray: "6 5" };
 export const WATER_CONTROL_STYLES = {
   gate: { fillColor: "#2563eb" },

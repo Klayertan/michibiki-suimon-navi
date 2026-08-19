@@ -160,6 +160,64 @@ scrolling the panel.
 - The ドローンモード -> "圃場を測る" handoff focuses whichever upload control is
   actually rendered, since the card's button is `display: none` on phones.
 
+## Redundant register button removed; map empty-state tied to registered fields
+
+Two related fixes, requested separately, to `#basicFieldManagementCard` and
+the map's `#emptyState` overlay:
+
+**`#basicMeasureFieldButton` ("＋ 新しい圃場を測る・登録する") removed.** Its
+click handler only ever scrolled to `#basicStage1Card` and focused the NMEA
+input there -- with that card now permanently visible in the right rail
+(desktop) and reachable from the header (mobile), a second entry point that
+just jumped to the first was pure duplication. The dangling
+`onRequestNewField: () => document.getElementById("basicMeasureFieldButton")?.click()`
+forwarding (already dead in practice -- its only other caller,
+`accountFieldsNewButton` in `js/auth/auth-controller.js`, binds to an element
+ID that does not exist anywhere in `index.html`) was removed alongside it.
+
+**`#emptyState` ("QZ1ログが未読込です") now reflects registered fields, not
+just this session's live track.** Previously its visibility was driven
+entirely by `parsedPoints.length > 0 || phonePoints.length > 0` -- ephemeral,
+session-only arrays that reset to empty on every reload. A returning farmer
+with real, persisted fields therefore saw "no data" plastered over their own
+field every time they opened the app, because the registered-field polygons
+render through a completely separate path
+(`fieldAnnotationController`/`renderMapLayers()`) that this check never
+looked at.
+
+Fixed with one shared `updateEmptyStateVisibility()`, called from both
+existing render sites (`renderPoints()`, the phone-points renderer) and from
+`onFieldsChanged` (which `FieldAnnotationController.renderAll()` already
+calls at the end of mount, registration, deletion, and import alike -- so
+this needs exactly one hook, not one per mutation):
+
+```js
+function updateEmptyStateVisibility() {
+  const hasFields = (fieldAnnotationController?.fields?.length ?? 0) > 0;
+  emptyState.hidden = parsedPoints.length > 0 || phonePoints.length > 0 || hasFields;
+}
+```
+
+The default copy is now mode-aware: 基本モード gets the farmer-facing
+"圃場はまだ登録されていません" / "NMEAをアップロードしてください" (設定/ドローン
+keep the fuller technical copy, since 現地測量ワークフロー also offers 測量JSON
+as an entry point that Basic does not expose). `switchMode()` calls
+`resetEmptyState()` on every transition so the wording is never stale after a
+tab switch or deep link, immediately followed by `updateEmptyStateVisibility()`
+to re-derive the correct hidden state -- `setEmptyState()` forces the card
+visible as a side effect (see below), so the second call is what prevents
+that from sticking when it shouldn't.
+
+**Error messages still surface even when fields already exist.** A parse
+failure or rejected upload calls `setEmptyState(title, detail)` with its own
+message; that function now also does `emptyState.hidden = false` explicitly,
+rather than depending on the incidental fact that a failed parse leaves
+`parsedPoints.length === 0`. Without this, the fields-aware visibility rule
+above would have silently swallowed every rejection message for any farmer
+who already had one registered field -- verified directly: uploading a
+garbage file with a field already registered still shows "NMEAデータを確認
+できませんでした" (`emptyState.hidden === false`).
+
 ## fitBounds must know about the floating chrome
 
 With the map running underneath the rails, the container's centre is no

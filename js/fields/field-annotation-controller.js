@@ -19,6 +19,7 @@ import {
   DEFAULT_AUTO_CLOSE_THRESHOLD_M,
   FEATURE_TYPE_LABELS,
   FIELD_POLYGON_STYLE,
+  FIELD_POLYGON_SELECTED_STYLE,
   LOCAL_STORAGE_KEY,
   NEEDS_EXPORT_DATA_MESSAGE,
   NEEDS_FIELD_MESSAGE,
@@ -165,6 +166,7 @@ export class FieldAnnotationController {
     this.pendingOutsideFieldObservation = null;
 
     this.layers = { fields: L.layerGroup(), tracks: L.layerGroup(), waterPoints: L.layerGroup(), observations: L.layerGroup() };
+    this.fieldLayerById = new Map();
     this.elements = {};
   }
 
@@ -1223,6 +1225,31 @@ export class FieldAnnotationController {
     this.revealSelectedEditor();
   }
 
+  /**
+   * Clicking a field polygon on the map sets the same #basicActiveFieldSelect
+   * ("圃場を選ぶ") that drives Basic mode's summary and Drone mode's gate card
+   * (index.html:9234), so a map click is an alternate path to that one
+   * dropdown selection rather than a second, independent concept of "selected
+   * field". Re-highlights even when the field was already active, so a click
+   * always gives visible feedback.
+   */
+  setActiveField(fieldId) {
+    const select = this.elements.basicActiveFieldSelect;
+    if (select && fieldId && select.value !== fieldId
+      && [...select.options].some((option) => option.value === fieldId)) {
+      select.value = fieldId;
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+    this.highlightActiveField();
+  }
+
+  highlightActiveField() {
+    const activeFieldId = this.elements.basicActiveFieldSelect?.value || "";
+    this.fieldLayerById.forEach((layer, fieldId) => {
+      layer.setStyle(fieldId === activeFieldId ? FIELD_POLYGON_SELECTED_STYLE : FIELD_POLYGON_STYLE);
+    });
+  }
+
   clearSelection() {
     this.selected = null;
     this.setSelFeatureMessage("");
@@ -1554,14 +1581,18 @@ export class FieldAnnotationController {
     this.layers.waterPoints.clearLayers();
     this.layers.observations.clearLayers();
 
+    this.fieldLayerById = new Map();
+    const activeFieldId = this.elements.basicActiveFieldSelect?.value || "";
     this.fields.forEach((field) => {
-      L.polygon(field.coordinates, FIELD_POLYGON_STYLE)
+      const layer = L.polygon(field.coordinates, field.id === activeFieldId ? FIELD_POLYGON_SELECTED_STYLE : FIELD_POLYGON_STYLE)
         .bindTooltip(field.name || field.id, { permanent: true, direction: "center", className: "field-annotation-label" })
         .on("click", (event) => {
           event.originalEvent?.stopPropagation();
+          this.setActiveField(field.id);
           this.selectFeature("field", field);
         })
         .addTo(this.layers.fields);
+      this.fieldLayerById.set(field.id, layer);
     });
 
     this.boundaryTracks.forEach((track) => {

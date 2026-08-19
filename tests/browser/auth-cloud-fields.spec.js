@@ -257,8 +257,11 @@ test("あなたの圃場 lists the signed-in farmer's paddies with their area", 
   expect(await accountFieldNames(page)).toEqual(["北田"]);
   await expect(page.locator("#accountFieldsCard .account-field-area")).toContainText("m²");
   // あなたの圃場's own "＋ 新しい圃場を測る" button was folded into 圃場の管理's
-  // single register entry point (§3/§21 of the field-water-dashboard spec).
-  await expect(page.locator("#basicMeasureFieldButton")).toContainText("新しい圃場を測る");
+  // single register entry point (§3/§21 of the field-water-dashboard spec),
+  // then removed outright: it only ever scrolled to #basicStage1Card's NMEA
+  // upload, which is now directly visible (right rail desktop / header
+  // mobile) -- see docs/STAGE1_BASIC_FLOATING_MAP_DASHBOARD.md.
+  await expect(page.locator("#basicMeasureFieldButton")).toHaveCount(0);
 });
 
 test("selecting a paddy from あなたの圃場 drives the existing active field, not a second one", async ({ page }) => {
