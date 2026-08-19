@@ -112,6 +112,10 @@ const ELEMENT_IDS = [
   // Basic-mode single "current field" control (index.html mode shell) — reuses
   // this same populate function, never a second one.
   "basicActiveFieldSelect",
+  // Drone mode's own copy of the same "current field" picker, shown inline in
+  // #droneModeGateCard so a field can be chosen without leaving 基本モード's
+  // dropdown or hunting for the right polygon on the map.
+  "droneActiveFieldSelect",
   // Stage-1 (Basic mode) field-only registration dialog. Deliberately has no
   // measurement-type choice and no 境界トラック escape hatch — both remain
   // available on the Settings dialog above.
@@ -1568,6 +1572,7 @@ export class FieldAnnotationController {
     this.renderQuickToolbar();
     this.renderFieldTargetOptions(this.elements.obsTargetFieldSelect);
     this.renderFieldTargetOptions(this.elements.basicActiveFieldSelect);
+    this.renderFieldTargetOptions(this.elements.droneActiveFieldSelect);
     this.updateObservationButtonStates();
     this.renderSelectedFeature();
     this.renderWorkflowPanel();

@@ -4343,9 +4343,13 @@
             <button id="droneModeGoMeasureButton" class="panel-button primary" type="button">圃場を測る</button>
           </div>
           <div id="droneFieldSummary" class="decision-field-summary" hidden>
+            <div class="input-row" id="droneFieldSelectRow">
+              <label for="droneActiveFieldSelect">圃場を選ぶ</label>
+              <select id="droneActiveFieldSelect"></select>
+            </div>
             <div class="kv"><span>圃場</span><strong id="droneFieldName">—</strong></div>
             <div class="kv"><span>面積</span><strong id="droneFieldArea">—</strong></div>
-            <p class="meta">この圃場の境界を、ドローンの巡回範囲の基準として使用します（安全マージンの適用は今後実装予定）。</p>
+            <p class="meta">この圃場の境界を、ドローンの巡回範囲の基準として使用します（安全マージンの適用は今後実装予定）。地図上の圃場をクリックしても選び直せます。</p>
           </div>
         </section>
 
@@ -6390,6 +6394,20 @@
       if (field) {
         document.getElementById("droneFieldName").textContent = field.name || "—";
         document.getElementById("droneFieldArea").textContent = formatAreaBasic(field.properties?.areaM2);
+      }
+      // droneActiveFieldSelect is a second <select> of its own (populated by
+      // renderFieldTargetOptions, same as basicActiveFieldSelect), so its
+      // value never auto-follows basicActiveFieldSelect -- keep them in sync
+      // here every time the shared "current field" changes, from any source
+      // (map click, 基本モード dropdown, or this select itself).
+      const droneSelect = document.getElementById("droneActiveFieldSelect");
+      const droneSelectRow = document.getElementById("droneFieldSelectRow");
+      if (droneSelect && select && droneSelect.value !== select.value) {
+        droneSelect.value = select.value;
+      }
+      if (droneSelectRow) {
+        // Only worth showing a picker when there's an actual choice to make.
+        droneSelectRow.hidden = fields.length <= 1;
       }
       if (document.body.dataset.mode === "drone") {
         dronePanel.hidden = !field;
@@ -9297,6 +9315,12 @@
       renderDroneModeGate();
       loadTargetWaterLevelForActiveField();
       fetchLiveWeather();
+    });
+    // Drone mode's own field picker (index.html:4346-4349) drives the exact
+    // same #basicActiveFieldSelect cascade above -- via setActiveField, which
+    // also re-highlights the matching polygon on the map, same as clicking it.
+    document.getElementById("droneActiveFieldSelect")?.addEventListener("change", (event) => {
+      fieldAnnotationController?.setActiveField(event.target.value);
     });
     document.getElementById("recTargetWaterLevelInput")?.addEventListener("input", (event) => {
       const fieldId = document.getElementById("basicActiveFieldSelect")?.value;
