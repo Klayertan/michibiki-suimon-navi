@@ -10022,6 +10022,17 @@
           // decisionFieldSelect/reportFieldSelect only pick up new fields
           // once the user happens to visit 判断デモ/詳細解析 (which populate
           // lazily on their own mount/refresh).
+          // A freshly registered polygon replaces its own source track as the
+          // thing worth looking at, so drop the raw QZ1 measurement points
+          // from the map the moment registration succeeds. They stay
+          // available: re-tick 選択中データの測位点を表示, or use the
+          // registered-list card's per-field GNSS点を表示 button.
+          onFieldRegistered: () => {
+            if (showQz1LayerInput.checked) {
+              showQz1LayerInput.checked = false;
+              syncLayerVisibility();
+            }
+          },
           onFieldsChanged: () => {
             // Reports first: 現在の田圃 now reads its 元NMEA/測位信頼性/
             // 有効測位点 metadata out of fieldReportController, so refreshing

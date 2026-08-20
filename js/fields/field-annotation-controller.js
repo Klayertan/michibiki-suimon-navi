@@ -150,6 +150,13 @@ export class FieldAnnotationController {
     // its own -- it reads this.fields/basicActiveFieldSelect after every
     // renderAll(), the same point every other target-field select refreshes.
     this.onFieldsChanged = options.onFieldsChanged || (() => {});
+    // Fires once per successful 圃場ポリゴン registration. The raw uploaded
+    // QZ1/NMEA measurement points have done their job at that moment -- the
+    // polygon now carries the boundary -- and leaving them drawn buries the
+    // new field under its own source track. index.html uses this to switch
+    // 選択中データの測位点を表示 off; the farmer can bring the points back
+    // per field with the registered-list card's GNSS点を表示 button.
+    this.onFieldRegistered = options.onFieldRegistered || (() => {});
     // Fires synchronously at the end of every renderQuickToolbar() call, so
     // index.html can re-measure #waterQuickToolbar's height and update the
     // left rail's clip boundary (--basic-quick-toolbar-live-height) in the
@@ -780,6 +787,7 @@ export class FieldAnnotationController {
     this.cancelManualClosure();
     this.finishBasicRegistration(field);
     this.selectFeature("field", field);
+    this.onFieldRegistered(field);
     this.renderAll();
   }
 
