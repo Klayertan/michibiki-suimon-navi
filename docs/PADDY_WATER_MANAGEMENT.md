@@ -24,7 +24,7 @@ growth stage get the same target depth; only the volume differs.
 | `js/water/water-measurement.js` | The measurement record `{ valueMm, valueCm, reference, source, measuredAt }` — **signed**, against an explicit datum — plus normalization of the legacy cm-only entry. |
 | `js/water/water-recommendation.js` | The pure engine: target -> status -> depth difference -> theoretical volume -> recommendation + provenance. The only place `L = m² × mm` happens. |
 | `index.html` (`#waterManagementCard`, `renderWaterManagementCard()`) | Display and event wiring only. No arithmetic. |
-| `js/water/water-need.js` | **Untouched.** The pre-existing cm-based 今日の水門判断 hero calculation. |
+| `js/water/water-need.js` | **Retired.** The former cm-based hero calculation, no longer loaded — the hero now uses `water-recommendation.js` so a water level is optional. Kept with its tests for reference. |
 
 Tests: `tests/unit/water-recommendation.test.js`, `tests/unit/water-measurement.test.js`,
 `tests/unit/growth-stage-model.test.js`, `tests/browser/water-management-card.spec.js`.
@@ -165,7 +165,7 @@ journal, volume, pages, date, ISSN, DOI) rather than a descriptive paraphrase.
 
 | Key | Shape | Notes |
 |---|---|---|
-| `suimonNaviCurrentWaterLevelV1` | `{ [fieldId]: { valueCm, recordedAt, valueMm, reference, source, measuredAt } }` | **Extended, not replaced.** The legacy `valueCm`/`recordedAt` pair is still written so `water-need.js` and the existing hero read exactly what they always did. A pre-existing cm-only entry loads with no migration step. |
+| `suimonNaviCurrentWaterLevelV1` | `{ [fieldId]: { valueCm, recordedAt, valueMm, reference, source, measuredAt } }` | **Extended, not replaced.** The legacy `valueCm`/`recordedAt` pair is still written so any older reader sees the shape it always did. A pre-existing cm-only entry loads with no migration step. |
 | `suimonNaviFieldGrowthStageV1` | `{ [fieldId]: { stage, source, transplantedOn, variety, updatedAt } }` | New key. Registered in `SCOPED_STORAGE_KEYS`, so it is per-account. |
 
 `suimonNaviCurrentWaterLevelV1` is deliberately **not** added to

@@ -119,7 +119,7 @@ into it.
 | Gate engine | `js/water/gate-decision.js` | **The single source of 開ける/閉める/様子見**, from stage + level + weather |
 | Stage calendar | `js/water/growth-calendar.js` | Region (from field latitude) + date → suggested stage; manual always wins |
 | Daily loss | `js/water/daily-loss.js` | `ETc = Kc × ETo` + percolation range, with its error bar |
-| Legacy hero | `js/water/water-need.js` | Pre-existing cm-based 今日の水門判断 calculation |
+| Retired | `js/water/water-need.js` | Former cm-based hero calculation. **No longer loaded by the app** — 今日の水門判断 now runs on `water-recommendation.js`, so both water surfaces share one engine and cannot disagree. Kept with its tests for reference. |
 | Cloud sync | `js/cloud/` | Supabase sync; records carried verbatim in a `record` column |
 | Auth | `js/auth/` | Account scoping of per-farmer storage keys |
 | Drone | `js/drone/`, `js/pilot/`, `backend/app/mavlink/` | Telemetry display (mock by default) |
@@ -128,6 +128,13 @@ into it.
 
 **Separation rule.** All depth/volume arithmetic lives in `js/water/*`, which is
 DOM-free and unit-tested. `index.html` renders results and never computes them.
+
+**One engine, two surfaces.** 今日の水門判断 and the 水管理 card both render from
+`evaluateWaterManagement()`. A water level is **optional**: with only the
+surveyed area and a growth stage the recommendation already states the target
+depth, and recording a level upgrades it to a deficit plus a volume. Stages
+managed by state rather than depth (中干し, 落水期, 登熟期) return no numeric
+target, so neither surface can suggest filling a field that is being dried.
 
 On desktop (≥981px) 基本モード renders as a floating map dashboard: the Leaflet
 map is the full-bleed canvas of the workspace and the 圃場の管理/今日の水門判断 and
@@ -150,8 +157,8 @@ Local-first. Browser storage is the source of truth; Supabase sync is additive.
 
 **Backward compatibility is a hard constraint.** The water-level key is
 *extended, not replaced*: the legacy `valueCm`/`recordedAt` pair is still
-written, so `water-need.js` and the existing hero read exactly what they always
-did, and a pre-existing cm-only entry loads with no migration step. Cloud sync
+written, so any older reader (and the retired `water-need.js`) still sees the
+shape it always did, and a pre-existing cm-only entry loads with no migration step. Cloud sync
 carries whole local records verbatim in a `record` JSON column, so denormalised
 columns can never corrupt a boundary.
 

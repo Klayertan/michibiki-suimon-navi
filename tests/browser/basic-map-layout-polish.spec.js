@@ -157,8 +157,12 @@ test("map summary renders, reflects the selected field, and matches the missing-
   await expect(card).toBeVisible();
   await expect(card).toContainText("今日の水門判断");
   await expect(card).toContainText("圃場3");
-  await expect(page.locator("#mapWaterSummaryState")).toHaveText("水位未記録");
-  await expect(page.locator("#mapWaterSummaryPrimary")).toHaveText("現在の水位を記録すると、必要な入水量を計算できます。");
+  // With NO water level recorded the summary leads with the growth stage's
+  // reference depth (or its management state), never with a request for input:
+  // the recommendation needs only the surveyed area and the stage.
+  await expect(page.locator("#mapWaterSummaryState")).not.toHaveText("水位未記録");
+  await expect(page.locator("#mapWaterSummaryPrimary")).not.toContainText("現在の水位を記録すると");
+  await expect(page.locator("#mapWaterSummaryPrimary")).toHaveText(/目標水深\s\d+〜\d+\s?mm|：/);
   await expect(page.locator("#mapWaterSummaryButton")).toHaveText("水位を記録");
 
   // Does not obscure the field polygon.
@@ -197,7 +201,8 @@ test("changing the active field updates the map summary, and it matches the full
   // Switching field updates BOTH surfaces from the one active-field state.
   await page.locator("#basicActiveFieldSelect").selectOption(ids[1]);
   await expect(page.locator("#mapWaterSummaryField")).toHaveText("圃場1");
-  await expect(page.locator("#mapWaterSummaryState")).toHaveText("水位未記録");
+  // Unmeasured field: shows its target/management state, not "水位未記録".
+  await expect(page.locator("#mapWaterSummaryState")).not.toHaveText("水位未記録");
   await expect(page.locator("#waterHeroFieldLabel")).toContainText("圃場1");
 });
 

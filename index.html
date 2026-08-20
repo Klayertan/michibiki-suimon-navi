@@ -3118,7 +3118,7 @@
             <p id="waterHeroStaleWarning" class="water-hero-stale" role="status" aria-live="polite" hidden></p>
 
             <div class="water-hero-stats">
-              <div class="water-hero-stat"><span>必要水量（目安）</span><strong id="waterHeroVolume">—</strong></div>
+              <div class="water-hero-stat"><span id="waterHeroVolumeLabel">必要水量（目安）</span><strong id="waterHeroVolume">—</strong></div>
               <div class="water-hero-stat"><span>実施目安</span><strong id="waterHeroTiming">—</strong></div>
               <div class="water-hero-stat"><span>信頼度</span><strong id="waterHeroConfidence">—</strong></div>
             </div>
@@ -5349,15 +5349,9 @@
       userId: null
     };
 
-    // Pure water-depth/volume calculation for 今日の水門判断's quantitative
-    // hero (js/water/water-need.js) -- loaded once, near init's other lazy
-    // modules. renderWaterHero() no-ops until this resolves, which in
-    // practice is well before the first field/report render (local file,
-    // no network).
-    let computeWaterNeed = null;
-
     // 水管理 / Water Management (growth-stage recommendation) modules, loaded
-    // the same lazy way and in the same place as computeWaterNeed above.
+    // lazily in init(). Both 今日の水門判断 and the 水管理 card render from
+    // these, so neither can show a number the other disagrees with.
     // renderWaterManagementCard() shows an explicit "module failed to load"
     // state rather than a blank card if any of these stay null, because a
     // silent blank would be indistinguishable from "no recommendation".
@@ -6375,37 +6369,75 @@
     // ---------------------------------------------------------------------
     // 今日の水門判断 quantitative hero.
     //
-    // computeWaterNeed() (js/water/water-need.js) is the ONLY place depth/
-    // volume arithmetic happens; everything here is presentation. It reads
-    // the two real, persisted per-field numbers this app has --
-    // readCurrentWaterLevelForField() and readTargetWaterLevels() -- plus
-    // field.properties.areaM2, and never fabricates a value that is missing.
+    // evaluateWaterManagement() (js/water/water-recommendation.js) is the ONLY
+    // place depth/volume arithmetic happens; everything here is presentation.
+    // The hero leads with the growth stage's reference depth from the surveyed
+    // area alone -- a water level is optional and only sharpens the answer --
+    // and never fabricates a value that is missing.
     // ---------------------------------------------------------------------
 
-    function fieldWaterNeed(field) {
-      if (!computeWaterNeed || !field) {
+    /**
+     * ONE engine for both water surfaces.
+     *
+     * The hero used to run on computeWaterNeed(), which needs a current level
+     * AND a hand-typed 目標水位 before it can say anything -- so with a freshly
+     * surveyed field it showed "現在の水位を記録すると…" while the 水管理 card
+     * sitting below it already knew the stage's reference depth. Two engines,
+     * two answers, same field.
+     *
+     * evaluateWaterManagement() is now the only source for both. It leads with
+     * the growth stage's reference depth using nothing but the surveyed area
+     * and the stage, and treats the measurement as OPTIONAL enrichment: supply
+     * one and it adds the deficit and the volume. It also knows 中干し/落水期,
+     * so the hero can no longer suggest filling a field that is being dried.
+     */
+    function fieldWaterResult(field) {
+      if (!waterRecommendation || !field) {
         return null;
       }
-      const currentEntry = readCurrentWaterLevelForField(field.id);
-      const targetValue = readTargetWaterLevels()[field.id];
-      return computeWaterNeed({
-        fieldId: field.id,
-        areaM2: Number.isFinite(field.properties?.areaM2) ? field.properties.areaM2 : undefined,
-        currentWaterLevelCm: currentEntry ? currentEntry.valueCm : undefined,
-        currentLevelRecordedAt: currentEntry ? currentEntry.recordedAt : undefined,
-        targetWaterLevelCm: Number.isFinite(targetValue) ? targetValue : undefined
+      return waterRecommendation.evaluateWaterManagement({
+        areaM2: field.properties?.areaM2,
+        // resolveGrowthStageForField() returns a RECORD ({ stage, source,
+        // regionId, isEstimate, ... }), not an id -- passing the object
+        // through normalizes to "unknown" and silently hides the stage.
+        growthStage: resolveGrowthStageForField(field.id)?.stage,
+        // Raw persisted entry: the engine normalizes both the new record and
+        // the legacy cm entry, so an old field needs no migration pass.
+        measurement: readCurrentWaterLevels()[field.id],
+        now: Date.now()
       });
     }
 
-    function waterNeedMiniLabel(need) {
-      if (!need || need.direction === "unknown") {
-        return "水位未記録";
+    /** True once a reading exists and the engine could act on it. */
+    function hasUsableMeasurement(result) {
+      return Boolean(result && result.measurement);
+    }
+
+    /** Compact per-field state for the multi-field carousel and the map corner. */
+    function waterNeedMiniLabel(result) {
+      if (!result) {
+        return "—";
       }
-      if (need.direction === "hold") {
-        return "維持";
+      const { STATUS } = waterRecommendation;
+      switch (result.status) {
+        case STATUS.unknownStage:
+          return "ステージ未設定";
+        case STATUS.noNumericTarget:
+          return result.target.modeLabelJa;
+        case STATUS.unreadableMeasurement:
+          return "要再記録";
+        // Without a reading the useful summary is the TARGET, not "no data".
+        case STATUS.missingMeasurement:
+          return `目標 ${result.target.targetMinMm}〜${result.target.targetMaxMm}mm`;
+        case STATUS.belowRange:
+          return `+${waterRecommendation.formatMm(result.deficitMinMm)}mm`;
+        case STATUS.aboveRange:
+          return `−${waterRecommendation.formatMm(result.excessMm)}mm`;
+        case STATUS.withinRange:
+          return "適正";
+        default:
+          return "—";
       }
-      const sign = need.direction === "add" ? "+" : "−";
-      return `${sign}${Math.abs(need.deltaWaterDepthCm).toFixed(1)}cm`;
     }
 
     function renderWaterHeroCarousel(fields, activeFieldId) {
@@ -6421,7 +6453,7 @@
       carousel.hidden = false;
       carousel.replaceChildren();
       fields.forEach((field) => {
-        const need = fieldWaterNeed(field);
+        const need = fieldWaterResult(field);
         const button = document.createElement("button");
         button.type = "button";
         button.className = "water-hero-mini-card";
@@ -6437,33 +6469,68 @@
         delta.textContent = waterNeedMiniLabel(need);
         const volume = document.createElement("span");
         volume.className = "water-hero-mini-volume";
-        volume.textContent = need && Number.isFinite(need.volumeM3) && need.volumeM3 > 0
-          ? `${need.volumeM3.toFixed(1)}m³`
+        const adj = need?.standingWaterAdjustment;
+        volume.textContent = adj && adj.areaKnown && Number.isFinite(adj.minM3) && adj.minM3 > 0
+          ? `${adj.minM3.toFixed(1)}m³`
           : "";
         button.append(name, delta, volume);
         carousel.append(button);
       });
     }
 
-    function waterHeroPrimaryMessage(need) {
-      if (!need || need.direction === "unknown") {
-        return "現在の水位を記録すると、必要な入水量を計算できます。";
+    /**
+     * The hero's headline. With NO measurement this is the recommendation
+     * itself -- the depth to aim for -- not a request for input. Recording a
+     * level upgrades it from "aim for this" to "add this much".
+     */
+    function waterHeroPrimaryMessage(result) {
+      if (!result) {
+        return "圃場を登録すると、生育ステージに応じた目標水深を表示します。";
       }
-      if (need.direction === "hold") {
-        return "現在の水位を維持してください";
+      const { STATUS } = waterRecommendation;
+      switch (result.status) {
+        case STATUS.unknownStage:
+          return "生育ステージを選ぶと、その時期の目標水深を表示します。";
+        case STATUS.noNumericTarget:
+          // 中干し / 落水期 / 登熟期: a depth target would be wrong here.
+          return `${result.stage.labelJa}：${result.target.modeLabelJa}`;
+        case STATUS.unreadableMeasurement:
+          return "保存されている水位を解釈できません。記録し直してください。";
+        case STATUS.missingMeasurement:
+          // THE ZERO-INPUT CASE. Lead with the answer, not with a request.
+          return `目標水深 ${result.target.targetMinMm}〜${result.target.targetMaxMm} mm（${result.target.modeLabelJa}）`;
+        case STATUS.belowRange: {
+          const { deficitMinMm, deficitMaxMm } = result;
+          return `水を ${waterRecommendation.formatMm(deficitMinMm)}〜${waterRecommendation.formatMm(deficitMaxMm)} mm 入れてください`;
+        }
+        case STATUS.aboveRange:
+          return `目標より ${waterRecommendation.formatMm(result.excessMm)} mm 高めです`;
+        case STATUS.withinRange:
+          return "現在の水位を維持してください";
+        default:
+          return `目標水深 ${result.target.targetMinMm}〜${result.target.targetMaxMm} mm`;
       }
-      const depth = Math.abs(need.deltaWaterDepthCm).toFixed(1);
-      return need.direction === "add" ? `水を ${depth} cm 入れてください` : `水位を約 ${depth} cm 下げてください`;
     }
 
-    function waterHeroTimingLabel(need, decision) {
-      if (!need || need.direction === "unknown") {
+    function waterHeroTimingLabel(result, decision) {
+      if (!result) {
         return "—";
       }
-      if (need.direction === "hold") {
+      const { STATUS } = waterRecommendation;
+      if (result.status === STATUS.noNumericTarget) {
+        return "入水不要";
+      }
+      if (result.status === STATUS.missingMeasurement) {
+        // Honest: we cannot time an action whose size we do not know yet.
+        return "水位を記録";
+      }
+      if (result.status === STATUS.withinRange) {
         return "不要";
       }
-      return decision?.verdict === "open" ? "今日〜明日" : "現地で確認";
+      if (result.status === STATUS.belowRange) {
+        return decision?.verdict === "open" ? "今日〜明日" : "現地で確認";
+      }
+      return "現地で確認";
     }
 
     const FORECAST_DAY_LABELS = ["今日", "明日", "明後日"];
@@ -6511,36 +6578,51 @@
 
       renderWaterHeroCarousel(fields, activeFieldId);
 
-      if (fields.length === 0 || !activeField || !computeWaterNeed) {
+      if (fields.length === 0 || !activeField || !waterRecommendation) {
         emptyState.hidden = fields.length !== 0;
         content.hidden = true;
         renderMapWaterSummary(null, null, null);
-        // The 水管理 card reads the same active field but a different engine,
-        // so it still renders when the water-need hero cannot.
         renderWaterManagementCard();
         return;
       }
       emptyState.hidden = true;
       content.hidden = false;
 
-      const need = fieldWaterNeed(activeField);
+      const need = fieldWaterResult(activeField);
       document.getElementById("waterHeroFieldLabel").textContent = `${activeField.name || activeField.id} の推奨`;
       document.getElementById("waterHeroPrimary").textContent = waterHeroPrimaryMessage(need);
 
       const staleWarning = document.getElementById("waterHeroStaleWarning");
       if (need?.isStale) {
         staleWarning.hidden = false;
-        staleWarning.textContent = `最終水位記録: ${need.staleDays}日前 — この水位記録は古い可能性があります。現地で確認してください。`;
+        staleWarning.textContent = `最終水位記録: ${need.measurementAgeDays}日前 — この水位記録は古い可能性があります。現地で確認してください。`;
       } else {
         staleWarning.hidden = true;
       }
 
-      document.getElementById("waterHeroVolume").textContent = need && Number.isFinite(need.volumeM3)
-        ? (need.volumeM3 > 0 ? `約 ${need.volumeM3.toFixed(1)} m³` : "—")
-        : "—";
-      document.getElementById("waterHeroConfidence").textContent = !need || need.direction === "unknown"
+      // 必要水量: the deficit volume once a level is known, otherwise the
+      // per-10mm conversion rate -- pure geometry from the QZ1-surveyed area,
+      // which assumes NO current level. The farmer gets an actionable number
+      // on first open instead of a dash.
+      const adjustment = need?.standingWaterAdjustment;
+      const showVolume = Boolean(adjustment) && adjustment.areaKnown
+        && (adjustment.direction === "add" || adjustment.direction === "remove");
+      const rate = !showVolume && dailyLossModel
+        ? dailyLossModel.volumePerTenMm(activeField.properties?.areaM2)
+        : null;
+      const volumeLabel = document.getElementById("waterHeroVolumeLabel");
+      if (volumeLabel) {
+        volumeLabel.textContent = showVolume ? "必要水量（目安）" : "水深10mmあたり";
+      }
+      document.getElementById("waterHeroVolume").textContent = showVolume
+        ? waterRecommendation.formatVolumeRange(adjustment.minM3, adjustment.maxM3)
+        : (rate ? `約 ${rate.m3.toLocaleString("ja-JP", { maximumFractionDigits: 1 })} m³` : "—");
+
+      document.getElementById("waterHeroConfidence").textContent = !need
         ? "—"
-        : (need.isStale ? "低" : "高");
+        : (need.status === waterRecommendation.STATUS.missingMeasurement
+          ? "参考値"
+          : (need.isStale ? "低" : "高"));
 
       // Mirrors updateDecision()'s own threshold resolution exactly (settings
       // overrides over the profile defaults) so this label never disagrees
@@ -6591,26 +6673,33 @@
 
       const detailEl = document.getElementById("mapWaterSummaryDetail");
       const button = document.getElementById("mapWaterSummaryButton");
-      const hasQuantity = need && need.direction !== "unknown";
+      const adj = need?.standingWaterAdjustment;
+      const hasQuantity = Boolean(adj) && adj.areaKnown
+        && (adj.direction === "add" || adj.direction === "remove");
+      const probToday = weatherData?.dailyForecast?.[0]?.maxProbPct;
+      const probText = Number.isFinite(probToday) ? ` / 降水確率 ${probToday}%` : "";
+
       if (hasQuantity) {
-        const volumeText = Number.isFinite(need.volumeM3) && need.volumeM3 > 0
-          ? `約 ${need.volumeM3.toFixed(1)} m³ / `
-          : "";
-        const probToday = weatherData?.dailyForecast?.[0]?.maxProbPct;
-        const probText = Number.isFinite(probToday) ? ` / 降水確率 ${probToday}%` : "";
+        const volumeText = `約 ${waterRecommendation.formatVolumeRange(adj.minM3, adj.maxM3)} / `;
         detailEl.textContent = `${volumeText}推奨操作: ${decision?.label ?? "—"}${probText}`;
         button.textContent = "詳細を見る";
-      } else {
-        detailEl.textContent = "";
+      } else if (need && need.status === waterRecommendation.STATUS.missingMeasurement) {
+        // The recommendation stands on its own; the gate verdict is already
+        // stage- and weather-aware without a reading, so show both rather
+        // than blanking the card until someone measures.
+        detailEl.textContent = `推奨操作: ${decision?.label ?? "—"}${probText}`;
         button.textContent = "水位を記録";
+      } else {
+        detailEl.textContent = decision?.label ? `推奨操作: ${decision.label}${probText}` : "";
+        button.textContent = "詳細を見る";
       }
     }
 
     document.getElementById("mapWaterSummaryButton")?.addEventListener("click", () => {
       const field = (fieldAnnotationController?.fields || [])
         .find((candidate) => candidate.id === document.getElementById("basicActiveFieldSelect")?.value);
-      const need = field ? fieldWaterNeed(field) : null;
-      if (!need || need.direction === "unknown") {
+      const need = field ? fieldWaterResult(field) : null;
+      if (!need || !hasUsableMeasurement(need)) {
         // Same destination as the full hero's own 水位を記録する button.
         document.getElementById("waterHeroRecordButton")?.click();
       } else {
@@ -9702,6 +9791,11 @@
       const fieldId = document.getElementById("basicActiveFieldSelect")?.value;
       writeGrowthStageForField(fieldId, event.target.value, "manual");
       renderWaterManagementCard();
+      // 今日の水門判断 now reads the same stage-based engine, so it has to
+      // repaint here too -- otherwise the hero keeps showing the previous
+      // stage's target while the 水管理 card below it already shows the new
+      // one. (Also refreshes the map-corner summary, which it renders.)
+      renderWaterHero();
       // The gate verdict now depends on the growth stage -- switching to 中干し
       // must flip it to 閉める immediately. Without this the two cards sit on
       // screen contradicting each other until some other event repaints the
@@ -9935,11 +10029,6 @@
 
     (async function init() {
       initSerialCard();
-      try {
-        ({ computeWaterNeed } = await import("./js/water/water-need.js"));
-      } catch (error) {
-        console.error("Water-need helper initialization failed", error);
-      }
       try {
         // 水管理 card. Imported as namespaces (not destructured) so a new
         // export -- a future stage derivation, another source -- is reachable

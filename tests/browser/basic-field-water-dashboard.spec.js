@@ -178,13 +178,18 @@ test("one field: satellite thumbnail, metadata and the missing-water-level hero 
   await expect(page.locator("#accountFieldsList .account-field-tile")).toHaveCount(1);
   await expect(page.locator("#accountFieldsList .account-field-tile").first()).toHaveClass(/is-active/);
 
-  // Hero: no current/target level recorded yet -> missing-data message, not a
-  // fabricated 0 cm / 0 m3, and the carousel stays hidden with only one field.
+  // Hero with NO level recorded: leads with the RECOMMENDATION (the stage's
+  // reference depth, or its management state for a stage that has no numeric
+  // target), never a request for input. The 必要水量 slot shows the per-10mm
+  // conversion rate -- pure geometry from the surveyed area, which assumes no
+  // current level -- so nothing is fabricated and nothing is a bare dash.
   await expect(page.locator("#waterHeroCarousel")).toBeHidden();
   await expect(page.locator("#waterHeroContent")).toBeVisible();
-  await expect(page.locator("#waterHeroPrimary")).toContainText("現在の水位を記録すると");
-  await expect(page.locator("#waterHeroVolume")).toHaveText("—");
-  await expect(page.locator("#waterHeroConfidence")).toHaveText("—");
+  await expect(page.locator("#waterHeroPrimary")).not.toContainText("現在の水位を記録すると");
+  await expect(page.locator("#waterHeroPrimary")).toHaveText(/目標水深\s\d+〜\d+\s?mm|：/);
+  await expect(page.locator("#waterHeroVolumeLabel")).toHaveText("水深10mmあたり");
+  await expect(page.locator("#waterHeroVolume")).toHaveText(/約\s[\d,.]+\sm³/);
+  await expect(page.locator("#waterHeroConfidence")).toHaveText("参考値");
 });
 
 // ---------------------------------------------------------------------------
@@ -268,9 +273,11 @@ test("multiple fields: dropdown, registered-field row, and mini-card all drive t
   await expect(page.locator("#basicFieldSourceFile")).toHaveText("圃場2.txt");
   await expect(page.locator(`#waterHeroCarousel button[data-water-hero-field-id="${ids[0]}"]`)).toHaveClass(/is-active/);
 
-  // Field without a recorded level shows its mini-card as unrecorded, never a fake 0cm.
-  await expect(page.locator(`#waterHeroCarousel button[data-water-hero-field-id="${ids[1]}"] .water-hero-mini-delta`))
-    .toHaveText("水位未記録");
+  // Field without a recorded level shows its TARGET (or management state) on
+  // the mini-card -- never "水位未記録", and never a fake 0cm.
+  const miniDelta = page.locator(`#waterHeroCarousel button[data-water-hero-field-id="${ids[1]}"] .water-hero-mini-delta`);
+  await expect(miniDelta).not.toHaveText("水位未記録");
+  await expect(miniDelta).toHaveText(/目標\s\d+〜\d+mm|管理|灌漑|落水|飽水/);
 });
 
 test("selecting a field re-fetches weather for that field's centroid", async ({ page }) => {
