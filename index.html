@@ -444,6 +444,34 @@
       font-weight: 800;
     }
 
+    /* Only ever shown on #basicWaterRecordCard while it carries
+       .basic-water-record-attached (desktop 基本モード's slide-down mode --
+       see that rule's own long comment); display:none everywhere else,
+       including on this same card in every other context (mobile/設定/
+       ドローン), where it stays a plain non-interactive summary label. */
+    .basic-water-record-close {
+      display: none;
+      align-items: center;
+      background: var(--panel, #fbfaf5);
+      border: 1px solid var(--line, #d8d8ca);
+      border-radius: 999px;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 0.9rem;
+      height: 28px;
+      justify-content: center;
+      line-height: 1;
+      padding: 0;
+      width: 28px;
+    }
+
+    .basic-water-record-close:hover,
+    .basic-water-record-close:focus-visible {
+      background: #eaf3ec;
+      border-color: var(--green);
+      color: var(--text);
+    }
+
     details.card[open] > summary {
       border-bottom: 1px solid var(--line);
     }
@@ -1895,6 +1923,66 @@
         overflow-y: auto;
       }
 
+      /* 水位・観察を記録 (#basicWaterRecordCard), attached below #mapWaterSummary
+         as a slide-down panel triggered by the summary's own "水位を記録"
+         button -- desktop 基本モード only. Mobile/設定/ドローン keep this card
+         exactly where it has always lived (a normal flowing section) and are
+         completely unaffected: the .basic-water-record-attached class below
+         is only ever added by JS from that one desktop-basic code path, and
+         even then this whole block only matches inside body[data-mode="basic"]
+         at >=981px, so the class alone (e.g. lingering after a resize down to
+         mobile) has zero effect outside that combination.
+
+         Not moved in the DOM -- #mapWaterSummary is itself desktop-only
+         ([hidden] below 980px, its own media rule), so nesting this card as
+         a literal child would silently drop it from mobile, where it is a
+         normal always-usable section today, not something gated behind a
+         desktop-only overlay. position:fixed sidesteps needing DOM
+         descendance for CSS positioning: this app's shell does not scroll on
+         desktop (only individual panels do), so viewport-relative
+         positioning behaves identically to .map-wrap-relative positioning
+         here. --basic-summary-live-bottom is #mapWaterSummary's OWN live
+         bottom edge (viewport px, plus an 8px gap), kept in sync by
+         syncMapWaterSummaryReserve() -- both from a ResizeObserver and,
+         critically, synchronously at the end of renderMapWaterSummary()
+         itself, for the exact same reason --basic-quick-toolbar-live-height
+         needs its own synchronous hook above: a ResizeObserver alone is
+         asynchronous, leaving a real, observed window where this card would
+         sit at the OLD (pre-change) position for a frame after the summary's
+         own height just changed. */
+      body[data-mode="basic"] #basicWaterRecordCard.basic-water-record-attached {
+        position: fixed;
+        left: var(--basic-rail-left-clear);
+        top: var(--basic-summary-live-bottom, 200px);
+        width: min(320px, calc(100% - var(--basic-rail-left-clear) - var(--basic-rail-right-clear) - 12px));
+        margin: 0;
+        max-height: 0;
+        opacity: 0;
+        overflow: hidden;
+        pointer-events: none;
+        transition: max-height 0.28s ease, opacity 0.2s ease;
+      }
+
+      body[data-mode="basic"] #basicWaterRecordCard.basic-water-record-attached.is-open {
+        max-height: min(520px, calc(100vh - var(--basic-summary-live-bottom, 200px) - 24px));
+        opacity: 1;
+        overflow-y: auto;
+        pointer-events: auto;
+      }
+
+      /* Dismissal affordance: while attached, clicking #mapWaterSummaryButton
+         again also closes it (see toggleAttachedWaterRecordCard()), but a
+         floating panel with no obvious "away" to scroll to needs an explicit
+         close control too. Hidden everywhere else -- .basic-water-record-
+         attached is desktop-basic-only, so this never appears in the normal
+         (mobile/設定/ドローン) rendering of the same card. */
+      #basicWaterRecordCard.basic-water-record-attached .basic-water-record-close {
+        display: block;
+        position: absolute;
+        top: 10px;
+        right: 10px;
+      }
+
       /* Centred on the FREE canvas between the rails, not on the viewport:
          viewport-centring put this 420px card under the 地図/航空写真 toggle
          at 1366px, because the gap between the rails is much narrower than
@@ -3131,7 +3219,13 @@
 
             <div id="waterHeroForecast" class="water-hero-forecast"></div>
 
-            <button id="waterHeroRecordButton" class="panel-button primary" type="button">水位を記録する</button>
+            <!-- 水位を記録する used to live here. The map-corner summary's
+                 own 水位を記録 button (#mapWaterSummaryButton, missing-
+                 measurement state) is now the one entry point on desktop --
+                 it opens 水位・観察を記録 as a slide-down panel in place
+                 instead of scrolling here. #basicRecordWaterButton (圃場の
+                 管理) still reaches the same card as a fallback outside
+                 desktop 基本モード. Do not reintroduce a second button here. -->
           </div>
 
           <p class="disclaimer">※ 本アプリは判断支援です。最終判断と水門の操作は必ず人が行ってください。必要水量は圃場面積と水深から算出した目安で、浸透・漏水・蒸発・通水ロスは考慮していません。</p>
@@ -3596,6 +3690,11 @@
              基本モード still gets the card through data-mode. -->
         <details id="basicWaterRecordCard" class="card paddy-collapsible" data-workspace="survey" data-mode="basic settings" open hidden>
           <summary><span class="details-title">水位・観察を記録<span class="en">Mark observation</span></span></summary>
+          <!-- Desktop 基本モード only (see .basic-water-record-close's own
+               CSS comment): closes the slide-down panel when this card is
+               attached below #mapWaterSummary. Invisible in every other
+               context this same card renders in. -->
+          <button id="basicWaterRecordCloseButton" class="basic-water-record-close" type="button" aria-label="閉じる">✕</button>
           <div class="details-content">
             <div class="input-row">
               <label for="recObsTypeSelect">観測タイプ</label>
@@ -6693,15 +6792,103 @@
         detailEl.textContent = decision?.label ? `推奨操作: ${decision.label}${probText}` : "";
         button.textContent = "詳細を見る";
       }
+      // Synchronous, not just the ResizeObserver below: renderMapWaterSummary
+      // just potentially changed this card's own height (new field name,
+      // new detail line length), and #basicWaterRecordCard's attached
+      // position depends on it -- see that CSS rule's own comment for why
+      // relying on the (asynchronous) observer alone leaves a real gap.
+      syncMapWaterSummaryReserve();
     }
+
+    /** Keeps --basic-summary-live-bottom in sync with #mapWaterSummary's OWN live height -- read by #basicWaterRecordCard.basic-water-record-attached's `top`. */
+    function syncMapWaterSummaryReserve() {
+      const summary = document.getElementById("mapWaterSummary");
+      if (!summary || summary.hidden || getComputedStyle(summary).display === "none") {
+        return;
+      }
+      const bottom = summary.getBoundingClientRect().bottom;
+      if (bottom > 0) {
+        document.documentElement.style.setProperty("--basic-summary-live-bottom", `${Math.ceil(bottom) + 8}px`);
+      }
+    }
+    if ("ResizeObserver" in window) {
+      const mapSummaryElForObserver = document.getElementById("mapWaterSummary");
+      if (mapSummaryElForObserver) {
+        new ResizeObserver(syncMapWaterSummaryReserve).observe(mapSummaryElForObserver);
+      }
+    }
+
+    function isDesktopBasicMode() {
+      return document.body.dataset.mode === "basic" && window.matchMedia("(min-width: 981px)").matches;
+    }
+
+    /**
+     * 水位・観察を記録 (#basicWaterRecordCard) as a slide-down panel attached
+     * below #mapWaterSummary -- desktop 基本モード only. Toggling is class-
+     * based (.basic-water-record-attached + .is-open), not the native
+     * <details>[open] this element already carries statically-always-true:
+     * [open] is not CSS-transitionable (the UA stylesheet's open/closed
+     * content toggle is a display:none/block switch), and the class-based
+     * approach lets .basic-water-record-attached alone (present) vs. absent
+     * cleanly separate "attached to the map" from "normal flowing card"
+     * without touching the [open] semantics mobile/設定/ドローン still rely on
+     * -- see #basicWaterRecordCard.basic-water-record-attached's own CSS
+     * comment for the full reasoning.
+     */
+    function toggleAttachedWaterRecordCard() {
+      const card = document.getElementById("basicWaterRecordCard");
+      if (!card) {
+        return;
+      }
+      const alreadyOpen = card.classList.contains("basic-water-record-attached")
+        && card.classList.contains("is-open");
+      card.classList.add("basic-water-record-attached");
+      syncMapWaterSummaryReserve();
+      if (alreadyOpen) {
+        card.classList.remove("is-open");
+        return;
+      }
+      // requestAnimationFrame: adding basic-water-record-attached (which
+      // starts the card at max-height:0) and is-open in the SAME tick would
+      // never paint the 0 state as its own frame, so the transition would
+      // have nothing to animate FROM -- the card would just appear already
+      // expanded instead of visibly sliding down.
+      requestAnimationFrame(() => {
+        card.classList.add("is-open");
+        const typeSelect = document.getElementById("recObsTypeSelect");
+        if (typeSelect && [...typeSelect.options].some((option) => option.value === "water_level")) {
+          typeSelect.value = "water_level";
+        }
+        document.getElementById("recObsWaterLevelInput")?.focus();
+      });
+    }
+
+    document.getElementById("basicWaterRecordCloseButton")?.addEventListener("click", () => {
+      document.getElementById("basicWaterRecordCard")?.classList.remove("is-open");
+    });
+
+    // The native <details> disclosure toggle must not fight the class-based
+    // open/close above -- clicking the summary would otherwise natively flip
+    // [open] to false, which hides everything (including this card's own
+    // close button) via the UA stylesheet regardless of .is-open. Guarded to
+    // the attached state only: mobile/設定/ドローン's summary is unaffected.
+    document.querySelector("#basicWaterRecordCard > summary")?.addEventListener("click", (event) => {
+      if (document.getElementById("basicWaterRecordCard")?.classList.contains("basic-water-record-attached")) {
+        event.preventDefault();
+      }
+    });
 
     document.getElementById("mapWaterSummaryButton")?.addEventListener("click", () => {
       const field = (fieldAnnotationController?.fields || [])
         .find((candidate) => candidate.id === document.getElementById("basicActiveFieldSelect")?.value);
       const need = field ? fieldWaterResult(field) : null;
       if (!need || !hasUsableMeasurement(need)) {
-        // Same destination as the full hero's own 水位を記録する button.
-        document.getElementById("waterHeroRecordButton")?.click();
+        if (isDesktopBasicMode()) {
+          toggleAttachedWaterRecordCard();
+        } else {
+          // Same destination as 圃場の管理's own 水位を記録 button.
+          document.getElementById("basicRecordWaterButton")?.click();
+        }
       } else {
         document.querySelector(".gate-card")?.scrollIntoView({ behavior: "smooth", block: "start" });
       }
@@ -6718,10 +6905,6 @@
         select.value = fieldId;
         select.dispatchEvent(new Event("change", { bubbles: true }));
       }
-    });
-
-    document.getElementById("waterHeroRecordButton")?.addEventListener("click", () => {
-      document.getElementById("basicRecordWaterButton")?.click();
     });
 
     /**
