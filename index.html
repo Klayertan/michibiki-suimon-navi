@@ -1950,6 +1950,19 @@
          asynchronous, leaving a real, observed window where this card would
          sit at the OLD (pre-change) position for a frame after the summary's
          own height just changed. */
+      /* The whole point of the slide-down redesign: this card no longer sits
+         permanently in the right rail on desktop -- it only exists on screen
+         once #mapWaterSummaryButton has actually attached it (see
+         toggleAttachedWaterRecordCard()). Without this rule the card renders
+         in its old always-visible flowing position AS WELL AS the fixed
+         slide-down copy once attached, which is not what "move it so it only
+         appears on demand" means. Scoped to :not(.basic-water-record-attached)
+         so it stops applying the instant the class is added, handing off
+         cleanly to the fixed-position rule below. */
+      body[data-mode="basic"] #basicWaterRecordCard:not(.basic-water-record-attached) {
+        display: none;
+      }
+
       body[data-mode="basic"] #basicWaterRecordCard.basic-water-record-attached {
         position: fixed;
         left: var(--basic-rail-left-clear);
@@ -6835,19 +6848,22 @@
      * -- see #basicWaterRecordCard.basic-water-record-attached's own CSS
      * comment for the full reasoning.
      */
-    function toggleAttachedWaterRecordCard() {
+    /**
+     * Opens the attached card unconditionally (idempotent) -- the shared
+     * entry point for every desktop trigger, not just #mapWaterSummaryButton.
+     * #basicRecordWaterButton (圃場の管理's own 水位を記録) used to just scroll
+     * the always-visible card into view; now that the card is display:none by
+     * default on desktop (see the CSS rule scoped to
+     * :not(.basic-water-record-attached)), that scroll would land on nothing,
+     * so it opens through here too.
+     */
+    function openAttachedWaterRecordCard() {
       const card = document.getElementById("basicWaterRecordCard");
       if (!card) {
         return;
       }
-      const alreadyOpen = card.classList.contains("basic-water-record-attached")
-        && card.classList.contains("is-open");
       card.classList.add("basic-water-record-attached");
       syncMapWaterSummaryReserve();
-      if (alreadyOpen) {
-        card.classList.remove("is-open");
-        return;
-      }
       // requestAnimationFrame: adding basic-water-record-attached (which
       // starts the card at max-height:0) and is-open in the SAME tick would
       // never paint the 0 state as its own frame, so the transition would
@@ -6861,6 +6877,20 @@
         }
         document.getElementById("recObsWaterLevelInput")?.focus();
       });
+    }
+
+    function toggleAttachedWaterRecordCard() {
+      const card = document.getElementById("basicWaterRecordCard");
+      if (!card) {
+        return;
+      }
+      const alreadyOpen = card.classList.contains("basic-water-record-attached")
+        && card.classList.contains("is-open");
+      if (alreadyOpen) {
+        card.classList.remove("is-open");
+        return;
+      }
+      openAttachedWaterRecordCard();
     }
 
     document.getElementById("basicWaterRecordCloseButton")?.addEventListener("click", () => {
@@ -10077,6 +10107,10 @@
       document.querySelector('#waterQuickToolbar button[data-water-quick-type="gate"]')?.focus();
     });
     document.getElementById("basicRecordWaterButton")?.addEventListener("click", () => {
+      if (isDesktopBasicMode()) {
+        openAttachedWaterRecordCard();
+        return;
+      }
       switchWorkspace("fields");
       window.setTimeout(() => {
         const waterCard = document.getElementById("basicWaterRecordCard");

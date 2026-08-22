@@ -401,15 +401,24 @@ test("water management still works in Basic mode after the cleanup", async ({ pa
   await page.locator("#basicFieldRegConfirmButton").click();
   await expect(page.locator("#fieldAnnotationSummaryFields")).toHaveText("1");
 
-  // The water-level inputs stayed in Basic mode when the recording card left.
-  await expect(page.locator("#basicWaterRecordCard")).toBeVisible();
+  // The water-level inputs stayed in Basic mode when the recording card left,
+  // but the card itself is no longer parked in the right rail on desktop --
+  // it only appears once summoned (by this button or the map summary's own
+  // 水位を記録 button), then slides down attached to the map corner.
+  await expect(page.locator("#basicWaterRecordCard")).toBeHidden();
   await page.locator("#basicRecordWaterButton").click();
+  await expect(page.locator("#basicWaterRecordCard")).toBeVisible();
   await expect(page.locator("#recObsWaterLevelInput")).toBeVisible();
   await page.locator("#recTargetWaterLevelInput").fill("50");
   await page.locator("#recObsWaterLevelInput").fill("20");
   await expect(page.locator("#recWaterLevelVerdict")).toContainText("水位が低めです");
   await page.locator("#recObsWaterLevelInput").fill("55");
   await expect(page.locator("#recWaterLevelVerdict")).toContainText("適正");
+
+  // Close the slide-down panel before returning to the map -- attached, it
+  // floats over part of the map (by design, so its own controls are
+  // reachable), which would otherwise intercept the click below.
+  await page.locator("#basicWaterRecordCloseButton").click();
 
   // Water-management points still register against the field, via the
   // on-map quick toolbar -- the only placement path now (the right-rail
