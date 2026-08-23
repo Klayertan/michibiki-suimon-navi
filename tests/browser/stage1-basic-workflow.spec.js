@@ -368,7 +368,7 @@ test("a registered field survives a reload with its area and geometry intact", a
   expect(after.coordinates).toEqual(before.coordinates);
   expect(after.properties.areaM2).toBeCloseTo(before.properties.areaM2, 6);
   await expect(page.locator("#basicFieldArea")).toContainText("m²");
-  await expect(page.locator("#basicFieldArea")).toContainText("ha");
+  await expect(page.locator("#basicFieldArea")).toContainText("反");
 });
 
 // ---------------------------------------------------------------------------

@@ -6319,16 +6319,16 @@
       return `${Math.round(area).toLocaleString()} m² / ${(area / 100).toFixed(2)} a / ${(area / 991.7).toFixed(2)} tan`;
     }
 
-    // Basic-mode area display only -- m²/a/ha, per the product spec. Distinct
-    // from formatAreaFull() (m²/a/tan) above, which the legacy 詳細解析 tab's
-    // 2 call sites keep using unchanged.
+    // Basic-mode area display -- m²/a/反. 反 (tan, ~991.7 m²) replaces ha:
+    // older farmers read paddy area in 尺貫法, not hectares, and this is the
+    // one farmer-facing surface where that matters. Same conversion factor
+    // formatAreaFull() already uses below, for the legacy 詳細解析 tab.
     function formatAreaBasic(area) {
       if (!Number.isFinite(area) || area <= 0) {
         return "—";
       }
 
-      const ha = area / 10000;
-      return `${Math.round(area).toLocaleString()} m² / ${(area / 100).toFixed(2)} a / ${ha.toFixed(3)} ha`;
+      return `${Math.round(area).toLocaleString()} m² / ${(area / 100).toFixed(2)} a / ${(area / 991.7).toFixed(2)}反`;
     }
 
     // 基本モード's active field is the app's ONE farmer-facing field context,
