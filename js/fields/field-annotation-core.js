@@ -231,9 +231,41 @@ export function nextBoundaryTrackId(fieldId, existingTrackCountForField) {
   return `${fieldId}-track-${String(existingTrackCountForField + 1).padStart(3, "0")}`;
 }
 
-export function makeSurveySessionId(nowMs = Date.now()) {
+let lastSurveyStamp = null;
+let lastSurveySeq = 0;
+
+/**
+ * `survey-YYYYMMDD-HHMMSS`, with a `-N` suffix (N >= 2) whenever the same
+ * second is stamped twice. The clock alone has one-second resolution, so two
+ * fields registered back to back — routine in Settings → 圃場データ and in
+ * automated tests — used to get the *same* id, and every id lookup
+ * (`surveySessions.find(s => s.id === ...)`, e.g. resolvePrimarySurveySession
+ * in js/reports/field-report.js) then resolved the second field to the first
+ * field's session: wrong 元NMEAファイル名, 有効測位点 and 測位信頼性 on the
+ * farmer-facing report card.
+ *
+ * The first id in any given second keeps the plain `survey-<stamp>` shape, so
+ * ids already in localStorage stay exactly as they are; only the collisions
+ * grow a suffix. `takenIds` (the ids already stored) closes the case the
+ * in-memory counter can't see — a reload landing inside the same second as a
+ * previously stored session.
+ */
+export function makeSurveySessionId(nowMs = Date.now(), takenIds = null) {
   const stamp = new Date(nowMs).toISOString().replace(/[-:]/g, "").replace("T", "-").slice(0, 15);
-  return `survey-${stamp}`;
+  if (stamp === lastSurveyStamp) {
+    lastSurveySeq += 1;
+  } else {
+    lastSurveyStamp = stamp;
+    lastSurveySeq = 1;
+  }
+  const taken = takenIds ? new Set(Array.from(takenIds, (id) => String(id))) : null;
+  const idFor = (seq) => (seq === 1 ? `survey-${stamp}` : `survey-${stamp}-${seq}`);
+  let id = idFor(lastSurveySeq);
+  while (taken && taken.has(id)) {
+    lastSurveySeq += 1;
+    id = idFor(lastSurveySeq);
+  }
+  return id;
 }
 
 // ---------------------------------------------------------------------------

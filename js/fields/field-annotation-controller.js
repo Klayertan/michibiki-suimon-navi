@@ -765,8 +765,13 @@ export class FieldAnnotationController {
     return `${message} ${RAW_NMEA_SIZE_WARNING}`;
   }
 
+  /** Never hands back an id an existing session already uses — see makeSurveySessionId(). */
+  newSurveySessionId() {
+    return makeSurveySessionId(Date.now(), this.surveySessions.map((session) => session.id));
+  }
+
   registerFieldPolygon({ name, id, memo, coordinates, rawPoints, fileName, rawNmeaText, gapM, closedManually }) {
-    const sessionId = makeSurveySessionId();
+    const sessionId = this.newSurveySessionId();
     const uploadedAt = new Date().toISOString();
     const session = buildSurveySession({
       id: sessionId, name: `${name} 測量`, fieldId: id, sourceFileName: fileName,
@@ -792,7 +797,7 @@ export class FieldAnnotationController {
   }
 
   registerBoundaryTrack({ name, id, memo, coordinates, rawPoints, fileName, rawNmeaText, dialog }) {
-    const sessionId = makeSurveySessionId();
+    const sessionId = this.newSurveySessionId();
     const uploadedAt = new Date().toISOString();
     const session = buildSurveySession({
       id: sessionId, name: `${name} 測量`, fieldId: id, sourceFileName: fileName,
@@ -819,7 +824,7 @@ export class FieldAnnotationController {
   }
 
   registerWaterPointsSession({ name, id, memo, rawPoints, fileName, rawNmeaText }) {
-    const sessionId = makeSurveySessionId();
+    const sessionId = this.newSurveySessionId();
     const uploadedAt = new Date().toISOString();
     const session = buildSurveySession({
       id: sessionId, name: name || `${id} 測量`, fieldId: id, sourceFileName: fileName,
