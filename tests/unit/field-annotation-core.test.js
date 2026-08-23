@@ -93,6 +93,42 @@ test("nextBoundaryTrackId and makeSurveySessionId produce stable, distinguishabl
   assert.match(id, /^survey-/);
 });
 
+test("makeSurveySessionId never repeats an id inside one second", () => {
+  // Two fields registered back to back (routine in Settings → 圃場データ and in
+  // automated tests) used to share a session id, which made the second field's
+  // report resolve to the first field's session.
+  // Uses a second no other test stamps, so the first id here is genuinely the
+  // first one issued for it.
+  const sameMs = Date.parse("2026-07-19T21:07:03.400+09:00");
+  const first = makeSurveySessionId(sameMs);
+  const second = makeSurveySessionId(sameMs);
+  const third = makeSurveySessionId(sameMs);
+
+  assert.equal(first, "survey-20260719-120703");
+  assert.notEqual(second, first);
+  assert.notEqual(third, second);
+  assert.notEqual(third, first);
+  // The stamp prefix is preserved; only a monotonic suffix distinguishes them.
+  for (const id of [second, third]) {
+    assert.match(id, /^survey-20260719-120703-\d+$/);
+  }
+  // Lexical order still matches registration order, and stays below the next second.
+  assert.ok(first < second && second < third);
+  assert.ok(third < "survey-20260719-120704");
+
+  // A different second goes back to the plain, unsuffixed shape that existing
+  // stored ids use.
+  assert.equal(makeSurveySessionId(sameMs + 1000), "survey-20260719-120704");
+});
+
+test("makeSurveySessionId skips ids already stored, even after a reload resets the counter", () => {
+  const nowMs = Date.parse("2026-07-19T20:15:00+09:00");
+  const stored = ["survey-20260719-111500", "survey-20260719-111500-2"];
+  const id = makeSurveySessionId(nowMs, stored);
+  assert.ok(!stored.includes(id));
+  assert.match(id, /^survey-20260719-111500-\d+$/);
+});
+
 test("evaluateClosure auto-closes a tight loop and requires confirmation for a large gap", () => {
   const tight = [...SQUARE, [34.654799, 135.829825]];
   const tightResult = evaluateClosure(tight, DEFAULT_AUTO_CLOSE_THRESHOLD_M);
