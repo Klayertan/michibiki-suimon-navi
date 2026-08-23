@@ -9,12 +9,6 @@
       "autoPort": true
     },
     {
-      "name": "suimon-navi-new-ui",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["--prefix", "frontend", "run", "dev"],
-      "port": 5173
-    },
-    {
       "name": "suimon-navi-backend-mock",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "backend:mock"],

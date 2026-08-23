@@ -10,13 +10,10 @@
     "backend:real": "node scripts/run-backend.mjs --mode real",
     "backend:setup": "node scripts/setup-backend.mjs",
     "dev": "node scripts/dev-all.mjs",
-    "dev:new-ui": "npm --prefix frontend run dev",
-    "dev:new-ui:shared-storage": "npm --prefix frontend run dev:shared-storage",
     "test": "node --test tests/unit/*.test.js",
     "test:backend": "node scripts/run-pytest.mjs",
     "test:browser": "playwright test",
-    "test:new-ui": "npm --prefix frontend test",
-    "test:all": "npm run test && npm run test:backend && npm run test:browser && npm run test:new-ui"
+    "test:all": "npm run test && npm run test:backend && npm run test:browser"
   },
   "devDependencies": {
     "@playwright/test": "^1.55.0"
