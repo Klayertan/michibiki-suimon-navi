@@ -221,7 +221,9 @@ test("the map summary's own button stays clickable (card is pointer-events:none 
   await page.locator("#mapWaterSummaryButton").click();
   await expect(page.locator("#recObsWaterLevelInput")).toBeFocused();
 
-  // Populated state -> button scrolls the full hero into view.
+  // Populated state -> button expands .gate-card in place, attached below
+  // the summary (it no longer lives in the left rail on desktop -- see
+  // .gate-card's own CSS comment).
   await page.locator("#recObsWaterLevelInput").fill("3.2");
   await page.locator("#recTargetWaterLevelInput").fill("5.5");
   await expect(page.locator("#mapWaterSummaryButton")).toHaveText("詳細を見る");

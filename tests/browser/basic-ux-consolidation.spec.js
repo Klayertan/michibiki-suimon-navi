@@ -161,6 +161,17 @@ test("Basic has exactly one farmer verdict, in the polished card", async ({ page
   await registerField(page, { nmea: LOOP_A, fileName: "one-verdict.nmea" });
   await page.goto("/");
 
+  // .gate-card no longer sits permanently in the left rail on desktop -- it
+  // only appears attached below #mapWaterSummary once the map's own button
+  // opens it (see .gate-card's own CSS comment). Recording a level first
+  // guarantees the button is in its "詳細を見る" state rather than "水位を
+  // 記録", regardless of what growth stage this field defaulted to.
+  await page.locator("#mapWaterSummaryButton").click();
+  await page.locator("#recObsWaterLevelInput").fill("3.2");
+  await page.locator("#recTargetWaterLevelInput").fill("5.5");
+  await expect(page.locator("#mapWaterSummaryButton")).toHaveText("詳細を見る");
+  await page.locator("#mapWaterSummaryButton").click();
+
   const card = page.locator(".gate-card");
   await expect(card).toBeVisible();
   await expect(card).toContainText("今日の水門判断");

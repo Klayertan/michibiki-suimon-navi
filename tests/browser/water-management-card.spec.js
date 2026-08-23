@@ -312,7 +312,11 @@ test("the mm card and the cm input are two views of one stored measurement", asy
 
   await expect(page.locator("#recObsWaterLevelInput")).toHaveValue("3.5");
 
-  // ...and back the other way.
+  // ...and back the other way. #recObsWaterLevelInput lives inside
+  // #basicWaterRecordCard, which is no longer permanently visible on
+  // desktop -- open it first (see that card's own CSS comment).
+  await page.locator("#basicRecordWaterButton").click();
+  await expect(page.locator("#recObsWaterLevelInput")).toBeVisible();
   await page.locator("#recObsWaterLevelInput").fill("1.8");
   await expect(page.locator("#waterMgmtDepthInput")).toHaveValue("18");
   await expect(page.locator("#waterMgmtStatus")).toHaveText("参考範囲より 7〜17 mm 低い");
@@ -419,10 +423,24 @@ test("the reference range can be applied to 目標水位, but only on request", 
 test("今日の水門判断 keeps working alongside the new card", async ({ page }) => {
   await openBasic(page);
   await registerField(page, "圃場1");
+  // The exact "水を 2.3 cm 入れてください" message below only exists for a
+  // numeric-target stage -- pin one so this does not depend on which growth
+  // stage today's real date happens to calendar-estimate.
+  await page.locator("#waterMgmtStageSelect").selectOption("tillering");
+  // #recObsWaterLevelInput lives inside #basicWaterRecordCard, which is no
+  // longer permanently visible on desktop -- open it first.
+  await page.locator("#basicRecordWaterButton").click();
+  await expect(page.locator("#recObsWaterLevelInput")).toBeVisible();
   await page.locator("#recObsWaterLevelInput").fill("3.2");
   await page.locator("#recTargetWaterLevelInput").fill("5.5");
 
   await expect(page.locator("#waterHeroPrimary")).toHaveText("水を 2.3 cm 入れてください");
+  // #verdictBadge lives inside .gate-card, which is likewise no longer
+  // permanently visible -- a measurement now exists, so the map summary's
+  // button is in its "詳細を見る" state and opens it (see .gate-card's own
+  // CSS comment).
+  await expect(page.locator("#mapWaterSummaryButton")).toHaveText("詳細を見る");
+  await page.locator("#mapWaterSummaryButton").click();
   await expect(page.locator("#verdictBadge")).toBeVisible();
   await expect(page.locator("#waterManagementCard")).toHaveCount(1);
 });

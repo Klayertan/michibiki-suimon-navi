@@ -444,12 +444,13 @@
       font-weight: 800;
     }
 
-    /* Only ever shown on #basicWaterRecordCard while it carries
-       .basic-water-record-attached (desktop 基本モード's slide-down mode --
-       see that rule's own long comment); display:none everywhere else,
-       including on this same card in every other context (mobile/設定/
-       ドローン), where it stays a plain non-interactive summary label. */
-    .basic-water-record-close {
+    /* Shared close-button look for every card that slides down attached
+       below #mapWaterSummary on desktop 基本モード (#basicWaterRecordCard,
+       .gate-card) -- display:none by default; each card's own
+       .basic-*-attached rule turns it on only while that card is actually
+       floating, so it stays invisible in every other context (mobile/設定/
+       ドローン, or the card's own normal flowing position). */
+    .basic-attached-close {
       display: none;
       align-items: center;
       background: var(--panel, #fbfaf5);
@@ -465,8 +466,8 @@
       width: 28px;
     }
 
-    .basic-water-record-close:hover,
-    .basic-water-record-close:focus-visible {
+    .basic-attached-close:hover,
+    .basic-attached-close:focus-visible {
       background: #eaf3ec;
       border-color: var(--green);
       color: var(--text);
@@ -1989,7 +1990,54 @@
          close control too. Hidden everywhere else -- .basic-water-record-
          attached is desktop-basic-only, so this never appears in the normal
          (mobile/設定/ドローン) rendering of the same card. */
-      #basicWaterRecordCard.basic-water-record-attached .basic-water-record-close {
+      #basicWaterRecordCard.basic-water-record-attached .basic-attached-close {
+        display: block;
+        position: absolute;
+        top: 10px;
+        right: 10px;
+      }
+
+      /* .gate-card (今日の水門判断), attached below #mapWaterSummary the same
+         way #basicWaterRecordCard is -- see that rule's own long comment for
+         why position:fixed + a live --basic-summary-live-bottom top offset
+         instead of DOM nesting. Triggered by #mapWaterSummaryButton's
+         "詳細を見る" state (toggleAttachedGateCard()) rather than the old
+         scrollIntoView(.gate-card), which stopped reaching anything once the
+         card left the left rail's normal flow -- see the hide rule below.
+
+         Left-rail fallout: 水管理 (#waterManagementCard) sits directly after
+         .gate-card in the DOM and needs no reordering -- once .gate-card is
+         display:none it simply moves up into the slot .gate-card used to
+         occupy, immediately under 圃場の管理. That collapse is the entire
+         point: the farmer used to have to scroll past the full verdict card
+         to reach 生育ステージ; now both 圃場の管理 and 水管理 fit above the
+         fold, and the verdict is one click away on the map instead of a
+         permanent, always-open detail block down the left side. */
+      body[data-mode="basic"] .gate-card:not(.basic-gate-card-attached) {
+        display: none;
+      }
+
+      body[data-mode="basic"] .gate-card.basic-gate-card-attached {
+        position: fixed;
+        left: var(--basic-rail-left-clear);
+        top: var(--basic-summary-live-bottom, 200px);
+        width: min(400px, calc(100% - var(--basic-rail-left-clear) - var(--basic-rail-right-clear) - 12px));
+        margin: 0;
+        max-height: 0;
+        opacity: 0;
+        overflow: hidden;
+        pointer-events: none;
+        transition: max-height 0.28s ease, opacity 0.2s ease;
+      }
+
+      body[data-mode="basic"] .gate-card.basic-gate-card-attached.is-open {
+        max-height: min(600px, calc(100vh - var(--basic-summary-live-bottom, 200px) - 24px));
+        opacity: 1;
+        overflow-y: auto;
+        pointer-events: auto;
+      }
+
+      .gate-card.basic-gate-card-attached .basic-attached-close {
         display: block;
         position: absolute;
         top: 10px;
@@ -3199,6 +3247,12 @@
         </section>
 
         <section class="card gate-card" data-workspace="decision" data-mode="basic settings">
+          <!-- Desktop 基本モード only (see .basic-attached-close's own CSS
+               comment): closes the slide-down panel when this card is
+               attached below #mapWaterSummary. Invisible in every other
+               context this same card renders in (mobile/設定/ドローン, where
+               it stays a normal flowing left-rail section). -->
+          <button id="gateCardCloseButton" class="basic-attached-close" type="button" aria-label="閉じる">✕</button>
           <span class="eyebrow">今日の水門判断</span>
           <h2>気象と圃場の状況からの推奨</h2>
           <p id="decisionDataWarning" class="data-source-warning" role="status" aria-live="polite" hidden></p>
@@ -3703,11 +3757,11 @@
              基本モード still gets the card through data-mode. -->
         <details id="basicWaterRecordCard" class="card paddy-collapsible" data-workspace="survey" data-mode="basic settings" open hidden>
           <summary><span class="details-title">水位・観察を記録<span class="en">Mark observation</span></span></summary>
-          <!-- Desktop 基本モード only (see .basic-water-record-close's own
+          <!-- Desktop 基本モード only (see .basic-attached-close's own
                CSS comment): closes the slide-down panel when this card is
                attached below #mapWaterSummary. Invisible in every other
                context this same card renders in. -->
-          <button id="basicWaterRecordCloseButton" class="basic-water-record-close" type="button" aria-label="閉じる">✕</button>
+          <button id="basicWaterRecordCloseButton" class="basic-attached-close" type="button" aria-label="閉じる">✕</button>
           <div class="details-content">
             <div class="input-row">
               <label for="recObsTypeSelect">観測タイプ</label>
@@ -6862,6 +6916,9 @@
       if (!card) {
         return;
       }
+      // Both this card and .gate-card attach to the exact same spot below
+      // #mapWaterSummary -- only one can be open at a time or they'd overlap.
+      document.querySelector(".gate-card")?.classList.remove("is-open");
       card.classList.add("basic-water-record-attached");
       syncMapWaterSummaryReserve();
       // requestAnimationFrame: adding basic-water-record-attached (which
@@ -6908,6 +6965,45 @@
       }
     });
 
+    /**
+     * .gate-card (今日の水門判断) as a slide-down panel attached below
+     * #mapWaterSummary -- desktop 基本モード only, mirroring
+     * openAttachedWaterRecordCard() exactly (see that function's own
+     * comment). Triggered by #mapWaterSummaryButton's "詳細を見る" state.
+     */
+    function openAttachedGateCard() {
+      const card = document.querySelector(".gate-card");
+      if (!card) {
+        return;
+      }
+      // Mutual exclusion with #basicWaterRecordCard -- see that function's
+      // own comment; both attach to the same spot below #mapWaterSummary.
+      document.getElementById("basicWaterRecordCard")?.classList.remove("is-open");
+      card.classList.add("basic-gate-card-attached");
+      syncMapWaterSummaryReserve();
+      requestAnimationFrame(() => {
+        card.classList.add("is-open");
+      });
+    }
+
+    function toggleAttachedGateCard() {
+      const card = document.querySelector(".gate-card");
+      if (!card) {
+        return;
+      }
+      const alreadyOpen = card.classList.contains("basic-gate-card-attached")
+        && card.classList.contains("is-open");
+      if (alreadyOpen) {
+        card.classList.remove("is-open");
+        return;
+      }
+      openAttachedGateCard();
+    }
+
+    document.getElementById("gateCardCloseButton")?.addEventListener("click", () => {
+      document.querySelector(".gate-card")?.classList.remove("is-open");
+    });
+
     document.getElementById("mapWaterSummaryButton")?.addEventListener("click", () => {
       const field = (fieldAnnotationController?.fields || [])
         .find((candidate) => candidate.id === document.getElementById("basicActiveFieldSelect")?.value);
@@ -6919,7 +7015,12 @@
           // Same destination as 圃場の管理's own 水位を記録 button.
           document.getElementById("basicRecordWaterButton")?.click();
         }
+      } else if (isDesktopBasicMode()) {
+        toggleAttachedGateCard();
       } else {
+        // Mobile/設定/ドローン: .gate-card is still a normal flowing section,
+        // never display:none (see its own CSS rule's body[data-mode="basic"]
+        // scope), so scrolling to it still works exactly as before.
         document.querySelector(".gate-card")?.scrollIntoView({ behavior: "smooth", block: "start" });
       }
     });
