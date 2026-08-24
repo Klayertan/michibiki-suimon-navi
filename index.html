@@ -6288,6 +6288,40 @@
       return activeBoundary()?.points ?? [];
     }
 
+    /**
+     * Feeds 圃場解析デモ (paddyIntelligence) from whichever field is
+     * currently active app-wide, so a farmer who registers a field and picks
+     * it in 基本モード/ドローンモード sees its boundary there without a
+     * detour through 設定 → 測量チェック (the only other surface that used to
+     * write surveyedBoundary from a registered field -- see
+     * assuranceController's own onFieldChanged). activeBoundary() already
+     * prefers surveyedBoundary over demo data, so this is what actually makes
+     * "No field boundary loaded." go away for a field the farmer can already
+     * see drawn on the map.
+     */
+    function syncSurveyedBoundaryFromField(field) {
+      if (!field || !Array.isArray(field.coordinates) || field.coordinates.length < 3) {
+        return;
+      }
+      surveyedBoundary = field.coordinates.map(([lat, lon], index) => ({
+        id: `${field.id}:vertex-${index}`,
+        lat,
+        lon,
+        feature: "corner",
+        note: `圃場: ${field.name || field.id}`,
+        photoRef: ""
+      }));
+      refreshFieldOverlay();
+      paddyIntelligence?.refresh();
+    }
+
+    /** Looks up #basicActiveFieldSelect's current value and syncs it via syncSurveyedBoundaryFromField(). */
+    function syncSurveyedBoundaryForActiveField() {
+      const fieldId = document.getElementById("basicActiveFieldSelect")?.value;
+      const field = (fieldAnnotationController?.fields || []).find((candidate) => candidate.id === fieldId);
+      syncSurveyedBoundaryFromField(field);
+    }
+
     function polygonAreaSqm(points) {
       if (!Array.isArray(points) || points.length < 3) {
         return 0;
@@ -10082,6 +10116,7 @@
       renderDroneModeGate();
       loadTargetWaterLevelForActiveField();
       fetchLiveWeather();
+      syncSurveyedBoundaryForActiveField();
     });
     // Drone mode's own field picker (index.html:4346-4349) drives the exact
     // same #basicActiveFieldSelect cascade above -- via setActiveField, which
@@ -10523,7 +10558,9 @@
         // option list was just populated with the same value already
         // selected). Water-level restore has to run unconditionally here, or
         // a reload silently drops both the target and the current reading.
+        // 圃場解析デモ's boundary sync has the exact same gap.
         loadTargetWaterLevelForActiveField();
+        syncSurveyedBoundaryForActiveField();
       } catch (error) {
         console.error("Field report initialization failed", error);
         const warning = document.getElementById("reportMessage");
