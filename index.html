@@ -3859,6 +3859,15 @@
               </div>
               <div class="veg-actions">
                 <button id="selFeatureSaveButton" class="panel-button primary" type="button">保存</button>
+                <!-- Shown only for a field/track that has ALREADY been
+                     straightened once before -- see this button's own JS
+                     comment (renderSelectedFeature()) for why: the FIRST
+                     straightening stays the prominent 境界を直線化 button on
+                     the registered-fields card itself, but a farmer touching
+                     up an already-straightened boundary again is a rarer,
+                     more deliberate action that belongs behind 編集 instead
+                     of cluttering that card's button row indefinitely. -->
+                <button id="selFeatureStraightenButton" class="panel-button" type="button" hidden>境界を直線化</button>
                 <button id="selFeatureDeleteButton" class="panel-button danger" type="button">削除</button>
               </div>
               <p id="selFeatureMessage" class="meta" role="status" aria-live="polite"></p>

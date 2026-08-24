@@ -895,3 +895,59 @@ test("the advanced manual card in 詳細解析 still works and offers the same t
   await page.locator("#fieldCloseSaveAsTrackButton").click();
   await expect(page.locator("#fieldAnnotationSummaryTracks")).toHaveText("1");
 });
+
+// ---------------------------------------------------------------------------
+// 境界を直線化: standalone button on the first pass, tucked into 編集 after
+// ---------------------------------------------------------------------------
+
+test("境界を直線化 starts as its own button, then moves inside 編集 once the boundary has been straightened once", async ({ page }) => {
+  await openSurveyWorkspace(page);
+  await uploadNmea(page, TIGHT_LOOP_NMEA);
+  await page.locator("#fieldRegConfirmButton").click();
+
+  const fieldId = await page.evaluate(() => window.fieldAnnotationController.fields[0].id);
+  const straightenButton = page.locator(`button[data-id="${fieldId}"][data-action="straighten"]`);
+  const editButton = page.locator(`button[data-id="${fieldId}"][data-action="edit"]`);
+
+  // Never straightened yet: standalone button on the card, nothing in 編集.
+  await expect(straightenButton).toBeVisible();
+  await editButton.click();
+  await expect(page.locator("#selFeatureForm")).toBeVisible();
+  await expect(page.locator("#selFeatureStraightenButton")).toBeHidden();
+
+  // Actually straighten it (3 of TIGHT_LOOP_NMEA's 5 points as corners --
+  // enough to satisfy confirmBoundaryStraighten()'s >=3 floor).
+  await page.evaluate((id) => {
+    const controller = window.fieldAnnotationController;
+    const field = controller.fields.find((candidate) => candidate.id === id);
+    controller.beginBoundaryStraighten("field", field);
+    [0, 1, 2].forEach((index) => controller.toggleCornerIndex(index));
+    controller.confirmBoundaryStraighten();
+  }, fieldId);
+
+  // Standalone button is gone -- both because coordinates are now <=4
+  // (nothing left to straighten) AND because hasBeenStraightened is set.
+  await expect(straightenButton).toHaveCount(0);
+  expect(await page.evaluate((id) =>
+    window.fieldAnnotationController.fields.find((f) => f.id === id).properties.hasBeenStraightened,
+  fieldId)).toBe(true);
+
+  // A field that STILL has >4 vertices after being straightened once (e.g. a
+  // pentagon-shaped paddy) gets the button back, but inside 編集 this time,
+  // not as a second standalone button on the card.
+  await page.evaluate((id) => {
+    const controller = window.fieldAnnotationController;
+    const field = controller.fields.find((candidate) => candidate.id === id);
+    field.coordinates = [
+      [34.6548, 135.82975486320416],
+      [34.6548, 135.83027],
+      [34.654280457665195, 135.83027],
+      [34.6549, 135.8303],
+      [34.655, 135.8301]
+    ];
+    controller.renderAll();
+  }, fieldId);
+  await expect(straightenButton).toHaveCount(0);
+  await editButton.click();
+  await expect(page.locator("#selFeatureStraightenButton")).toBeVisible();
+});

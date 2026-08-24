@@ -112,7 +112,7 @@ const ELEMENT_IDS = [
   "fieldCloseWarning", "fieldCloseWarningText", "fieldCloseForceCloseButton", "fieldCloseSaveAsTrackButton", "fieldCloseCancelButton",
   // Selected-feature editor (shared by fields / tracks / water points / observations).
   "selFeatureEmpty", "selFeatureForm", "selFeatureTypeRow", "selFeatureTypeSelect", "selFeatureNameInput", "selFeatureIdInput",
-  "selFeatureMemoInput", "selFeatureRelatedFieldSelect", "selFeatureSaveButton", "selFeatureDeleteButton", "selFeatureMessage",
+  "selFeatureMemoInput", "selFeatureRelatedFieldSelect", "selFeatureSaveButton", "selFeatureStraightenButton", "selFeatureDeleteButton", "selFeatureMessage",
   "selFeatureObsTypeRow", "selFeatureObsTypeSelect", "selFeatureSeverityRow", "selFeatureSeveritySelect",
   // Legend / summary.
   "fieldAnnotationLegend", "fieldAnnotationSummaryFields", "fieldAnnotationSummaryTracks",
@@ -335,6 +335,9 @@ export class FieldAnnotationController {
 
     // Selected-feature editor.
     el.selFeatureSaveButton?.addEventListener("click", () => this.saveSelectedFeature());
+    el.selFeatureStraightenButton?.addEventListener("click", () => {
+      if (this.selected) this.beginBoundaryStraighten(this.selected.kind, this.selected.record);
+    });
     el.selFeatureDeleteButton?.addEventListener("click", () => this.deleteSelectedFeature());
 
     // Registered fields/logs panel (event delegation — rows are rebuilt on render).
@@ -1572,6 +1575,12 @@ export class FieldAnnotationController {
       record.properties.areaM2 = polygonAreaSquareMeters(straightened);
       record.properties.updatedAt = new Date().toISOString();
     }
+    // Drives the FIRST-time-only placement of the 境界を直線化 trigger --
+    // see buildRegisteredCard()'s and #selFeatureStraightenButton's own
+    // comments.
+    if (record.properties) {
+      record.properties.hasBeenStraightened = true;
+    }
     this.persist();
     this.endBoundaryStraighten();
     this.renderAll();
@@ -2022,7 +2031,12 @@ export class FieldAnnotationController {
     }
     // Straightening needs at least a triangle's worth of raw vertices to be
     // worth doing — a boundary already down to 3-4 points is already straight.
-    if (record.coordinates.length > 4) {
+    // Only offered here the FIRST time: once a boundary has already been
+    // straightened once (hasBeenStraightened), a repeat pass is a rarer,
+    // more deliberate touch-up that lives inside 編集 instead (see
+    // #selFeatureStraightenButton / renderSelectedFeature()) rather than
+    // permanently occupying a slot in this card's button row.
+    if (record.coordinates.length > 4 && !record.properties?.hasBeenStraightened) {
       actionDefs.push(["straighten", "境界を直線化"]);
     }
     actionDefs.forEach(([action, label]) => {
@@ -2118,6 +2132,19 @@ export class FieldAnnotationController {
     el.selFeatureNameInput.value = record.name || "";
     el.selFeatureIdInput.value = record.id || "";
     el.selFeatureMemoInput.value = record.properties?.memo || "";
+
+    // Second-and-later 境界を直線化 lives here rather than as a standalone
+    // button on the registered-fields card -- see this button's own markup
+    // comment in index.html. Same eligibility floor as that first button
+    // (buildRegisteredCard()): a boundary already down to <=4 points is
+    // already straight, so there is nothing left to gain from doing it again.
+    if (el.selFeatureStraightenButton) {
+      el.selFeatureStraightenButton.hidden = !(
+        (kind === "field" || kind === "track")
+        && Array.isArray(record.coordinates) && record.coordinates.length > 4
+        && record.properties?.hasBeenStraightened
+      );
+    }
 
     // The generic 種類 select only lists field/water-control types; an
     // observation uses its own type + severity selects instead.
