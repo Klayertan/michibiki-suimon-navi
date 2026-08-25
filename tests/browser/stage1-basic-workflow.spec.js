@@ -485,6 +485,27 @@ test("registering 田圃1/2/3 adds no repeated workflow clutter", async ({ page 
   await expect(page.locator(".workflow-step:visible")).toHaveCount(0);
 });
 
+test("a second NMEA upload shows its own GNSS points, even though registering the first one hid them", async ({ page }) => {
+  await openBasic(page);
+
+  // Registering 田圃1 hides the QZ1 point layer (see onFieldRegistered in
+  // index.html) so the map isn't cluttered with a track that is now a
+  // polygon. That hide is global checkbox state, not scoped to those specific
+  // points -- without the fix, it would silently also hide 田圃2's brand-new
+  // upload, which the farmer needs to see to pick START/END for it.
+  await uploadWalk(page);
+  await pickBoundaryPoint(page, "start", START_INDEX);
+  await pickBoundaryPoint(page, "end", END_CLOSED_INDEX);
+  await page.locator("#basicCreateFieldButton").click();
+  await page.locator("#basicFieldRegConfirmButton").click();
+  await expect(page.locator("#fieldAnnotationSummaryFields")).toHaveText("1");
+  await expect(page.locator("#showQz1Layer")).not.toBeChecked();
+
+  await uploadWalk(page);
+  await expect(page.locator("#showQz1Layer")).toBeChecked();
+  await expect(page.locator(".qz1-point")).toHaveCount(11);
+});
+
 // ---------------------------------------------------------------------------
 // Map
 // ---------------------------------------------------------------------------

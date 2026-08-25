@@ -9094,6 +9094,15 @@
       clearSurveyedGate();
       rebuildSurveyedBoundaryAndChannel();
       updateSummary();
+      // onFieldRegistered (below) unchecks this once the PREVIOUS upload's
+      // points turn into a field, decluttering the map. That hide is global
+      // state, not scoped to those specific points -- left alone, it would
+      // silently also hide THIS brand-new upload's points, which the farmer
+      // needs to see and tap to pick START/END for the field they are about
+      // to register. A fresh parse always means fresh points to look at.
+      if (!showQz1LayerInput.checked) {
+        showQz1LayerInput.checked = true;
+      }
       renderPoints();
       refreshFieldOverlay();
       if (assuranceController) {
