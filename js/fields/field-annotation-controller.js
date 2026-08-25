@@ -2135,13 +2135,20 @@ export class FieldAnnotationController {
 
     // Second-and-later 境界を直線化 lives here rather than as a standalone
     // button on the registered-fields card -- see this button's own markup
-    // comment in index.html. Same eligibility floor as that first button
-    // (buildRegisteredCard()): a boundary already down to <=4 points is
-    // already straight, so there is nothing left to gain from doing it again.
+    // comment in index.html. Deliberately NOT the >4-point floor
+    // buildRegisteredCard() uses for the first straightening: that floor
+    // means "not worth straightening AT ALL yet", but a re-straighten is
+    // requested precisely because the farmer wants to REDO their corner
+    // picks -- and most real paddies are quadrilaterals, so the common case
+    // is exactly 4 points after the first pass. Using the same floor here
+    // would make the button vanish for good the moment a farmer straightens
+    // an ordinary rectangular field, with no way back if they picked the
+    // wrong corners. The real floor is beginBoundaryStraighten()'s own
+    // (>=3 points, below which there is no polygon left to pick corners on).
     if (el.selFeatureStraightenButton) {
       el.selFeatureStraightenButton.hidden = !(
         (kind === "field" || kind === "track")
-        && Array.isArray(record.coordinates) && record.coordinates.length > 4
+        && Array.isArray(record.coordinates) && record.coordinates.length >= 3
         && record.properties?.hasBeenStraightened
       );
     }

@@ -932,6 +932,14 @@ test("境界を直線化 starts as its own button, then moves inside 編集 once
     window.fieldAnnotationController.fields.find((f) => f.id === id).properties.hasBeenStraightened,
   fieldId)).toBe(true);
 
+  // The common real case: most paddies are quadrilaterals, so straightening
+  // usually lands on exactly 3-4 points -- the button in 編集 must still be
+  // reachable even here, or a farmer who picked the wrong corners the first
+  // time has no way back. This is the exact >4-vs->=3 floor distinction
+  // renderSelectedFeature()'s own comment explains.
+  await editButton.click();
+  await expect(page.locator("#selFeatureStraightenButton")).toBeVisible();
+
   // A field that STILL has >4 vertices after being straightened once (e.g. a
   // pentagon-shaped paddy) gets the button back, but inside 編集 this time,
   // not as a second standalone button on the card.
