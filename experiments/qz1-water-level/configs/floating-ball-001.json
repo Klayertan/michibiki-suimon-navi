@@ -1,0 +1,15 @@
+{
+  "experiment": "floating-ball-001",
+  "stage": "floating-ball",
+  "sensor": "QZ1LE",
+  "reference_heights_mm": [0, 10, 20, 30, 50, 100],
+  "include_descending": true,
+  "location": "",
+  "operator": "",
+  "notes": "Stage 2: the tethered float on real water. reference_height_mm is the INDEPENDENTLY MEASURED water level (staff gauge / hook gauge), not a rig position. Record how the water level was measured and its own uncertainty here — the comparison is only as good as that reference. Run stage 1 first; this stage is not interpretable on its own.",
+  "sampling_configuration": {
+    "dwell_seconds": 300,
+    "settle_seconds": 60
+  },
+  "tolerance_mm": 20
+}

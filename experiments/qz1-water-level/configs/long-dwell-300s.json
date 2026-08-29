@@ -1,0 +1,15 @@
+{
+  "experiment": "vertical-displacement-300s",
+  "stage": "controlled-rig",
+  "sensor": "QZ1LE",
+  "reference_heights_mm": [0, 50, 100],
+  "include_descending": true,
+  "location": "",
+  "operator": "",
+  "notes": "Fewer heights, much longer dwells. Use when a 120 s run reported INSUFFICIENT because the samples were too correlated to contain two independent measurements — the fix for that is time, not filtering.",
+  "sampling_configuration": {
+    "dwell_seconds": 300,
+    "settle_seconds": 30
+  },
+  "tolerance_mm": 10
+}

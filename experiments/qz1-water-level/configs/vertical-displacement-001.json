@@ -1,0 +1,15 @@
+{
+  "experiment": "vertical-displacement-001",
+  "stage": "controlled-rig",
+  "sensor": "QZ1LE",
+  "reference_heights_mm": [0, 10, 20, 30, 50, 100],
+  "include_descending": true,
+  "location": "",
+  "operator": "",
+  "notes": "Stage 1: receiver on a rigid vertical reference. No water, no float. Fill in location/operator before the run; leave notes for anything that happened during it (cloud, obstruction, someone walking past the antenna).",
+  "sampling_configuration": {
+    "dwell_seconds": 120,
+    "settle_seconds": 15
+  },
+  "tolerance_mm": 10
+}
