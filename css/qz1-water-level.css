@@ -1,0 +1,249 @@
+/* QZ1 water-level experiment card.
+ *
+ * Visual weight is assigned by what the number MEANS, not by how exciting it
+ * is. The relative-displacement row is highlighted because it is the honest
+ * headline of this experiment; the calibrated-depth row is deliberately plain
+ * and, in the normal case, reads "表示できません" with the reason underneath.
+ * Making the depth look like the important number is precisely the design
+ * mistake this project must not make.
+ *
+ * Layout borrows .card / .kv / .rec-section from the existing stylesheet, so
+ * the card sits in the QZ1測量 workspace without a private layout system.
+ */
+
+.wlx-card .wlx-banner {
+  background: #fff7ed;
+  border-left: 4px solid #ea580c;
+  padding: 10px 12px;
+  margin: 0 0 12px;
+  font-size: 0.85rem;
+  line-height: 1.6;
+  border-radius: 0 4px 4px 0;
+}
+
+.wlx-card .wlx-banner strong {
+  color: #9a3412;
+}
+
+.wlx-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0;
+}
+
+.wlx-error {
+  color: #b91c1c;
+  font-size: 0.82rem;
+  margin: 6px 0 0;
+}
+
+/* The one row the operator should read first. */
+.wlx-card .kv.wlx-highlight {
+  background: #eff6ff;
+  border-radius: 4px;
+  padding: 4px 6px;
+  margin: 2px -6px;
+}
+
+.wlx-card .kv.wlx-highlight strong {
+  font-size: 1.05rem;
+}
+
+/* The refusal reason is normal body text, not an error: "no calibration yet"
+ * is the expected state of this project, not a fault. */
+.wlx-depth-note {
+  font-size: 0.78rem;
+  color: #475569;
+  margin: 2px 0 0;
+}
+
+.wlx-outcome {
+  font-weight: 600;
+  font-size: 0.9rem;
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  padding: 8px 10px;
+  margin: 10px 0;
+}
+
+/* The result table is fixed-width by construction (renderResultTable pads to
+ * column widths), so it must not be re-wrapped or proportionally spaced. */
+.wlx-result-table {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: 0.72rem;
+  line-height: 1.45;
+  overflow-x: auto;
+  white-space: pre;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  padding: 10px;
+  margin: 8px 0;
+}
+
+.wlx-warnings {
+  margin: 8px 0;
+  padding-left: 20px;
+  font-size: 0.8rem;
+  color: #92400e;
+}
+
+.wlx-warnings:empty {
+  display: none;
+}
+
+.wlx-plots {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.wlx-figure {
+  margin: 0;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  padding: 6px;
+  overflow-x: auto;
+}
+
+.wlx-figure svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  min-width: 480px;
+}
+
+@media (max-width: 700px) {
+  .wlx-buttons .panel-button {
+    flex: 1 1 45%;
+  }
+}
+
+/* --------------------------------------------------------------------------
+ * Sensor identity + field assignment section.
+ *
+ * The detected field gets the same .wlx-highlight treatment the relative
+ * displacement does, because it is the one automatic conclusion in this card
+ * a farmer acts on. The assigned field beneath it is deliberately plain: it
+ * changes only when a person presses a button, so it needs no emphasis to be
+ * trusted.
+ * ------------------------------------------------------------------------ */
+
+.wlx-subheading {
+  margin: 12px 0 4px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #64748b;
+  text-transform: uppercase;
+}
+
+.wlx-subheading .en {
+  margin-left: 6px;
+  font-weight: 500;
+  text-transform: none;
+  color: #94a3b8;
+}
+
+.wlx-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
+.wlx-dot-online {
+  background: #16a34a;
+}
+
+.wlx-dot-offline {
+  background: #cbd5e1;
+}
+
+/* Overlapping polygons: the candidates are listed rather than resolved. */
+.wlx-ambiguous {
+  color: #92400e;
+  font-size: 0.78rem;
+  margin: 2px 0 0;
+}
+
+.wlx-ambiguous[hidden] {
+  display: none;
+}
+
+.wlx-movement-warning {
+  background: #fef2f2;
+  border-left: 4px solid #dc2626;
+  border-radius: 0 4px 4px 0;
+  padding: 8px 10px;
+  margin: 10px 0;
+  font-size: 0.82rem;
+}
+
+.wlx-movement-warning[hidden] {
+  display: none;
+}
+
+.wlx-movement-warning strong {
+  color: #991b1b;
+}
+
+.wlx-movement-warning .meta {
+  margin: 4px 0 0;
+}
+
+.wlx-field-sensors {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.wlx-field-sensors[hidden] {
+  display: none;
+}
+
+.wlx-debug-details {
+  margin-top: 10px;
+  font-size: 0.78rem;
+}
+
+.wlx-debug-details > summary {
+  cursor: pointer;
+  color: #64748b;
+}
+
+.wlx-sensor-debug {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: 0.7rem;
+  line-height: 1.5;
+  white-space: pre;
+  overflow-x: auto;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  padding: 8px;
+  margin: 6px 0 0;
+}
+
+/* Leaflet popup for the float marker. Narrow enough not to swallow the map
+ * on a phone; the rows reuse the card's own .kv layout. */
+.wlx-sensor-popup {
+  min-width: 240px;
+  font-size: 0.8rem;
+}
+
+.wlx-sensor-popup .kv {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 2px 0;
+}
+
+.wlx-sensor-popup .kv span {
+  color: #475569;
+}

@@ -43,6 +43,12 @@ export const SCOPED_STORAGE_KEYS = [
   // now would make those readings unreachable for a signed-in user without a
   // migration step. See docs/PADDY_WATER_MANAGEMENT.md.)
   "suimonNaviFieldGrowthStageV1",
+  // QZ1 floating-sensor registry: device ids and which paddy each one is
+  // assigned to. New key, so namespacing it costs nothing -- there is no
+  // pre-existing unprefixed value for a signed-in farmer to lose. It holds
+  // field IDs, never field geometry; the boundaries stay in
+  // suimonNaviFieldAnnotationsV2, which remains the only field store.
+  "suimonNaviFloatingSensorsV1",
   // Cloud sync bookkeeping (cloud ids, last-synced stamps, pending queue).
   "suimonNaviCloudSyncV1"
 ];

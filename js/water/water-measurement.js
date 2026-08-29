@@ -120,7 +120,14 @@ export const MEASUREMENT_SOURCES = {
   manual: { id: "manual", labelJa: "手入力", labelEn: "Manual entry" },
   realsense: { id: "realsense", labelJa: "RealSense計測", labelEn: "RealSense depth camera" },
   sensor: { id: "sensor", labelJa: "水位センサ", labelEn: "Water-level sensor" },
-  drone: { id: "drone", labelJa: "ドローン観測", labelEn: "Drone observation" }
+  drone: { id: "drone", labelJa: "ドローン観測", labelEn: "Drone observation" },
+  // Experimental. A depth carrying this source was DERIVED from a GNSS
+  // altitude change on a tethered float, via an explicit calibration
+  // (js/qz1-water-level/calibration.js) — it is not a depth anyone measured.
+  // The label says so on purpose: nothing may present it as an ordinary
+  // reading until the vertical-displacement experiment supports it.
+  // See docs/qz1-floating-water-level/EXPERIMENT.md.
+  "qz1-float": { id: "qz1-float", labelJa: "QZ1浮体（実験・要検証）", labelEn: "QZ1 float (experimental, unvalidated)" }
 };
 
 /** A reading older than this is shown with a "confirm on site" warning. */

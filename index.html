@@ -18,6 +18,7 @@
   <link rel="stylesheet" href="css/drone.css">
   <link rel="stylesheet" href="css/gamepad.css">
   <link rel="stylesheet" href="css/pilot.css">
+  <link rel="stylesheet" href="css/qz1-water-level.css">
   <style>
     * {
       box-sizing: border-box;
@@ -4659,6 +4660,190 @@
           </div>
         </details>
 
+        <!-- QZ1 水位実験 (EXPERIMENTAL).
+             Settings-only, in the QZ1測量 workspace, next to the existing
+             field-recording card: it drives the SAME serial connection that
+             card opens (index.html forwards each live fix through
+             waterLevelExperimentController.ingestLiveFix) rather than opening
+             a second one. It is not in 基本モード and must not be: nothing
+             here is a farming instrument yet, and the whole card exists to
+             find out whether it could ever become one.
+             See docs/qz1-floating-water-level/. -->
+        <details id="waterLevelExperimentCard" class="card paddy-collapsible wlx-card" data-workspace="survey" data-mode="settings" hidden>
+          <summary><span class="details-title">QZ1 水位実験<span class="en">QZ1 water-level experiment</span></span></summary>
+          <div id="wlxPanel" class="details-content">
+            <p class="wlx-banner">
+              <strong>実験機能です。</strong>
+              GNSSの標高から水位変化を読み取れるかどうかを<em>調べるため</em>の道具であり、
+              読み取れることを前提にした機能ではありません。
+              ここに出る数値は水深ではありません。ミリメートル精度は主張していません。
+            </p>
+
+
+            <!-- Sensor identity and field assignment.
+                 Deliberately the FIRST section of this card: installing a
+                 float starts with "which device is this and which paddy is it
+                 in", and that question is answerable from horizontal GNSS
+                 today, whatever the altitude experiment below eventually
+                 concludes. The two are independent — see
+                 js/qz1-water-level/sensor-field-controller.js. -->
+            <section class="rec-section wlx-sensor-section">
+              <h3 class="rec-section-title">浮体センサ<span class="en">Float sensor</span></h3>
+              <p class="meta">
+                センサは自分がどの圃場にあるかを知りません。スイスイナビが、登録済みの圃場ポリゴンと
+                GNSS位置を照合して判定します。確定（割り当て）は人が一度だけ行います。
+              </p>
+
+              <div class="input-row">
+                <label for="wlxSensorIdInput">センサID</label>
+                <input id="wlxSensorIdInput" type="text" placeholder="QZ1-FLOAT-001" autocomplete="off" spellcheck="false">
+              </div>
+              <div class="wlx-buttons">
+                <button id="wlxSensorRegisterButton" class="panel-button" type="button">センサを登録</button>
+              </div>
+              <div class="kv">
+                <span>状態</span>
+                <strong><span id="wlxSensorOnlineDot" class="wlx-dot wlx-dot-offline"></span><span id="wlxSensorOnlineLabel">未登録・受信なし</span></strong>
+              </div>
+
+              <h4 class="wlx-subheading">GNSS</h4>
+              <div class="kv"><span>緯度</span><strong id="wlxSensorLatitude">—</strong></div>
+              <div class="kv"><span>経度</span><strong id="wlxSensorLongitude">—</strong></div>
+              <div class="kv"><span>標高</span><strong id="wlxSensorAltitude">—</strong></div>
+              <div class="kv"><span>最終受信</span><strong id="wlxSensorLastSeen">—</strong></div>
+
+              <h4 class="wlx-subheading">圃場<span class="en">Field</span></h4>
+              <div class="kv wlx-highlight"><span>検出圃場（自動）</span><strong id="wlxDetectedField">—（測位待ち）</strong></div>
+              <p class="meta wlx-ambiguous" id="wlxAmbiguousList" hidden></p>
+              <div class="kv"><span>検出一貫性<span class="en">Detection consistency</span></span><strong id="wlxDetectionConfidence">—</strong></div>
+              <div class="kv"><span>判定に使ったサンプル</span><strong id="wlxDetectionSamples">—</strong></div>
+              <div class="kv"><span>割り当て圃場（確定）</span><strong id="wlxAssignedField">—</strong></div>
+              <div class="kv"><span>割り当て状態</span><strong id="wlxAssignmentStatus">未割り当て</strong></div>
+
+              <div class="wlx-buttons">
+                <button id="wlxAssignButton" class="panel-button primary" type="button" disabled>この圃場に割り当てる</button>
+                <button id="wlxUnassignButton" class="panel-button" type="button" disabled>割り当てを解除</button>
+              </div>
+              <p class="meta" id="wlxSensorMessage" role="status" aria-live="polite"></p>
+
+              <!-- Sustained mismatch only. A locked assignment is never
+                   changed automatically; this is a prompt for a person. -->
+              <div id="wlxMovementWarning" class="wlx-movement-warning" hidden>
+                <strong>⚠ センサが移動した可能性があります</strong>
+                <p class="meta" id="wlxMovementDetail"></p>
+              </div>
+
+              <div id="wlxFieldSensorList" class="wlx-field-sensors" hidden></div>
+
+              <details class="wlx-debug-details">
+                <summary>検出の内訳（デバッグ）</summary>
+                <pre id="wlxSensorDebug" class="wlx-sensor-debug"></pre>
+              </details>
+            </section>
+
+            <section class="rec-section">
+              <h3 class="rec-section-title">実験設定<span class="en">Design</span></h3>
+              <div class="input-row">
+                <label for="wlxExperimentId">実験ID</label>
+                <input id="wlxExperimentId" type="text" placeholder="vertical-displacement-001">
+              </div>
+              <div class="input-row">
+                <label for="wlxStageSelect">段階</label>
+                <select id="wlxStageSelect">
+                  <option value="controlled-rig" selected>① 固定治具で受信機を上下（水なし）</option>
+                  <option value="floating-ball">② 浮体ブイ（実水面・別途実測が必要）</option>
+                </select>
+              </div>
+              <div class="input-row">
+                <label for="wlxSensorSelect">受信機</label>
+                <select id="wlxSensorSelect">
+                  <option value="QZ1" selected>QZ1</option>
+                  <option value="QZ1LE">QZ1LE</option>
+                </select>
+              </div>
+              <div class="input-row">
+                <label for="wlxHeightsInput">基準高さ (mm)</label>
+                <input id="wlxHeightsInput" type="text" inputmode="numeric" placeholder="0, 10, 20, 30, 50, 100">
+              </div>
+              <div class="input-row">
+                <label for="wlxDwellSelect">各段の滞在時間</label>
+                <select id="wlxDwellSelect"></select>
+              </div>
+              <div class="input-row">
+                <label for="wlxSettleInput">整定時間 (s・冒頭を除外)</label>
+                <input id="wlxSettleInput" type="number" min="0" step="1" value="15">
+              </div>
+              <div class="input-row">
+                <label for="wlxToleranceInput">許容誤差 (mm)</label>
+                <input id="wlxToleranceInput" type="number" min="1" step="1" value="10">
+              </div>
+              <label class="rec-field-mode-toggle">
+                <input id="wlxDescendingToggle" type="checkbox" checked>
+                復路（下降）も測る — ドリフトの確認になります
+              </label>
+              <p class="meta" id="wlxPlanSummary">—</p>
+              <p class="wlx-error" id="wlxConfigError" hidden></p>
+            </section>
+
+            <section class="rec-section">
+              <h3 class="rec-section-title">実行<span class="en">Run</span></h3>
+              <p class="meta">
+                「QZ1に接続」で受信機がつながっている必要があります（上の「圃場を測る」カードと同じ接続を使います）。
+                各段は<strong>「位置に到達」を押してから</strong>時間を数え始めます。移動中のデータはどの段にも含めません。
+              </p>
+              <div class="wlx-buttons">
+                <button id="wlxStartButton" class="panel-button primary" type="button">実験を開始</button>
+                <button id="wlxConfirmButton" class="panel-button" type="button" disabled>位置に到達</button>
+                <button id="wlxSkipButton" class="panel-button" type="button" disabled>この段を早めに終える</button>
+                <button id="wlxAbortButton" class="panel-button danger" type="button" disabled>中止</button>
+              </div>
+              <div class="kv"><span>状態</span><strong id="wlxRunState">未開始</strong></div>
+              <div class="kv"><span>いま置くべき高さ</span><strong id="wlxCurrentTarget">—</strong></div>
+              <div class="kv"><span>残り時間</span><strong id="wlxCountdown">—</strong></div>
+              <div class="kv"><span>進捗</span><strong id="wlxStepProgress">—</strong></div>
+              <div class="kv"><span>サンプル数</span><strong id="wlxStepSamples">—</strong></div>
+              <p class="meta" id="wlxMessage" role="status" aria-live="polite"></p>
+            </section>
+
+            <!-- Three quantities, three rows, three labels. They are NOT the
+                 same number at different stages of processing and the card
+                 never lets them look like it. -->
+            <section class="rec-section">
+              <h3 class="rec-section-title">ライブ表示<span class="en">Live</span></h3>
+              <div class="kv"><span>Fix</span><strong id="wlxLiveFix">—</strong></div>
+              <div class="kv"><span>衛星数</span><strong id="wlxLiveSatellites">—</strong></div>
+              <div class="kv"><span>HDOP</span><strong id="wlxLiveHdop">—</strong></div>
+              <div class="kv"><span>① 生のGNSS標高</span><strong id="wlxLiveRawAltitude">—</strong></div>
+              <div class="kv"><span>基準（0mm）の標高</span><strong id="wlxLiveBaseline">—</strong></div>
+              <div class="kv wlx-highlight"><span>② 相対変位（水深ではありません）</span><strong id="wlxLiveRelative">—</strong></div>
+              <div class="kv"><span>③ 較正済み水深</span><strong id="wlxLiveDepth">表示できません</strong></div>
+              <p class="meta wlx-depth-note" id="wlxLiveDepthNote"></p>
+            </section>
+
+            <section class="rec-section">
+              <h3 class="rec-section-title">解析<span class="en">Analysis</span></h3>
+              <div class="input-row">
+                <label for="wlxFilterSelect">フィルタ</label>
+                <select id="wlxFilterSelect"></select>
+              </div>
+              <p class="meta">
+                フィルタは結果と一緒に必ず記録されます。生データは書き換えません。
+                平滑化は見た目のばらつきを減らしますが、統計的な検出力は上がりません（有効サンプル数が減ります）。
+              </p>
+              <div class="wlx-buttons">
+                <button id="wlxAnalyzeButton" class="panel-button primary" type="button" disabled>解析する</button>
+                <button id="wlxExportCsvButton" class="panel-button" type="button" disabled>CSV・メタデータを保存</button>
+                <button id="wlxExportHtmlButton" class="panel-button" type="button" disabled>レポート(HTML)</button>
+                <button id="wlxExportJsonButton" class="panel-button" type="button" disabled>解析結果(JSON)</button>
+              </div>
+              <p class="wlx-outcome" id="wlxOutcome"></p>
+              <pre id="wlxResultTable" class="wlx-result-table"></pre>
+              <ul id="wlxWarnings" class="wlx-warnings"></ul>
+              <div id="wlxPlots" class="wlx-plots"></div>
+            </section>
+          </div>
+        </details>
+
         <!-- Drone Mode's own gate: Stage 2 must never run without a Stage 1
              field, and must visibly reuse that field's polygon/area rather
              than redrawing one. data-workspace is intentionally omitted --
@@ -5496,6 +5681,8 @@
     let assuranceController = null;
     let vegetationController = null;
     let recordingController = null;
+    let waterLevelExperimentController = null;
+    let sensorFieldController = null;
     let fieldAnnotationController = null;
     let fieldReportController = null;
     let droneController = null;
@@ -9805,6 +9992,21 @@
         }
       }
       recordingController?.ingestSerialLine({ rawLine: line, looksLikeGga: isGgaShaped, point, noFix });
+      // Second consumer of the same fix. The experiment card never opens its
+      // own port: this is the only serial pipeline on the page, and the card
+      // is a listener on it. `point` is null for a sentence that produced no
+      // fix, and the controller ignores those.
+      if (point) {
+        const receivedAtMs = Date.now();
+        waterLevelExperimentController?.ingestLiveFix(point, receivedAtMs, line);
+        // The SAME parsed position, handed to the field detector. Two
+        // independent consumers, one parse: altitude analysis above, and
+        // latitude/longitude -> which registered paddy contains this float
+        // below. Neither depends on the other, so field association keeps
+        // working even if the altitude experiment concludes that GNSS height
+        // cannot resolve a water-level change.
+        sensorFieldController?.ingestLiveFix(point, receivedAtMs);
+      }
     }
 
     function scheduleLiveRender() {
@@ -10689,6 +10891,42 @@
         console.error("Field recording initialization failed", error);
         const warning = document.getElementById("recMessage");
         if (warning) warning.textContent = `フィールド記録を初期化できませんでした: ${error.message}`;
+      }
+      try {
+        // QZ1 water-level experiment (settings-only, QZ1測量 workspace).
+        // Optional in the strongest sense: if it fails to load, nothing else
+        // on the page changes -- it is a research instrument bolted onto the
+        // existing serial pipeline, not part of any farming workflow.
+        const { WaterLevelExperimentController } = await import("./js/qz1-water-level/experiment-controller.js");
+        waterLevelExperimentController = new WaterLevelExperimentController();
+        waterLevelExperimentController.mount();
+        window.waterLevelExperimentController = waterLevelExperimentController;
+      } catch (error) {
+        console.error("QZ1 water-level experiment initialization failed", error);
+        const warning = document.getElementById("wlxMessage");
+        if (warning) warning.textContent = `水位実験カードを初期化できませんでした: ${error.message}`;
+      }
+      try {
+        // QZ1 float identity + automatic field detection. Mounted after the
+        // field controller so `getFields` can read the farmer's registered
+        // paddies, and after the experiment controller so the map popup can
+        // borrow its relative-displacement readout for display.
+        const { SensorFieldController } = await import("./js/qz1-water-level/sensor-field-controller.js");
+        sensorFieldController = new SensorFieldController({
+          map,
+          // The single existing field store. This milestone adds no second
+          // field database: detection reads the same polygons the farmer
+          // registered in 圃場データ.
+          getFields: () => fieldAnnotationController?.fields ?? [],
+          storage: accountScopedStorage,
+          getRelativeDisplacementMm: () => waterLevelExperimentController?.currentRelativeDisplacementMm() ?? null
+        });
+        sensorFieldController.mount();
+        window.sensorFieldController = sensorFieldController;
+      } catch (error) {
+        console.error("QZ1 float sensor/field detection initialization failed", error);
+        const warning = document.getElementById("wlxSensorMessage");
+        if (warning) warning.textContent = `センサ・圃場検出を初期化できませんでした: ${error.message}`;
       }
       try {
         // The drone panel is optional: it needs the local MAVLink backend

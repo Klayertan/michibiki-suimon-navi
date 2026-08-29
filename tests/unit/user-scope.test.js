@@ -102,6 +102,10 @@ test("every user-data key is covered", () => {
     "suimonNaviFieldAnnotationsV2",
     "suimonNaviTargetWaterLevelV1",
     "suimonNaviFieldGrowthStageV1",
+    // Which QZ1 float is assigned to which of THIS farmer's paddies. Two
+    // farmers sharing a browser must not inherit each other's sensor
+    // assignments any more than they inherit each other's fields.
+    "suimonNaviFloatingSensorsV1",
     "suimonNaviCloudSyncV1"
   ]);
 });
