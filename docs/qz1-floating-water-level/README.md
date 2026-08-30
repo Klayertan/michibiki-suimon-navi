@@ -97,6 +97,8 @@ paddy-003（北の田）
 | [HARDWARE.md](HARDWARE.md) | 浮体の構造、材料、防水、アンテナ配置、係留ケーブル |
 | [EXPERIMENT.md](EXPERIMENT.md) | 実験手順（第1段階：固定治具／第2段階：浮体） |
 | [SENSOR_FIELD_ASSIGNMENT.md](SENSOR_FIELD_ASSIGNMENT.md) | センサID・圃場の自動判定・割り当て・移動検知 |
+| [SENSOR_MANAGEMENT.md](SENSOR_MANAGEMENT.md) | 水位センサーの登録・設定・較正・データ表示（実装/未実装の区別つき） |
+| [PLATFORM_SUPPORT.md](PLATFORM_SUPPORT.md) | 端末・ブラウザ別の接続方法。正直な対応表 |
 
 ## すぐ試す（合成データ）
 
@@ -124,6 +126,7 @@ node experiments/qz1-water-level/scripts/analyze-experiment.mjs   --nmea tests/f
 | ソフトウェア | 実装済み・単体テスト済み（`npm test`） |
 | 合成データでの検証 | 済み（コードの検証であって、ハードウェアの検証ではありません） |
 | センサ同一性・圃場判定 | 実装済み・単体テスト済み・合成位置でUI確認済み（実機の測位では未検証） |
+| 水位センサー管理UI | 実装済み（登録・設定・割り当て・較正の門番）。接続はシリアルとファイル読込のみ実装 |
 | **実機実験** | **未実施** — [EXPERIMENT.md](EXPERIMENT.md) の手順が丸ごと残っています |
 | 浮体プロトタイプ | 未製作 |
 | 較正 | 実験が裏付けるまで、水深表示は仕様として拒否されます |

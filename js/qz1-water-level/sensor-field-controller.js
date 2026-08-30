@@ -169,7 +169,16 @@ export class SensorFieldController {
     const longitude = finiteOrNull(point.lon);
     const altitudeM = finiteOrNull(point.altitude);
 
-    this.lastFix = { latitude, longitude, altitudeM, atMs: receivedAtMs };
+    // Quality fields travel with the fix so the management card can apply a
+    // sensor's configured gate without re-parsing anything. finiteOrNull for
+    // the same reason as above: a receiver that omits HDOP has no HDOP, and
+    // 0 would read as a perfect one.
+    this.lastFix = {
+      latitude, longitude, altitudeM, atMs: receivedAtMs,
+      fixQuality: finiteOrNull(point.fixQuality),
+      satellites: finiteOrNull(point.satellites),
+      hdop: finiteOrNull(point.hdop)
+    };
 
     const fields = this.currentFields();
     this.resetWindowIfFieldsChanged(fields);
@@ -254,10 +263,17 @@ export class SensorFieldController {
       latitude: this.lastFix?.latitude ?? null,
       longitude: this.lastFix?.longitude ?? null,
       altitudeM: this.lastFix?.altitudeM ?? null,
+      fixQuality: this.lastFix?.fixQuality ?? null,
+      satellites: this.lastFix?.satellites ?? null,
+      hdop: this.lastFix?.hdop ?? null,
       lastSeenAtMs: this.lastFix?.atMs ?? null,
       online: this.isOnline(nowMs),
       detectedFieldId: summary?.detectedFieldId ?? null,
-      fieldDetectionConfidence: summary?.confidence ?? null,
+      // Null, not 0, when the window is empty. A window with no samples has
+      // not measured 0% agreement -- it has measured nothing, and "0%" on a
+      // freshly registered sensor reads as a failed detection rather than an
+      // absent one.
+      fieldDetectionConfidence: summary && summary.sampleCount > 0 ? summary.confidence : null,
       detectionStatus: this.lastDetection?.status ?? null,
       candidateFieldIds: this.lastDetection?.fieldIds ?? [],
       assignedFieldId: sensor?.assignedFieldId ?? null,

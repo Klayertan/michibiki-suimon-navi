@@ -3191,6 +3191,15 @@
                 <div class="kv"><span>観察メモ</span><strong id="basicFieldObservations">—</strong></div>
               </div>
             </div>
+
+            <!-- The field side of the sensor pairing. The canonical
+                 relationship is sensor.assignedFieldId; this is a computed
+                 reverse lookup, never a second stored copy, so the two views
+                 cannot disagree. Rendered by renderFieldSensorPairing(). -->
+            <div id="fieldSensorPairing" class="field-sensor-pairing" hidden>
+              <span class="basic-field-group-title">水位センサー</span>
+              <div id="fieldSensorPairingBody"></div>
+            </div>
             <div class="veg-actions">
               <button id="basicRecordWaterButton" class="panel-button" type="button" disabled>水位を記録</button>
               <button id="basicAddWaterPointButton" class="panel-button" type="button" disabled>水管理ポイントを追加</button>
@@ -3696,6 +3705,254 @@
             <p class="meta">
               圃場・水管理ポイント・観察メモ・目標水位はクラウドに同期されます。生のNMEAログとフィールド記録セッションはこの端末にのみ保存されます（サイズが大きいため）。
             </p>
+          </div>
+        </details>
+
+
+        <!-- 水位センサー — device management.
+             Lives in the 圃場データ workspace because pairing a sensor to a
+             paddy is a field operation, and because the farmer's journey ends
+             with "圃場データで水位を見る". One card with four mutually
+             exclusive views (list / add / settings / data) rather than four
+             permanently visible panels: the map has to stay usable, and the
+             normal view only needs to answer which sensor, which field,
+             connected, current reading, healthy.
+             See docs/qz1-floating-water-level/SENSOR_MANAGEMENT.md. -->
+        <details id="waterSensorCard" class="card paddy-collapsible wsm-card" data-workspace="fields" data-mode="settings" open hidden>
+          <summary><span class="details-title">水位センサー<span class="en">Water-level sensors</span></span></summary>
+          <div class="details-content">
+
+            <!-- ============================= LIST ============================= -->
+            <div id="wsmListView">
+              <div class="wsm-list-header">
+                <p class="meta">
+                  QZ1/QZ1LEを水位センサーとして登録し、圃場と対応づけます。
+                  センサーは自分がどの圃場にあるかを知りません — GNSS位置から候補を提示し、確定は人が行います。
+                </p>
+                <button id="wsmAddButton" class="panel-button primary" type="button">＋ センサーを追加</button>
+              </div>
+
+              <p id="wsmEmptyState" class="wsm-empty" hidden>
+                登録済みの水位センサーはありません。
+              </p>
+              <div id="wsmSensorList" class="wsm-sensor-list" role="list"></div>
+
+              <!-- Honest platform matrix. Collapsed: it answers a question the
+                   farmer only asks when something is missing. -->
+              <details class="wsm-platform-details">
+                <summary>この端末で使える接続方法<span class="en">Available on this device</span></summary>
+                <div id="wsmPlatformMatrix" class="wsm-platform-matrix"></div>
+                <p class="meta" id="wsmPlatformNote"></p>
+              </details>
+            </div>
+
+            <!-- ============================ WIZARD ============================ -->
+            <div id="wsmWizardView" hidden>
+              <div class="wsm-view-header">
+                <button id="wsmWizardBackButton" class="panel-button wsm-back" type="button">← 一覧へ戻る</button>
+                <h3 class="wsm-view-title">水位センサーを追加</h3>
+              </div>
+              <p class="meta" id="wsmWizardStepLabel" role="status" aria-live="polite"></p>
+
+              <!-- Step 1: identity -->
+              <section class="wsm-step" id="wsmStep1">
+                <h4 class="wsm-subheading">1. センサーの識別<span class="en">Device identity</span></h4>
+                <div class="input-row">
+                  <label for="wsmNewSensorId">センサーID</label>
+                  <input id="wsmNewSensorId" type="text" autocomplete="off" spellcheck="false" placeholder="QZ1-FLOAT-001">
+                </div>
+                <p class="meta">機器そのものの固定IDです。表示名や割当圃場を変えても変わりません。</p>
+                <div class="input-row">
+                  <label for="wsmNewDisplayName">表示名（任意）</label>
+                  <input id="wsmNewDisplayName" type="text" autocomplete="off" placeholder="田圃1 水位センサー">
+                </div>
+                <div class="input-row">
+                  <label for="wsmNewDeviceModel">機種</label>
+                  <select id="wsmNewDeviceModel"></select>
+                </div>
+              </section>
+
+              <!-- Step 2: connection -->
+              <section class="wsm-step" id="wsmStep2" hidden>
+                <h4 class="wsm-subheading">2. 接続方法<span class="en">Data source</span></h4>
+                <p class="meta">この端末とこの機種で実際に使える方法のみ選べます。</p>
+                <div id="wsmWizardTransports" class="wsm-transport-options"></div>
+              </section>
+
+              <!-- Step 3: field assignment -->
+              <section class="wsm-step" id="wsmStep3" hidden>
+                <h4 class="wsm-subheading">3. 圃場の割り当て<span class="en">Field assignment</span></h4>
+                <div id="wsmWizardSuggestion" class="wsm-suggestion" hidden>
+                  <p class="meta">現在位置から推定</p>
+                  <div class="kv"><span>候補圃場</span><strong id="wsmWizardSuggestedField">—</strong></div>
+                  <div class="kv"><span>検出一貫性</span><strong id="wsmWizardSuggestedConsistency">—</strong></div>
+                  <button id="wsmWizardUseSuggestion" class="panel-button" type="button">この圃場を使う</button>
+                </div>
+                <div class="input-row">
+                  <label for="wsmWizardFieldSelect">割当圃場</label>
+                  <select id="wsmWizardFieldSelect"></select>
+                </div>
+                <p class="meta">あとから変更できます。未設定のままでも登録できます。</p>
+              </section>
+
+              <!-- Step 4: water-level configuration -->
+              <section class="wsm-step" id="wsmStep4" hidden>
+                <h4 class="wsm-subheading">4. 水位の設定<span class="en">Water-level configuration</span></h4>
+                <div class="input-row">
+                  <label for="wsmWizardFilterProfile">フィルタ</label>
+                  <select id="wsmWizardFilterProfile"></select>
+                </div>
+                <div class="input-row">
+                  <label for="wsmWizardMinSatellites">最小衛星数</label>
+                  <input id="wsmWizardMinSatellites" type="number" min="0" step="1">
+                </div>
+                <div class="input-row">
+                  <label for="wsmWizardMaxHdop">HDOP上限</label>
+                  <input id="wsmWizardMaxHdop" type="number" min="0.1" step="0.1">
+                </div>
+                <p class="meta">
+                  較正は登録後に行います。較正するまで絶対水深は表示されません（相対変位のみ）。
+                </p>
+              </section>
+
+              <!-- Step 5: review -->
+              <section class="wsm-step" id="wsmStep5" hidden>
+                <h4 class="wsm-subheading">5. 確認<span class="en">Review</span></h4>
+                <div id="wsmWizardReview" class="wsm-review"></div>
+              </section>
+
+              <p class="wsm-error" id="wsmWizardError" hidden role="alert"></p>
+              <div class="wsm-buttons">
+                <button id="wsmWizardPrevButton" class="panel-button" type="button">戻る</button>
+                <button id="wsmWizardNextButton" class="panel-button primary" type="button">次へ</button>
+                <button id="wsmWizardFinishButton" class="panel-button primary" type="button" hidden>登録する</button>
+              </div>
+            </div>
+
+            <!-- =========================== SETTINGS =========================== -->
+            <div id="wsmSettingsView" hidden>
+              <div class="wsm-view-header">
+                <button id="wsmSettingsBackButton" class="panel-button wsm-back" type="button">← 一覧へ戻る</button>
+                <h3 class="wsm-view-title" id="wsmSettingsTitle">センサー設定</h3>
+              </div>
+
+              <section class="wsm-step">
+                <h4 class="wsm-subheading">基本設定<span class="en">Basic</span></h4>
+                <div class="kv"><span>センサーID（固定）</span><strong id="wsmSettingsSensorId">—</strong></div>
+                <div class="input-row">
+                  <label for="wsmSettingsDisplayName">表示名</label>
+                  <input id="wsmSettingsDisplayName" type="text" autocomplete="off">
+                </div>
+                <div class="input-row">
+                  <label for="wsmSettingsDeviceModel">機種</label>
+                  <select id="wsmSettingsDeviceModel"></select>
+                </div>
+                <div class="input-row">
+                  <label for="wsmSettingsFieldSelect">割当圃場</label>
+                  <select id="wsmSettingsFieldSelect"></select>
+                </div>
+                <p class="meta" id="wsmSettingsAssignmentNote"></p>
+              </section>
+
+              <section class="wsm-step">
+                <h4 class="wsm-subheading">データ取得<span class="en">Acquisition</span></h4>
+                <div class="input-row">
+                  <label for="wsmSettingsTransport">接続方法</label>
+                  <select id="wsmSettingsTransport"></select>
+                </div>
+                <div class="input-row">
+                  <label for="wsmSettingsOnlineTimeout">オンライン判定（秒）</label>
+                  <input id="wsmSettingsOnlineTimeout" type="number" min="1" step="1">
+                </div>
+                <div class="kv"><span>接続状態</span><strong id="wsmSettingsConnection">—</strong></div>
+                <div class="kv"><span>最終受信</span><strong id="wsmSettingsLastSeen">—</strong></div>
+              </section>
+
+              <section class="wsm-step">
+                <h4 class="wsm-subheading">水位基準 / 較正<span class="en">Calibration</span></h4>
+                <div class="kv"><span>較正状態</span><strong id="wsmSettingsCalibrationState">—</strong></div>
+                <div class="kv"><span>較正日時</span><strong id="wsmSettingsCalibratedAt">—</strong></div>
+                <p class="meta" id="wsmSettingsCalibrationNote"></p>
+                <div class="input-row">
+                  <label for="wsmCalibrationDepth">実測水深 (mm)</label>
+                  <input id="wsmCalibrationDepth" type="number" step="1" placeholder="65">
+                </div>
+                <div class="kv"><span>現在のGNSS標高</span><strong id="wsmCalibrationAltitude">—</strong></div>
+                <div class="wsm-buttons">
+                  <button id="wsmCalibrateButton" class="panel-button" type="button">この値で較正</button>
+                  <button id="wsmClearCalibrationButton" class="panel-button danger" type="button">較正を解除</button>
+                </div>
+                <p class="wsm-error" id="wsmCalibrationError" hidden role="alert"></p>
+              </section>
+
+              <section class="wsm-step">
+                <h4 class="wsm-subheading">品質判定<span class="en">Quality</span></h4>
+                <div class="input-row">
+                  <label for="wsmSettingsFilterProfile">フィルタ</label>
+                  <select id="wsmSettingsFilterProfile"></select>
+                </div>
+                <div class="input-row">
+                  <label for="wsmSettingsMinSatellites">最小衛星数</label>
+                  <input id="wsmSettingsMinSatellites" type="number" min="0" step="1">
+                </div>
+                <div class="input-row">
+                  <label for="wsmSettingsMaxHdop">HDOP上限</label>
+                  <input id="wsmSettingsMaxHdop" type="number" min="0.1" step="0.1">
+                </div>
+                <label class="rec-field-mode-toggle">
+                  <input id="wsmSettingsShowDepth" type="checkbox">
+                  較正済みのとき絶対水深を表示する
+                </label>
+              </section>
+
+              <p class="wsm-error" id="wsmSettingsError" hidden role="alert"></p>
+              <p class="meta" id="wsmSettingsMessage" role="status" aria-live="polite"></p>
+              <div class="wsm-buttons">
+                <button id="wsmSettingsSaveButton" class="panel-button primary" type="button">保存</button>
+                <button id="wsmSettingsDataButton" class="panel-button" type="button">データを見る</button>
+                <button id="wsmSettingsDeleteButton" class="panel-button danger" type="button">センサーを削除</button>
+              </div>
+            </div>
+
+            <!-- ============================= DATA ============================= -->
+            <div id="wsmDataView" hidden>
+              <div class="wsm-view-header">
+                <button id="wsmDataBackButton" class="panel-button wsm-back" type="button">← 一覧へ戻る</button>
+                <h3 class="wsm-view-title" id="wsmDataTitle">センサーデータ</h3>
+              </div>
+              <div class="kv"><span>割当圃場</span><strong id="wsmDataField">—</strong></div>
+              <div class="kv"><span>接続</span><strong id="wsmDataConnection">—</strong></div>
+
+              <h4 class="wsm-subheading">水位<span class="en">Water level</span></h4>
+              <div class="kv"><span>① GNSS標高</span><strong id="wsmDataAltitude">—</strong></div>
+              <div class="kv wsm-highlight"><span>② 相対高度変化（水深ではありません）</span><strong id="wsmDataRelative">—</strong></div>
+              <div class="kv"><span>③ 較正水深</span><strong id="wsmDataDepth">—</strong></div>
+              <p class="meta wsm-depth-note" id="wsmDataDepthNote"></p>
+
+              <h4 class="wsm-subheading">判定<span class="en">Water management</span></h4>
+              <div id="wsmDataDecision" class="wsm-decision"></div>
+
+              <h4 class="wsm-subheading">GNSS</h4>
+              <div class="kv"><span>緯度</span><strong id="wsmDataLatitude">—</strong></div>
+              <div class="kv"><span>経度</span><strong id="wsmDataLongitude">—</strong></div>
+              <div class="kv"><span>Fix / 衛星数 / HDOP</span><strong id="wsmDataFix">—</strong></div>
+              <div class="kv"><span>測定品質</span><strong id="wsmDataQuality">—</strong></div>
+              <p class="meta" id="wsmDataQualityReasons"></p>
+
+              <h4 class="wsm-subheading">圃場検出<span class="en">Field detection</span></h4>
+              <div class="kv"><span>検出圃場</span><strong id="wsmDataDetectedField">—</strong></div>
+              <div class="kv"><span>割当圃場</span><strong id="wsmDataAssignedField">—</strong></div>
+              <div class="kv"><span>検出一貫性</span><strong id="wsmDataConsistency">—</strong></div>
+              <p class="meta">検出一貫性は直近の測位が一致した割合です。地理的に正しい確率ではありません。</p>
+              <div id="wsmDataMovedWarning" class="wsm-movement-warning" hidden>
+                <strong>⚠ センサーが移動した可能性があります</strong>
+                <p class="meta" id="wsmDataMovedDetail"></p>
+              </div>
+              <div class="wsm-buttons">
+                <button id="wsmDataSettingsButton" class="panel-button" type="button">センサー設定</button>
+              </div>
+            </div>
+
           </div>
         </details>
 
@@ -5683,6 +5940,7 @@
     let recordingController = null;
     let waterLevelExperimentController = null;
     let sensorFieldController = null;
+    let sensorManagementController = null;
     let fieldAnnotationController = null;
     let fieldReportController = null;
     let droneController = null;
@@ -5735,6 +5993,93 @@
     // Local MAVLink backend. Override before load (e.g. from the console or a
     // future settings panel) if the backend runs on a different port.
     const DRONE_BACKEND_URL = window.SUISUI_DRONE_BACKEND_URL || "http://127.0.0.1:8787";
+
+    /**
+     * The field side of the water-sensor pairing.
+     *
+     * Reads the sensor registry and derives "which sensor is on this field"
+     * rather than storing it on the field record. One canonical relationship
+     * (sensor.assignedFieldId) with a computed reverse lookup cannot fall out
+     * of step with itself; two stored copies eventually would.
+     *
+     * Everything user-supplied goes in through textContent -- field names and
+     * sensor display names are farmer-typed strings.
+     */
+    function renderFieldSensorPairing() {
+      const container = document.getElementById("fieldSensorPairing");
+      const body = document.getElementById("fieldSensorPairingBody");
+      if (!container || !body) {
+        return;
+      }
+      const registry = sensorManagementController?.registry ?? sensorFieldController?.registry ?? null;
+      const fieldId = document.getElementById("basicActiveFieldSelect")?.value || "";
+      if (!registry || !fieldId) {
+        container.hidden = true;
+        return;
+      }
+      container.hidden = false;
+      body.replaceChildren();
+
+      const paired = registry.listForField(fieldId);
+      if (paired.length === 0) {
+        const none = document.createElement("p");
+        none.className = "meta";
+        none.textContent = "未設定";
+        const assign = document.createElement("button");
+        assign.type = "button";
+        assign.className = "panel-button";
+        assign.textContent = "センサーを割り当て";
+        assign.addEventListener("click", () => {
+          switchMode("settings", { workspace: "fields" });
+          window.setTimeout(() => {
+            const card = document.getElementById("waterSensorCard");
+            if (card) card.open = true;
+            scrollElementWithinPanel(card, { block: "start" });
+          }, 100);
+        });
+        body.append(none, assign);
+        return;
+      }
+
+      for (const sensor of paired) {
+        const row = document.createElement("div");
+        row.className = "field-sensor-row";
+
+        const name = document.createElement("strong");
+        name.textContent = sensor.displayName?.trim() || sensor.sensorId;
+        const model = document.createElement("span");
+        model.className = "meta";
+        model.textContent = `${sensor.deviceModel ?? ""} · ${sensor.sensorId}`;
+
+        const actions = document.createElement("div");
+        actions.className = "field-sensor-actions";
+        const dataButton = document.createElement("button");
+        dataButton.type = "button";
+        dataButton.className = "panel-button";
+        dataButton.textContent = "データを見る";
+        dataButton.addEventListener("click", () => openSensorCard(sensor.sensorId, "data"));
+        const settingsButton = document.createElement("button");
+        settingsButton.type = "button";
+        settingsButton.className = "panel-button";
+        settingsButton.textContent = "センサー設定";
+        settingsButton.addEventListener("click", () => openSensorCard(sensor.sensorId, "settings"));
+        actions.append(dataButton, settingsButton);
+
+        row.append(name, model, actions);
+        body.append(row);
+      }
+    }
+
+    /** Opens the 水位センサー card on one sensor, switching workspace if needed. */
+    function openSensorCard(sensorId, view) {
+      switchMode("settings", { workspace: "fields" });
+      window.setTimeout(() => {
+        const card = document.getElementById("waterSensorCard");
+        if (card) card.open = true;
+        sensorManagementController?.openSensor(sensorId, view);
+        scrollElementWithinPanel(card, { block: "start" });
+      }, 100);
+    }
 
     function currentActiveField() {
       const assuranceField = assuranceController?.fields?.getActive?.();
@@ -6642,6 +6987,9 @@
     }
 
     function renderBasicFieldSummary() {
+      // The sensor pairing follows the active field, so it re-renders on the
+      // same signal every other per-field readout does.
+      renderFieldSensorPairing();
       const select = document.getElementById("basicActiveFieldSelect");
       const selectRow = document.getElementById("basicFieldSelectRow");
       const emptyState = document.getElementById("basicFieldEmptyState");
@@ -10912,17 +11260,74 @@
         // paddies, and after the experiment controller so the map popup can
         // borrow its relative-displacement readout for display.
         const { SensorFieldController } = await import("./js/qz1-water-level/sensor-field-controller.js");
+        const { FloatingSensorRegistry } = await import("./js/qz1-water-level/sensor-registry.js");
+        const { SensorManagementController, summarizeValidation } = await import("./js/qz1-water-level/sensor-management-controller.js");
+
+        // ONE registry, shared. The detection card and the management card are
+        // two views of the same devices; giving each its own registry would
+        // create two `assignedFieldId` values that drift apart, which is
+        // exactly the competing-source-of-truth this design forbids.
+        const floatingSensorRegistry = new FloatingSensorRegistry({ storage: accountScopedStorage });
+
         sensorFieldController = new SensorFieldController({
           map,
           // The single existing field store. This milestone adds no second
           // field database: detection reads the same polygons the farmer
           // registered in 圃場データ.
           getFields: () => fieldAnnotationController?.fields ?? [],
+          registry: floatingSensorRegistry,
           storage: accountScopedStorage,
           getRelativeDisplacementMm: () => waterLevelExperimentController?.currentRelativeDisplacementMm() ?? null
         });
         sensorFieldController.mount();
         window.sensorFieldController = sensorFieldController;
+
+        sensorManagementController = new SensorManagementController({
+          registry: floatingSensorRegistry,
+          storage: accountScopedStorage,
+          getFields: () => fieldAnnotationController?.fields ?? [],
+          // The live snapshot belongs to whichever sensor is actually
+          // streaming; the management card renders every other sensor from
+          // its persisted record.
+          getLiveState: () => sensorFieldController?.snapshot() ?? null,
+          getRelativeDisplacementMm: () => waterLevelExperimentController?.currentRelativeDisplacementMm() ?? null,
+          // A calibration may only license an absolute depth if a real
+          // vertical-displacement experiment backs it. This hands the
+          // experiment card's own analysis over when one exists, and null
+          // when it does not -- which is the normal state until the
+          // controlled 0/10/20/30/50/100 mm run has actually been performed
+          // on hardware. Nothing here fabricates that evidence.
+          getCalibrationValidation: () => (waterLevelExperimentController?.analysis
+            ? summarizeValidation(waterLevelExperimentController.analysis)
+            : null),
+          // The agronomic verdict comes from the EXISTING water-management
+          // engine. The sensor layer supplies a measurement and never a
+          // threshold, a target or a recommendation of its own.
+          evaluateWaterDecision: ({ fieldId, depthMm }) => {
+            if (!fieldId || !Number.isFinite(depthMm) || !waterRecommendation) {
+              return null;
+            }
+            const targetCm = readTargetWaterLevels()[fieldId];
+            if (!Number.isFinite(Number(targetCm))) {
+              return null;
+            }
+            const targetMm = Number(targetCm) * 10;
+            const differenceMm = depthMm - targetMm;
+            return {
+              targetText: waterRecommendation.formatDepthWithCm(targetMm),
+              verdictText: Math.abs(differenceMm) <= waterRecommendation.DEPTH_EPSILON_MM
+                ? "適正"
+                : (differenceMm > 0 ? "目標より高い" : "目標より低い")
+            };
+          },
+          onAssignmentChanged: () => {
+            sensorFieldController?.render();
+            renderFieldSensorPairing();
+          }
+        });
+        sensorManagementController.mount();
+        window.sensorManagementController = sensorManagementController;
+        renderFieldSensorPairing();
       } catch (error) {
         console.error("QZ1 float sensor/field detection initialization failed", error);
         const warning = document.getElementById("wlxSensorMessage");

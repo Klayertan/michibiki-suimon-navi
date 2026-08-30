@@ -247,3 +247,380 @@
 .wlx-sensor-popup .kv span {
   color: #475569;
 }
+
+/* ==========================================================================
+ * 水位センサー management card (js/qz1-water-level/sensor-management-controller.js)
+ *
+ * Four mutually exclusive views inside one card. The list view is deliberately
+ * sparse: a farmer scanning it should get which sensor, which field,
+ * connected, current reading — and nothing else competing for attention. The
+ * map stays the largest thing on the screen.
+ *
+ * State is never carried by colour alone: every dot sits beside its own text
+ * label, so the card reads correctly in greyscale and to a screen reader.
+ * ========================================================================== */
+
+.wsm-list-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.wsm-list-header .meta {
+  flex: 1 1 220px;
+  margin: 0;
+}
+
+.wsm-empty {
+  color: #64748b;
+  font-size: 0.85rem;
+  padding: 12px;
+  text-align: center;
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  border-radius: 6px;
+}
+
+.wsm-empty[hidden] {
+  display: none;
+}
+
+.wsm-sensor-list {
+  display: grid;
+  gap: 10px;
+}
+
+.wsm-sensor-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 12px;
+  background: #fff;
+}
+
+.wsm-sensor-card-warning {
+  border-color: #fca5a5;
+  background: #fffbfb;
+}
+
+.wsm-card-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.wsm-card-title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.wsm-card-subtitle {
+  margin: 2px 0 8px;
+  font-size: 0.75rem;
+  color: #64748b;
+  overflow-wrap: anywhere;
+}
+
+.wsm-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.75rem;
+  white-space: nowrap;
+  color: #475569;
+}
+
+.wsm-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  background: #cbd5e1;
+}
+
+.wsm-dot-online { background: #16a34a; }
+.wsm-dot-stale { background: #ca8a04; }
+.wsm-dot-offline { background: #cbd5e1; }
+.wsm-dot-unsupported-direct-connection { background: #94a3b8; }
+
+.wsm-card-rows {
+  display: grid;
+  gap: 2px;
+  margin-bottom: 10px;
+}
+
+.wsm-card-warning-text {
+  margin: 0 0 8px;
+  font-size: 0.78rem;
+  color: #991b1b;
+}
+
+.wsm-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.wsm-card-actions .panel-button {
+  flex: 1 1 auto;
+  min-height: 40px;
+}
+
+/* --- shared view chrome --- */
+
+.wsm-view-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.wsm-view-title {
+  margin: 0;
+  font-size: 1rem;
+  overflow-wrap: anywhere;
+}
+
+.wsm-back {
+  flex: 0 0 auto;
+}
+
+.wsm-subheading {
+  margin: 14px 0 6px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #64748b;
+  text-transform: uppercase;
+}
+
+.wsm-subheading .en {
+  margin-left: 6px;
+  font-weight: 500;
+  text-transform: none;
+  color: #94a3b8;
+}
+
+.wsm-step[hidden] {
+  display: none;
+}
+
+.wsm-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.wsm-error {
+  color: #b91c1c;
+  font-size: 0.82rem;
+  margin: 8px 0 0;
+}
+
+.wsm-error[hidden] {
+  display: none;
+}
+
+/* --- wizard --- */
+
+.wsm-transport-options {
+  display: grid;
+  gap: 8px;
+}
+
+.wsm-transport-option {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.wsm-transport-option span {
+  display: grid;
+  gap: 2px;
+}
+
+/* Unavailable routes are SHOWN, greyed, with their reason — never hidden.
+ * A farmer who sees nothing cannot tell a missing feature from a broken app. */
+.wsm-transport-unavailable {
+  opacity: 0.55;
+  cursor: not-allowed;
+  background: #f8fafc;
+}
+
+.wsm-suggestion {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 6px;
+  padding: 10px;
+  margin-bottom: 10px;
+}
+
+.wsm-suggestion[hidden] {
+  display: none;
+}
+
+.wsm-suggestion .meta {
+  margin: 0 0 4px;
+}
+
+.wsm-review {
+  display: grid;
+  gap: 2px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 10px;
+}
+
+/* --- data view --- */
+
+.wsm-card .kv.wsm-highlight {
+  background: #eff6ff;
+  border-radius: 4px;
+  padding: 4px 6px;
+  margin: 2px -6px;
+}
+
+.wsm-depth-note {
+  font-size: 0.78rem;
+  color: #475569;
+  margin: 2px 0 0;
+}
+
+.wsm-decision {
+  display: grid;
+  gap: 2px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 10px;
+}
+
+.wsm-movement-warning {
+  background: #fef2f2;
+  border-left: 4px solid #dc2626;
+  border-radius: 0 4px 4px 0;
+  padding: 8px 10px;
+  margin: 10px 0;
+  font-size: 0.82rem;
+}
+
+.wsm-movement-warning[hidden] {
+  display: none;
+}
+
+.wsm-movement-warning strong {
+  color: #991b1b;
+}
+
+/* --- platform matrix --- */
+
+.wsm-platform-details {
+  margin-top: 14px;
+  font-size: 0.8rem;
+}
+
+.wsm-platform-details > summary {
+  cursor: pointer;
+  color: #64748b;
+}
+
+.wsm-platform-details > summary .en {
+  margin-left: 6px;
+  color: #94a3b8;
+}
+
+.wsm-platform-matrix {
+  display: grid;
+  gap: 2px;
+  margin: 8px 0;
+}
+
+.wsm-available { color: #16a34a; }
+.wsm-unavailable { color: #92400e; }
+
+/* --- mobile ---
+ * Tested at 375 / 390 / 430 px. Actions go full width so the touch targets
+ * stay comfortable, and nothing relies on a second column existing. */
+@media (max-width: 520px) {
+  .wsm-list-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  /* The 220px basis above is a WIDTH for the desktop row. Once the container
+     becomes a column that basis applies to height and reserves a 220px gap
+     above the button, so it is reset rather than inherited. */
+  .wsm-list-header .meta {
+    flex: 0 0 auto;
+  }
+
+  .wsm-list-header .panel-button {
+    width: 100%;
+    min-height: 44px;
+  }
+
+  .wsm-card-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+  }
+
+  .wsm-card-actions .panel-button,
+  .wsm-buttons .panel-button {
+    flex: 1 1 100%;
+    min-height: 44px;
+  }
+
+  .wsm-view-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+/* Field-side view of the pairing (index.html #fieldSensorPairing).
+ * Deliberately three lines and two buttons: the field card must not become a
+ * second sensor dashboard. Depth goes in the sensor's own data view. */
+.field-sensor-pairing {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.field-sensor-pairing[hidden] {
+  display: none;
+}
+
+.field-sensor-row {
+  display: grid;
+  gap: 2px;
+  margin-top: 6px;
+}
+
+.field-sensor-row .meta {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.field-sensor-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.field-sensor-actions .panel-button {
+  flex: 1 1 auto;
+  min-height: 40px;
+}

@@ -351,6 +351,17 @@ test("with no fields registered the sensor is 'detecting', never 'outside'", () 
   assert.equal(snapshot.detectionStatus, DETECTION_STATUS.NO_FIELDS);
 });
 
+test("an empty detection window reports no consistency, not 0%", () => {
+  // 0% reads as "we checked and nothing agreed". Before any sample arrives
+  // the honest answer is that there is no figure yet.
+  const control = controller();
+  control.useSensor("QZ1-FLOAT-001");
+  assert.equal(control.snapshot().fieldDetectionConfidence, null);
+
+  feed(control, { latitude: 34.7003, longitude: 135.5003, altitudeM: 50 }, 10);
+  assert.equal(control.snapshot().fieldDetectionConfidence, 1, "and a real figure once there is one");
+});
+
 test("online reflects fix age, not whether anything was ever received", () => {
   const control = controller({ onlineTimeoutMs: 5000 });
   control.useSensor("QZ1-FLOAT-001");

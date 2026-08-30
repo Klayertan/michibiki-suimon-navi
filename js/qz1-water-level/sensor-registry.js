@@ -33,8 +33,21 @@
 // geometry, and it is the field store that remains the only place a boundary
 // lives.
 
+import {
+  DEFAULT_DEVICE_MODEL,
+  normalizeDeviceModel,
+  normalizeSensorSettings
+} from "./sensor-settings.js";
+
+// The key is unchanged at V1 on purpose. The record GREW (displayName,
+// deviceModel, settings, calibration) but nothing was renamed or removed, so
+// a V1 record read by this build normalizes into a V2 record with defaults
+// filled in, and a V2 record read by an older build still finds every field
+// it knew about. Bumping the key would strand every sensor a farmer has
+// already registered; bumping only the version number inside it records the
+// change without breaking the read.
 export const SENSOR_STORAGE_KEY = "suimonNaviFloatingSensorsV1";
-export const SENSOR_SCHEMA_VERSION = 1;
+export const SENSOR_SCHEMA_VERSION = 2;
 
 /** The only device type this milestone knows about. */
 export const SENSOR_TYPE_FLOATING_WATER_LEVEL = "qz1-floating-water-level";
@@ -105,6 +118,9 @@ export function buildSensor({
   sensorId,
   type = SENSOR_TYPE_FLOATING_WATER_LEVEL,
   label = "",
+  displayName = "",
+  deviceModel = DEFAULT_DEVICE_MODEL,
+  settings = null,
   nowIso = new Date().toISOString()
 } = {}) {
   const id = normalizeSensorId(sensorId);
@@ -114,15 +130,39 @@ export function buildSensor({
   return {
     sensorId: id,
     type: String(type || SENSOR_TYPE_FLOATING_WATER_LEVEL),
+    // `label` predates `displayName` and is kept so nothing that already reads
+    // it breaks. `displayName` is the one the UI shows and the farmer edits;
+    // renaming it must never touch `sensorId`, which is the hardware.
     label: String(label ?? ""),
+    displayName: String(displayName ?? ""),
+    deviceModel: normalizeDeviceModel(deviceModel),
     assignedFieldId: null,
     assignmentStatus: ASSIGNMENT_STATES.UNASSIGNED,
+    settings: normalizeSensorSettings(settings),
+    /** Set only by an explicit calibration action. See calibration.js. */
+    calibration: null,
     lastPosition: null,
     lastSeenAt: null,
     assignmentHistory: [],
     createdAt: nowIso,
     updatedAt: nowIso
   };
+}
+
+/**
+ * What the UI calls this sensor.
+ *
+ * Falls back to the stable id rather than to an empty string: a card with a
+ * blank heading is worse than one headed `QZ1-FLOAT-001`, and the id is
+ * always present.
+ */
+export function sensorDisplayName(sensor) {
+  const name = typeof sensor?.displayName === "string" ? sensor.displayName.trim() : "";
+  if (name) {
+    return name;
+  }
+  const legacy = typeof sensor?.label === "string" ? sensor.label.trim() : "";
+  return legacy || String(sensor?.sensorId ?? "");
 }
 
 /**
@@ -374,16 +414,18 @@ export class FloatingSensorRegistry extends EventTarget {
   }
 
   /** Registers a sensor, or returns the existing one — never a duplicate. */
-  register({ sensorId, type, label, nowIso = new Date().toISOString() } = {}) {
+  register({ sensorId, type, label, displayName, deviceModel, settings, nowIso = new Date().toISOString() } = {}) {
     const id = normalizeSensorId(sensorId);
     if (!id) {
       return { sensor: null, error: `センサIDが不正です: ${JSON.stringify(sensorId)} / invalid sensor id` };
     }
     const existing = this.sensors.get(id);
     if (existing) {
+      // Never a duplicate, and never a silent overwrite of a device that is
+      // already registered and possibly already assigned and calibrated.
       return { sensor: existing, error: null, alreadyRegistered: true };
     }
-    const sensor = buildSensor({ sensorId: id, type, label, nowIso });
+    const sensor = buildSensor({ sensorId: id, type, label, displayName, deviceModel, settings, nowIso });
     this.sensors.set(id, sensor);
     this.persist();
     this.emitChange();
@@ -478,6 +520,90 @@ export class FloatingSensorRegistry extends EventTarget {
     return { sensor, error: null, changed: true };
   }
 
+  /**
+   * Renames a sensor for display. The stable id is untouched.
+   *
+   * This is the whole reason `displayName` exists separately: a farmer wants
+   * to call it 「田圃1 水位センサー」, and that must not become the identity
+   * that measurements, assignments and history are filed under.
+   */
+  rename(sensorId, displayName, { at = new Date().toISOString() } = {}) {
+    const sensor = this.get(sensorId);
+    if (!sensor) {
+      return { sensor: null, error: "センサが登録されていません / sensor is not registered" };
+    }
+    sensor.displayName = String(displayName ?? "").trim();
+    sensor.updatedAt = String(at);
+    this.persist();
+    this.emitChange();
+    return { sensor, error: null };
+  }
+
+  /** Changes which hardware model this record describes. */
+  setDeviceModel(sensorId, deviceModel, { at = new Date().toISOString() } = {}) {
+    const sensor = this.get(sensorId);
+    if (!sensor) {
+      return { sensor: null, error: "センサが登録されていません / sensor is not registered" };
+    }
+    sensor.deviceModel = normalizeDeviceModel(deviceModel);
+    sensor.updatedAt = String(at);
+    this.persist();
+    this.emitChange();
+    return { sensor, error: null };
+  }
+
+  /**
+   * Replaces the settings block with an already-validated one.
+   *
+   * Validation belongs to `validateSettingsPatch()` in sensor-settings.js —
+   * this method normalizes defensively but does not judge, so there is one
+   * place that decides whether a farmer's input was acceptable.
+   */
+  updateSettings(sensorId, settings, { at = new Date().toISOString() } = {}) {
+    const sensor = this.get(sensorId);
+    if (!sensor) {
+      return { sensor: null, error: "センサが登録されていません / sensor is not registered" };
+    }
+    sensor.settings = normalizeSensorSettings(settings);
+    sensor.updatedAt = String(at);
+    this.persist();
+    this.emitChange();
+    return { sensor, error: null };
+  }
+
+  /**
+   * Stores (or clears) the calibration record.
+   *
+   * Storing one does NOT by itself make a depth displayable: calibration.js
+   * still decides, every time, whether this particular record licenses a
+   * particular claim. This method only persists what the farmer took.
+   */
+  setCalibration(sensorId, calibration, { at = new Date().toISOString() } = {}) {
+    const sensor = this.get(sensorId);
+    if (!sensor) {
+      return { sensor: null, error: "センサが登録されていません / sensor is not registered" };
+    }
+    sensor.calibration = calibration ?? null;
+    sensor.updatedAt = String(at);
+    this.persist();
+    this.emitChange();
+    return { sensor, error: null };
+  }
+
+  /**
+   * The sensor a field is paired with, or null.
+   *
+   * The REVERSE of the canonical relationship. `sensor.assignedFieldId` is the
+   * single source of truth; there is deliberately no `field.sensorId` to fall
+   * out of step with it. `primaryWaterSensor()` picks the first assignment
+   * when several exist rather than inventing a competing "primary" flag —
+   * the data model already allows many, and destroying that would be a
+   * regression, not a simplification.
+   */
+  primaryWaterSensor(fieldId) {
+    return this.listForField(fieldId)[0] ?? null;
+  }
+
   remove(sensorId) {
     const id = normalizeSensorId(sensorId);
     if (!id || !this.sensors.has(id)) {
@@ -523,6 +649,25 @@ export function normalizeSensorList(raw) {
       sensorId,
       type: typeof entry?.type === "string" && entry.type ? entry.type : SENSOR_TYPE_FLOATING_WATER_LEVEL,
       label: typeof entry?.label === "string" ? entry.label : "",
+      // V1 -> V2. A V1 record has no displayName; it inherits its `label` if
+      // it had one, and otherwise stays empty so sensorDisplayName() falls
+      // back to the id. Nothing is invented and nothing is dropped.
+      displayName: typeof entry?.displayName === "string"
+        ? entry.displayName
+        : (typeof entry?.label === "string" ? entry.label : ""),
+      deviceModel: normalizeDeviceModel(entry?.deviceModel),
+      // Missing settings become the documented defaults rather than
+      // undefined, so every consumer can read settings.quality.maxHdop
+      // without a guard.
+      settings: normalizeSensorSettings(entry?.settings),
+      // Calibration is carried through UNVALIDATED and UNCHANGED. Repairing
+      // it here would be the one repair that could manufacture a licence to
+      // display a water depth; calibration.js re-checks it on every use, so
+      // a corrupt record fails there, visibly, rather than being silently
+      // "fixed" into something usable.
+      calibration: entry?.calibration && typeof entry.calibration === "object"
+        ? entry.calibration
+        : null,
       assignedFieldId,
       assignmentStatus: status,
       lastPosition: normalizePosition(entry?.lastPosition),
