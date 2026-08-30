@@ -140,4 +140,4 @@ NMEAファイルの読み込みやレイヤー切り替え時に、表示中の�
 | 精度円 | `L.circle` | スマホGPS誤差の可視化 |
 | 自動フィット | `L.latLngBounds`, `map.fitBounds` | 表示範囲の自動調整 |
 
-すべて `index.html` 単体（CDN経由でLeaflet/markercluster/Turfを読み込み）で完結しており、ビルド工程なしで GitHub Pages にそのままデプロイ可能。
+すべて `index.html` 単体（CDN経由でLeaflet/markercluster/Turfを読み込み）で完結しており、ビルド工程なしで静的ホスティングにそのままデプロイ可能（本番は Cloudflare Workers の静的アセット配信 — `docs/CLOUDFLARE_DEPLOYMENT.md`）。

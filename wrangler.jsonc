@@ -1,0 +1,77 @@
+/**
+ * スイスイナビ — Cloudflare Workers deployment
+ *
+ * Production hosting for the SuisuiNavi frontend. GitHub stays the source of
+ * truth (code, issues, branches, history); Cloudflare serves the application.
+ * Full rationale and setup steps: docs/CLOUDFLARE_DEPLOYMENT.md
+ *
+ * NOTE ON COST. There is deliberately no "main" here. A Worker with only an
+ * "assets" block never runs code: every request is served straight from
+ * Cloudflare's edge as a static asset, and static-asset requests are free and
+ * unlimited on the Free plan -- they do not consume the 100,000 requests/day
+ * Worker allowance, because no Worker is invoked. The site therefore has no
+ * request-volume cost exposure at all. Adding "main" later (see the /api/*
+ * note at the bottom) keeps that property for the static files; only requests
+ * that actually reach the Worker would start counting.
+ *
+ * NOTE ON SECRETS. Nothing in this file is secret and nothing secret may be
+ * added to it -- it is committed, and anything the browser downloads is
+ * public regardless. Account ID, API tokens and any future backend
+ * credentials belong in Cloudflare (dashboard secrets / `wrangler secret
+ * put`), never here and never in dist/.
+ */
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "suisui-navi",
+
+  // The Workers runtime API this deployment is pinned to. Raising it is a
+  // deliberate act: it can change runtime behaviour, so it is not bumped
+  // automatically. No compatibility flags are needed for static assets.
+  "compatibility_date": "2026-08-30",
+
+  "assets": {
+    // Produced by `npm run build` (scripts/build-static.mjs), which copies the
+    // tracked runtime files out of the repository root. The repository root
+    // itself is NOT the web root -- backend/, docs/, tests/ and node_modules/
+    // live there too.
+    "directory": "./dist",
+
+    // "auto-trailing-slash" is the default, stated explicitly because it is
+    // what makes GET / return index.html.
+    "html_handling": "auto-trailing-slash",
+
+    // "none", not "single-page-application". SuisuiNavi is one page whose
+    // internal navigation is client-side state, not URL paths, so there is no
+    // deep link that needs an index.html fallback. Falling back would be
+    // actively harmful: a mistyped module path would return HTML with a 200
+    // instead of a 404, and the browser would report a confusing MIME-type
+    // error rather than the missing file.
+    "not_found_handling": "none"
+  },
+
+  // `wrangler dev` defaults to port 8787, which is exactly the port the local
+  // MAVLink backend listens on (js/drone/drone-api-client.js DEFAULT_BASE_URL).
+  // Running both at once with the default would leave one of them silently
+  // failing to bind, so the preview is pinned somewhere else.
+  "dev": {
+    "port": 8788
+  }
+
+  // ---------------------------------------------------------------------
+  // FUTURE, NOT CONFIGURED YET. Left here as a record of where server-side
+  // work attaches, so the next person does not have to re-derive it.
+  //
+  //   "main": "worker/index.js",
+  //   "assets": { ..., "run_worker_first": ["/api/*"] },
+  //   "d1_databases":  [{ "binding": "DB",     "database_name": "...", "database_id": "..." }],
+  //   "r2_buckets":    [{ "binding": "BUCKET", "bucket_name": "..." }]
+  //
+  // `run_worker_first: ["/api/*"]` is the important line: it sends only /api/*
+  // to the Worker and leaves every static file on the free path.
+  //
+  // /api/* is free to claim on this origin. The existing drone client already
+  // uses /api/* paths, but always against http://127.0.0.1:8787 (the local
+  // MAVLink backend) or the desktop shell's own origin -- never against the
+  // page's origin. See js/drone/drone-api-client.js.
+  // ---------------------------------------------------------------------
+}

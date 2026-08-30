@@ -85,18 +85,26 @@ unprotected table is readable by anyone holding the public anon key.
 
 | Setting | Value |
 |---|---|
-| **Site URL** | `https://klayertan.github.io/michibiki-suimon-navi/` |
-| **Redirect URLs** | `https://klayertan.github.io/michibiki-suimon-navi/**` |
-| **Redirect URLs** (dev, optional) | `http://127.0.0.1:4173/**` |
+| **Site URL** | `https://<worker>.<subdomain>.workers.dev/` |
+| **Redirect URLs** | `https://<worker>.<subdomain>.workers.dev/**` |
+| **Redirect URLs** (dev, optional) | `http://127.0.0.1:4173/**`, `http://localhost:8788/**` |
 
-The trailing slash on the Site URL matters: this is a project served from a
-GitHub Pages **repository sub-path**, not from a domain root.
+Take the exact hostname from the Cloudflare deploy output — see
+[CLOUDFLARE_DEPLOYMENT.md](./CLOUDFLARE_DEPLOYMENT.md). Cloudflare serves the
+app from the **root** of that hostname, so the Site URL is the bare origin
+with a trailing slash.
+
+> **Migrating from GitHub Pages:** the old
+> `https://klayertan.github.io/michibiki-suimon-navi/**` entries are now dead.
+> Sign-in works without touching them, but an email-confirmation or
+> password-recovery link will bounce until the Cloudflare origin is added
+> here. Add the new entries first, then remove the old ones.
 
 The app does not hard-code any of this. `resolveRedirectUrl()` in
 `js/cloud/cloud-config.js` derives the return URL from wherever the page is
-actually being served — the Pages sub-path, a local dev server, or the packaged
-desktop shell — so one committed config works everywhere. Set `redirectTo` in
-`config/cloud-config.js` only if you move to a custom domain.
+actually being served — the Cloudflare origin root, a local dev server, or the
+packaged desktop shell — so one committed config works everywhere. Set
+`redirectTo` in `config/cloud-config.js` only if you move to a custom domain.
 
 `localhost` is never used as the production callback.
 
@@ -132,9 +140,12 @@ the caller's own JWT. An attacker holding the anon key and nothing else can
 read nothing, because there is no policy granting `anon` any row.
 
 This is Supabase's documented design for browser clients, and it is the only
-option available to a static site: GitHub Pages has no build step and no
-server, so there is nowhere to hide a value from the browser anyway. A
-"secret" shipped in a page is not a secret.
+option available to a static site: the app is served as static assets with no
+build step and no server-side rendering, so there is nowhere to hide a value
+from the browser anyway. A "secret" shipped in a page is not a secret. (If a
+future Cloudflare Worker route needs a genuine secret, it lives in Worker
+secrets and never reaches `dist/` — see
+[CLOUDFLARE_DEPLOYMENT.md](./CLOUDFLARE_DEPLOYMENT.md).)
 
 ### What must never be committed
 
@@ -172,8 +183,10 @@ Open <http://127.0.0.1:4173/>. You should see the login screen with
 
 ## 7. Deploy
 
-GitHub Pages serves this repository from `main` at the root, so a normal push
-publishes it. The only new runtime dependency is the Supabase JS SDK, loaded
+Cloudflare builds and publishes on every push to `main`
+([CLOUDFLARE_DEPLOYMENT.md](./CLOUDFLARE_DEPLOYMENT.md)); `config/cloud-config.js`
+is copied into `dist/` unchanged, so filling it in and pushing is the whole
+deployment. The only new runtime dependency is the Supabase JS SDK, loaded
 lazily from jsDelivr the first time the account surface is needed — a farmer
 who never signs in never downloads it.
 

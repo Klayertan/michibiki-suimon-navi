@@ -81,18 +81,34 @@ test("the mock provider needs no credentials and is only reachable when named ex
   assert.notEqual(normalizeCloudConfig({ provider: "supabase", url: "u", anonKey: "k" }).provider, "mock");
 });
 
-test("the redirect URL keeps the GitHub Pages repository sub-path", () => {
+test("the redirect URL is the origin root when the app is served from one", () => {
+  // Cloudflare Workers serves SuisuiNavi from the root of its own hostname,
+  // so the redirect is the bare origin -- no sub-path to preserve.
+  assert.equal(
+    resolveRedirectUrl({ origin: "https://suisui-navi.workers.dev", pathname: "/" }),
+    "https://suisui-navi.workers.dev/"
+  );
+  assert.equal(
+    resolveRedirectUrl({ origin: "https://suisui-navi.workers.dev", pathname: "/index.html" }),
+    "https://suisui-navi.workers.dev/"
+  );
+});
+
+test("the redirect URL keeps a repository-style sub-path when there is one", () => {
+  // Not the production host any more, but the desktop shell and any future
+  // sub-path deployment still depend on the filename being dropped without
+  // the directory going with it.
   const url = resolveRedirectUrl({
-    origin: "https://klayertan.github.io",
+    origin: "https://example.test",
     pathname: "/michibiki-suimon-navi/index.html"
   });
-  assert.equal(url, "https://klayertan.github.io/michibiki-suimon-navi/");
+  assert.equal(url, "https://example.test/michibiki-suimon-navi/");
 });
 
 test("the redirect URL works for a directory URL and for local dev", () => {
   assert.equal(
-    resolveRedirectUrl({ origin: "https://klayertan.github.io", pathname: "/michibiki-suimon-navi/" }),
-    "https://klayertan.github.io/michibiki-suimon-navi/"
+    resolveRedirectUrl({ origin: "https://example.test", pathname: "/michibiki-suimon-navi/" }),
+    "https://example.test/michibiki-suimon-navi/"
   );
   // Never hard-coded to localhost, and never hard-coded away from it either.
   assert.equal(resolveRedirectUrl({ origin: "http://127.0.0.1:4173", pathname: "/" }), "http://127.0.0.1:4173/");
@@ -100,7 +116,7 @@ test("the redirect URL works for a directory URL and for local dev", () => {
 
 test("an explicit redirectTo wins, for a custom domain", () => {
   const url = resolveRedirectUrl(
-    { origin: "https://klayertan.github.io", pathname: "/michibiki-suimon-navi/" },
+    { origin: "https://suisui-navi.workers.dev", pathname: "/" },
     "https://suisui.example.jp/app/"
   );
   assert.equal(url, "https://suisui.example.jp/app/");

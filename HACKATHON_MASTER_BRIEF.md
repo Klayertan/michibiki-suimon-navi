@@ -86,10 +86,10 @@ Note: GNSS Analyzer manual PDF covers the green QZ1 LE / iOS path — NOT the pa
 |---|---|
 | Render | beginner-friendly, front+back together |
 | Vercel | strong frontend framework support |
-| **GitHub Pages** | static only, free — **current choice, matches plain HTML/CSS/JS stack, keep it** |
-| Cloudflare Workers | more modern arch, more setup |
+| GitHub Pages | static only, free — original choice, **migrated away 2026-08-30** |
+| **Cloudflare Workers** | static assets free + unlimited, and the same deployment grows a `/api/*` backend later — **current choice** |
 
-Decision: stick with GitHub Pages. No backend needed for MVP. Reassess only if cloud DB becomes mandatory (see below).
+Decision (2026-08-30): **Cloudflare Workers + static assets**, still ¥0/month. GitHub stays the source repository; Cloudflare is production hosting. Push to `main` builds and deploys automatically. No backend is running yet — the choice was made because sensors, QZ1 uploads and drone observations will need one, and on Workers that is an edit to `wrangler.jsonc` rather than a second platform. See `docs/CLOUDFLARE_DEPLOYMENT.md`.
 
 ## 5. DATA STORAGE OPTIONS (official lecture #5 list)
 
@@ -207,7 +207,7 @@ Hackathon framing: this is ONE slide (発展構想) — pitch as roadmap, don't 
 |---|---|
 | 地域課題25 | named real farmer (friend's grandfather), real paddy field (水田), real manual gate pain point |
 | 位置情報活用25 | SLAS sub-meter walked survey, fix=2/satcount/HDOP shown, resolves field geometry vs 5m phone drift |
-| 完成度20 | static-data MVP, working end-to-end demo, GitHub Pages live |
+| 完成度20 | static-data MVP, working end-to-end demo, live on Cloudflare |
 | プレゼン15 | 課題→SLAS shield→demo flow per official pitch template |
 | 発展可能性15 | frame generalizes to any small-plot manual-irrigation farm in region |
 | ベストフィールドワーク賞 | companion-accompanied walked survey + grandfather interview, logged weekly |
@@ -217,7 +217,7 @@ Hackathon framing: this is ONE slide (発展構想) — pitch as roadmap, don't 
 
 **APP IS LIVE + REAL QZ1 DATA END-TO-END. Build order §11 steps 2, 3, 5, 6 substantially DONE.**
 
-Live URL: `https://klayertan.github.io/michibiki-suimon-navi/` (repo: `michibiki-suimon-navi`)
+Live URL at the time: `https://klayertan.github.io/michibiki-suimon-navi/` (repo: `michibiki-suimon-navi`). *Superseded 2026-08-30 — production hosting moved to Cloudflare; see `docs/CLOUDFLARE_DEPLOYMENT.md`.*
 
 ### Real walk session (2026-07-06, 15:53–16:01 JST, Nara KOSEN campus, QZ1-133 via BT SPP → Serial Bluetooth Terminal)
 Parsed from raw log, verified against app's own counters (exact match — parser honest):
@@ -262,7 +262,7 @@ Parsed from raw log, verified against app's own counters (exact match — parser
 - Thresholds (20/5/60) are placeholder guesses — replace with grandfather-sourced values after interview
 - Open-Meteo UTC→JST display handling — verify before demo
 
-~~Repo/deployment~~ RESOLVED: live at klayertan.github.io/michibiki-suimon-navi/
+~~Repo/deployment~~ RESOLVED: GitHub for source, Cloudflare Workers for production hosting (was GitHub Pages until 2026-08-30)
 ~~Weather source~~ RESOLVED: Open-Meteo auto-fetch + manual override
 
 ---
@@ -299,8 +299,8 @@ Total 100. Currently strong: 完成度20 (app live, real data). Currently WEAK a
 
 ```
 You are working on スイスイナビ (public name; engineering codename / repo slug remains "Suimon Navi" / 水門ナビ / michibiki-suimon-navi), a live web app:
-https://klayertan.github.io/michibiki-suimon-navi/ (repo: Klayertan/michibiki-suimon-navi)
-Plain HTML/CSS/JS + Leaflet + OSM. No build step. Deployed on GitHub Pages.
+Repo: Klayertan/michibiki-suimon-navi (source). Production hosting: Cloudflare Workers static assets.
+Plain HTML/CSS/JS + Leaflet + OSM. No build step; `npm run build` only copies the runtime files into dist/.
 
 Read HACKATHON_MASTER_BRIEF.md in repo root before any change.
 Hard rules: no cloud DB, no login, no physical gate control, keep static-JSON architecture,
@@ -314,7 +314,7 @@ Current priorities (in order):
 4. Robustness: Open-Meteo UTC→JST display check; NMEA parser already handles
    $L1BAT/$L1MAG/$GN* noise (5497 skipped lines verified correct — don't "fix" it).
 
-Definition of done for any feature: works on GitHub Pages static hosting,
+Definition of done for any feature: works as a static site on Cloudflare (no server required),
 demo-able offline with bundled sample data, visible fix-quality triplet (fix/sats/HDOP).
 ```
 

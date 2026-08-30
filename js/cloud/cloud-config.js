@@ -1,9 +1,9 @@
 // Cloud/auth configuration resolution.
 //
-// This app is a static site served from GitHub Pages: there is no build step
-// and no server to inject environment variables, so configuration arrives as
-// a plain committed file (`config/cloud-config.js`) that assigns
-// `window.SUISUI_CLOUD_CONFIG`. See docs/SUPABASE_SETUP.md.
+// This app is a static site served as Cloudflare Workers static assets: there
+// is no build step and no server to inject environment variables, so
+// configuration arrives as a plain committed file (`config/cloud-config.js`)
+// that assigns `window.SUISUI_CLOUD_CONFIG`. See docs/SUPABASE_SETUP.md.
 //
 // WHAT MAY GO IN THAT FILE: the Supabase project URL and the *anon /
 // publishable* key only. Those two values are designed to be shipped to
@@ -124,8 +124,8 @@ export function looksLikeServiceRoleKey(key) {
  *
  * Derived from where the page is actually being served rather than hard-coded,
  * so the same committed config works for:
- *   - GitHub Pages under a repository sub-path
- *     (https://klayertan.github.io/michibiki-suimon-navi/)
+ *   - the Cloudflare origin root (https://<worker>.workers.dev/)
+ *   - a deployment under a sub-path (https://example/app/)
  *   - a local dev server at http://127.0.0.1:4173/
  *   - the packaged desktop shell
  *

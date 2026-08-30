@@ -1,8 +1,9 @@
 /* スイスイナビ — クラウド（アカウント）設定 / SuisuiNavi cloud configuration
  *
  * This file is loaded by index.html before the app boots. It is COMMITTED on
- * purpose: a GitHub Pages site has no build step and no server, so there is
- * nowhere else for a frontend configuration value to live.
+ * purpose: SuisuiNavi is served as static assets with no build-time
+ * substitution and no server rendering, so there is nowhere else for a
+ * frontend configuration value to live.
  *
  * ONLY these two values belong here:
  *
@@ -46,8 +47,9 @@ window.SUISUI_CLOUD_CONFIG ??= {
 
   // Where Supabase should send the farmer back after an email-confirmation or
   // password-recovery link. Leave null to derive it from the page's own URL,
-  // which already handles the GitHub Pages repository sub-path
-  // (https://klayertan.github.io/michibiki-suimon-navi/). Set it explicitly
-  // only for a custom domain.
+  // which works for the Cloudflare origin root, for a sub-path deployment and
+  // for the local dev server alike. Set it explicitly only for a custom
+  // domain. Whatever it resolves to must also be in Supabase's Redirect URLs
+  // allow-list — see docs/SUPABASE_SETUP.md.
   redirectTo: null
 };

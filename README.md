@@ -152,12 +152,13 @@ flowchart TD
 - **地図表示：** Leaflet ＋ Leaflet.markercluster ＋ Turf.js（境界ポリゴンから面積算出）
 - **気象データ：** [Open-Meteo](https://open-meteo.com/)（無料・APIキー不要）から水門座標で自動取得。失敗時は `data/weather.json` にフォールバック
 - **水管理モデル：** `js/water/` — DOM非依存の純粋モジュール群、ユニットテスト済み
-- **アプリ：** プレーンなHTML/CSS/JS、GitHub Pagesでホスティング
+- **アプリ：** プレーンなHTML/CSS/JS、ビルド工程なし
+- **ホスティング：** Cloudflare Workers（静的アセット配信）。ソース管理はGitHub
 - **クラウド：** Supabase（アカウント＋圃場同期）。ローカルストレージが正、同期は追加的
 
 ## 使い方 (How to use)
 
-1. HTTP経由で配信します（GitHub Pages、またはローカルで `node scripts/dev-server.mjs` → `http://localhost:4173/`）。
+1. HTTP経由で配信します（Cloudflare上の公開URL、またはローカルで `node scripts/dev-server.mjs` → `http://localhost:4173/`）。
 2. **NMEAをアップロード** — QZ1のログ（`.nmea`/`.txt`/`.log`）を読み込みます。緑＝DGNSS fix、オレンジ＝単独測位。
    - PCでのライブ記録は **QZ1ライブ記録** カード（Chrome/Edge、HTTPS or localhost）。
    - スマホはWeb Serial非対応のため、Serial Bluetooth Terminal等でログ保存 → アップロード。
@@ -176,6 +177,28 @@ npm test
 ```bash
 npm run test:browser
 ```
+
+### デプロイ (Deployment)
+
+**ソース管理：GitHub。本番ホスティング：Cloudflare。**
+
+`main` へのpushでCloudflare Workers Buildsがビルドとデプロイを自動実行します。
+`npm run build` が配信対象（`index.html` / `config/` / `css/` / `js/` / `data/`）を
+`dist/` にまとめ、`wrangler.jsonc` の設定で静的アセットとして配信されます。
+Workerスクリプトは持たないため、静的アセットのリクエストは無料・無制限で、
+運用費は¥0です。
+
+本番と同じ配信経路をローカルで確認する場合：
+
+```bash
+npm run cf:dev
+```
+
+セットアップ手順・無料枠の前提・ロールバック・将来のD1/R2拡張については
+[docs/CLOUDFLARE_DEPLOYMENT.md](./docs/CLOUDFLARE_DEPLOYMENT.md) を参照してください。
+
+Web Serial（QZ1ライブ記録）はブラウザ側の機能のままです。CloudflareはHTTPSで
+ページを配信するだけで、シリアル通信には一切関与しません。
 
 ---
 
@@ -216,7 +239,7 @@ npm run backend:setup && npm run dev
 |---|---|---|
 | 地域課題の的確さ | 25 | 実在する祖父・水田。手動水門操作の負担を実地ヒアリングで裏付け |
 | 位置情報の活用度 | 25 | 実測境界→面積→必要水量と、測位精度が農業の実務値に直結する設計 |
-| 完成度 | 20 | GitHub Pagesで実動作、根拠モデルはユニットテスト済み |
+| 完成度 | 20 | Cloudflare上で実動作、根拠モデルはユニットテスト済み |
 | プレゼンテーション | 15 | 課題→技術の壁→解決策→デモの型で構成 |
 | 発展可能性 | 15 | センサ・気象・自動制御への拡張点を設計済み |
 

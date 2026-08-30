@@ -43,7 +43,7 @@ export async function loadSupabaseSdk(sdkUrl = DEFAULT_SUPABASE_SDK_URL) {
  *
  * `detectSessionInUrl` + `flowType: "pkce"` handle the redirect back from an
  * email-confirmation or password-recovery link. PKCE is the correct flow for
- * a public client with no secret, which is exactly what a GitHub Pages site is.
+ * a public client with no secret, which is exactly what a static site is.
  */
 export async function createSupabaseClient({ url, anonKey, sdkUrl = DEFAULT_SUPABASE_SDK_URL }) {
   if (!clientPromise) {

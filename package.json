@@ -5,6 +5,9 @@
   "type": "module",
   "scripts": {
     "serve": "node scripts/dev-server.mjs",
+    "build": "node scripts/build-static.mjs",
+    "cf:dev": "npm run build && wrangler dev",
+    "cf:deploy": "npm run build && wrangler deploy",
     "backend": "node scripts/run-backend.mjs",
     "backend:mock": "node scripts/run-backend.mjs --mode mock --allow-safe-commands",
     "backend:real": "node scripts/run-backend.mjs --mode real",
@@ -16,6 +19,7 @@
     "test:all": "npm run test && npm run test:backend && npm run test:browser"
   },
   "devDependencies": {
-    "@playwright/test": "^1.55.0"
+    "@playwright/test": "^1.55.0",
+    "wrangler": "^4.127.1"
   }
 }
