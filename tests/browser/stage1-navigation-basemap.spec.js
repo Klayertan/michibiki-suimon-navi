@@ -43,8 +43,9 @@ test("legacy workspaces remain compatible inside Settings and canonicalize after
   await expect(page.locator("body")).toHaveAttribute("data-mode", "settings");
   await expect(page.locator("body")).toHaveAttribute("data-workspace", "survey");
   await expect(page.locator('[data-mode-target="settings"]')).toHaveAttribute("aria-selected", "true");
+  // The workspace tabs are always shown directly now -- no more click-to-
+  // expand <details>/open state to check.
   await expect(page.locator(".engineering-nav")).toBeVisible();
-  await expect(page.locator(".engineering-nav")).toHaveAttribute("open", "");
   await expect(page.locator('[data-workspace-target="survey"]')).toHaveAttribute("aria-selected", "true");
 
   await page.locator('[data-workspace-target="analysis"]').click();

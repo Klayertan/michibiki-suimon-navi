@@ -368,7 +368,7 @@ test("a registered field survives a reload with its area and geometry intact", a
   expect(after.coordinates).toEqual(before.coordinates);
   expect(after.properties.areaM2).toBeCloseTo(before.properties.areaM2, 6);
   await expect(page.locator("#basicFieldArea")).toContainText("m²");
-  await expect(page.locator("#basicFieldArea")).toContainText("ha");
+  await expect(page.locator("#basicFieldArea")).toContainText("反");
 });
 
 // ---------------------------------------------------------------------------
@@ -401,9 +401,13 @@ test("water management still works in Basic mode after the cleanup", async ({ pa
   await page.locator("#basicFieldRegConfirmButton").click();
   await expect(page.locator("#fieldAnnotationSummaryFields")).toHaveText("1");
 
-  // The water-level inputs stayed in Basic mode when the recording card left.
-  await expect(page.locator("#basicWaterRecordCard")).toBeVisible();
+  // The water-level inputs stayed in Basic mode when the recording card left,
+  // but the card itself is no longer parked in the right rail on desktop --
+  // it only appears once summoned (by this button or the map summary's own
+  // 水位を記録 button), then slides down attached to the map corner.
+  await expect(page.locator("#basicWaterRecordCard")).toBeHidden();
   await page.locator("#basicRecordWaterButton").click();
+  await expect(page.locator("#basicWaterRecordCard")).toBeVisible();
   await expect(page.locator("#recObsWaterLevelInput")).toBeVisible();
   await page.locator("#recTargetWaterLevelInput").fill("50");
   await page.locator("#recObsWaterLevelInput").fill("20");
@@ -411,16 +415,21 @@ test("water management still works in Basic mode after the cleanup", async ({ pa
   await page.locator("#recObsWaterLevelInput").fill("55");
   await expect(page.locator("#recWaterLevelVerdict")).toContainText("適正");
 
-  // Water-management points still register against the field.
-  await expect(page.locator("#waterControlPanel")).toBeVisible();
+  // Close the slide-down panel before returning to the map -- attached, it
+  // floats over part of the map (by design, so its own controls are
+  // reachable), which would otherwise intercept the click below.
+  await page.locator("#basicWaterRecordCloseButton").click();
+
+  // Water-management points still register against the field, via the
+  // on-map quick toolbar -- the only placement path now (the right-rail
+  // #waterControlPanel duplicate was removed; see its comment in index.html).
   const fieldId = await page.evaluate(() => window.fieldAnnotationController.fields[0].id);
-  await page.evaluate(() => {
-    // 水管理ポイント is a collapsed <details> by default.
-    document.getElementById("waterControlPanel").open = true;
-    document.getElementById("wcpTargetFieldSelect").dispatchEvent(new Event("change", { bubbles: true }));
-  });
-  await page.locator("#wcpAddGateButton").click();
-  await page.locator("#wcpPositionCurrentButton").click();
+  await page.locator('#waterQuickToolbar button[data-water-quick-type="gate"]').click();
+  // Basic mode's desktop map is full-bleed under the floating rails, so a
+  // click position that works in Settings mode's narrower map column (e.g.
+  // x:300,y:200) can land on the left rail here instead -- x:600 clears
+  // both rails at this test's 1280px default viewport.
+  await page.locator("#map").click({ position: { x: 600, y: 400 } });
   const points = await page.evaluate(() => window.fieldAnnotationController.waterControlPoints);
   expect(points).toHaveLength(1);
   expect(points[0].relatedFieldId).toBe(fieldId);
@@ -474,6 +483,27 @@ test("registering 田圃1/2/3 adds no repeated workflow clutter", async ({ page 
   // none of it reaches 基本モード, and that it does not grow per field.
   await expect(page.locator("#workflowStepsContainer")).toBeHidden();
   await expect(page.locator(".workflow-step:visible")).toHaveCount(0);
+});
+
+test("a second NMEA upload shows its own GNSS points, even though registering the first one hid them", async ({ page }) => {
+  await openBasic(page);
+
+  // Registering 田圃1 hides the QZ1 point layer (see onFieldRegistered in
+  // index.html) so the map isn't cluttered with a track that is now a
+  // polygon. That hide is global checkbox state, not scoped to those specific
+  // points -- without the fix, it would silently also hide 田圃2's brand-new
+  // upload, which the farmer needs to see to pick START/END for it.
+  await uploadWalk(page);
+  await pickBoundaryPoint(page, "start", START_INDEX);
+  await pickBoundaryPoint(page, "end", END_CLOSED_INDEX);
+  await page.locator("#basicCreateFieldButton").click();
+  await page.locator("#basicFieldRegConfirmButton").click();
+  await expect(page.locator("#fieldAnnotationSummaryFields")).toHaveText("1");
+  await expect(page.locator("#showQz1Layer")).not.toBeChecked();
+
+  await uploadWalk(page);
+  await expect(page.locator("#showQz1Layer")).toBeChecked();
+  await expect(page.locator(".qz1-point")).toHaveCount(11);
 });
 
 // ---------------------------------------------------------------------------
@@ -562,7 +592,10 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 393, height: 852 }
         noHorizontalScroll: document.documentElement.scrollWidth <= window.innerWidth,
         mapHeight: box("#map").height,
         help: box("#basicHelpButton").height,
-        upload: box(".basic-upload-button").height,
+        // On phones the NMEA upload lives in the header, immediately left of
+        // 使い方, and the card's own button stands down -- so the touch
+        // target to measure is the header one. Still asserted at >=44px.
+        upload: box("#headerNmeaUploadButton").height,
         recordWater: box("#basicRecordWaterButton").height
       };
     });

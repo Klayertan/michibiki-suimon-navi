@@ -37,25 +37,63 @@ function walkNmea({ latBase = "3439.2880", lonBase = "13549.7892", timePrefix = 
 const START_INDEX = 3;
 const END_INDEX = 7; // ~1m from START -> auto-closes
 
-/** Deterministic Open-Meteo response: dry today, then two rainy days. */
+// Mirrors the past_days=8&forecast_days=3 the app actually requests, plus two
+// spare tail days. FORECAST_DAYS counts today as its first day, exactly as
+// Open-Meteo does.
+const MOCK_PAST_DAYS = 8;
+const MOCK_FORECAST_DAYS = 5;
+const MOCK_TODAY_INDEX = MOCK_PAST_DAYS;
+
+/**
+ * "YYYY-MM-DDTHH:00" in LOCAL time -- the shape Open-Meteo returns for
+ * timezone=Asia/Tokyo (no offset suffix), and the shape
+ * deriveWeatherFromOpenMeteo() feeds to `new Date(...)`, which reads an
+ * offsetless stamp as local. Building the labels locally is what keeps the
+ * fixture's "today" bucket the same calendar day the browser under test is on.
+ */
+function localHourStamp(date) {
+  const pad = (value) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+    + `T${pad(date.getHours())}:00`;
+}
+
+/**
+ * Deterministic Open-Meteo response: dry today, then two rainy days.
+ *
+ * The window is built RELATIVE to the day the test runs, never from a fixed
+ * calendar date. A hard-coded start expires silently: once the real clock
+ * passes it the response stops containing today + two future days, and the
+ * 3-day forecast assertion below fails for a reason that has nothing to do
+ * with the app. Days are emitted one calendar day at a time (24 labelled hours
+ * each) rather than by adding 3600000ms, so a DST boundary cannot shift a
+ * label into the neighbouring day and shear the day buckets.
+ */
 function mockOpenMeteoResponse() {
   const hours = [];
   const precip = [];
   const prob = [];
-  const start = new Date("2026-08-10T00:00:00Z"); // 8 days before "today"
-  for (let h = 0; h < 24 * 11; h += 1) {
-    const t = new Date(start.getTime() + h * 3600000);
-    hours.push(t.toISOString().slice(0, 13) + ":00");
-    const dayIndex = Math.floor(h / 24); // 0-7 = past, 8 = today, 9-10 = forecast
-    if (dayIndex === 9) {
-      precip.push(2.5);
-      prob.push(70);
-    } else if (dayIndex === 10) {
-      precip.push(0.5);
-      prob.push(30);
-    } else {
-      precip.push(0);
-      prob.push(5);
+  // Local midnight MOCK_PAST_DAYS before today, so day index MOCK_TODAY_INDEX
+  // is today.
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  start.setDate(start.getDate() - MOCK_PAST_DAYS);
+  const totalDays = MOCK_PAST_DAYS + MOCK_FORECAST_DAYS;
+  for (let dayIndex = 0; dayIndex < totalDays; dayIndex += 1) {
+    for (let hour = 0; hour < 24; hour += 1) {
+      const t = new Date(start);
+      t.setDate(t.getDate() + dayIndex);
+      t.setHours(hour, 0, 0, 0);
+      hours.push(localHourStamp(t));
+      if (dayIndex === MOCK_TODAY_INDEX + 1) {
+        precip.push(2.5);
+        prob.push(70);
+      } else if (dayIndex === MOCK_TODAY_INDEX + 2) {
+        precip.push(0.5);
+        prob.push(30);
+      } else {
+        precip.push(0);
+        prob.push(5);
+      }
     }
   }
   return {
@@ -94,7 +132,23 @@ async function registerField(page, name, walkOptions) {
   await expect(page.locator("#basicFieldRegDialog")).toBeHidden();
 }
 
+/**
+ * #recObsWaterLevelInput/#recTargetWaterLevelInput live inside
+ * #basicWaterRecordCard, which is no longer permanently visible on desktop
+ * -- it only renders once #basicRecordWaterButton (or the map summary's own
+ * button) opens it (see #basicWaterRecordCard's own CSS comment). Opening it
+ * first here is idempotent even if it is already open.
+ */
 async function setWaterLevels(page, { current, target }) {
+  // These tests are about the quantitative deficit/volume math, which only
+  // exists for a stage with a numeric target -- the calendar-estimated
+  // default stage a fresh field gets is whatever growth stage today's real
+  // date falls in, and that can land on a managed-state stage (e.g. 間断灌漑)
+  // with no numeric target at all. Pinning one keeps the test's outcome
+  // independent of which day it happens to run on.
+  await page.locator("#waterMgmtStageSelect").selectOption("tillering");
+  await page.locator("#basicRecordWaterButton").click();
+  await expect(page.locator("#recObsWaterLevelInput")).toBeVisible();
   if (current !== undefined) {
     await page.locator("#recObsWaterLevelInput").fill(String(current));
   }
@@ -140,13 +194,30 @@ test("one field: satellite thumbnail, metadata and the missing-water-level hero 
   await expect(page.locator("#accountFieldsList .account-field-tile")).toHaveCount(1);
   await expect(page.locator("#accountFieldsList .account-field-tile").first()).toHaveClass(/is-active/);
 
-  // Hero: no current/target level recorded yet -> missing-data message, not a
-  // fabricated 0 cm / 0 m3, and the carousel stays hidden with only one field.
+  // Hero with NO level recorded: leads with the RECOMMENDATION (the stage's
+  // reference depth, or its management state for a stage that has no numeric
+  // target), never a request for input. The 必要水量 slot shows the per-10mm
+  // conversion rate -- pure geometry from the surveyed area, which assumes no
+  // current level -- so nothing is fabricated and nothing is a bare dash.
+  //
+  // .gate-card (this content's container) is no longer permanently visible
+  // on desktop -- it only renders attached below #mapWaterSummary once
+  // #mapWaterSummaryButton opens it, and with no measurement yet that button
+  // opens #basicWaterRecordCard instead (see .gate-card's own CSS comment).
+  // The values are still computed and present in the DOM either way, so the
+  // text assertions below (which do not require visibility) still verify
+  // the same underlying rendering logic.
   await expect(page.locator("#waterHeroCarousel")).toBeHidden();
-  await expect(page.locator("#waterHeroContent")).toBeVisible();
-  await expect(page.locator("#waterHeroPrimary")).toContainText("現在の水位を記録すると");
-  await expect(page.locator("#waterHeroVolume")).toHaveText("—");
-  await expect(page.locator("#waterHeroConfidence")).toHaveText("—");
+  await expect(page.locator("#waterHeroPrimary")).not.toContainText("現在の水位を記録すると");
+  await expect(page.locator("#waterHeroPrimary")).toHaveText(/目標水深\s\d+〜\d+\s?mm|：/);
+  await expect(page.locator("#waterHeroVolumeLabel")).toHaveText("水深10mmあたり");
+  await expect(page.locator("#waterHeroVolume")).toHaveText(/約\s[\d,.]+\sm³/);
+  // "参考値" for a numeric-target stage with no measurement yet, "高" for a
+  // managed-state stage (e.g. 間断灌漑) where confidence isn't measurement-
+  // gated at all -- which one this freshly-registered field gets depends on
+  // today's real date via the calendar estimate (see setWaterLevels()'s own
+  // comment on the same dependency), so both are valid here.
+  await expect(page.locator("#waterHeroConfidence")).toHaveText(/参考値|高/);
 });
 
 // ---------------------------------------------------------------------------
@@ -230,9 +301,11 @@ test("multiple fields: dropdown, registered-field row, and mini-card all drive t
   await expect(page.locator("#basicFieldSourceFile")).toHaveText("圃場2.txt");
   await expect(page.locator(`#waterHeroCarousel button[data-water-hero-field-id="${ids[0]}"]`)).toHaveClass(/is-active/);
 
-  // Field without a recorded level shows its mini-card as unrecorded, never a fake 0cm.
-  await expect(page.locator(`#waterHeroCarousel button[data-water-hero-field-id="${ids[1]}"] .water-hero-mini-delta`))
-    .toHaveText("水位未記録");
+  // Field without a recorded level shows its TARGET (or management state) on
+  // the mini-card -- never "水位未記録", and never a fake 0cm.
+  const miniDelta = page.locator(`#waterHeroCarousel button[data-water-hero-field-id="${ids[1]}"] .water-hero-mini-delta`);
+  await expect(miniDelta).not.toHaveText("水位未記録");
+  await expect(miniDelta).toHaveText(/目標\s\d+〜\d+mm|管理|灌漑|落水|飽水/);
 });
 
 test("selecting a field re-fetches weather for that field's centroid", async ({ page }) => {
@@ -289,7 +362,11 @@ test("a water level recorded 3+ days ago is flagged stale, and confidence drops"
   }, fieldId);
   await page.reload();
 
-  await expect(page.locator("#waterHeroStaleWarning")).toBeVisible();
+  // #waterHeroStaleWarning/#waterHeroConfidence live inside .gate-card,
+  // which resets to its default (not permanently visible on desktop) state
+  // on every reload -- see .gate-card's own CSS comment. The text
+  // assertions below don't require visibility, so they still verify the
+  // same underlying staleness computation.
   await expect(page.locator("#waterHeroStaleWarning")).toContainText("4日前");
   await expect(page.locator("#waterHeroConfidence")).toHaveText("低");
 });

@@ -269,6 +269,102 @@
       color: #fff;
     }
 
+    /* Compact 今日の水門判断 read, upper-left of the main map -- the space
+       freed up by moving the zoom control to bottom-right. Desktop only:
+       hidden outright below the app's existing 980px breakpoint so mobile
+       (already reviewed and accepted) renders exactly as it did before this
+       existed, regardless of the JS-toggled [hidden] state. */
+    .map-water-summary {
+      background: rgba(255, 255, 255, 0.97);
+      border: 1px solid rgba(24, 49, 40, 0.22);
+      border-radius: 12px;
+      box-shadow: 0 2px 10px rgba(24, 49, 40, 0.16);
+      display: grid;
+      gap: 6px;
+      left: 12px;
+      max-width: 320px;
+      padding: 12px 14px;
+      /* A marker popup near the top-left of the map can otherwise render
+         underneath this card and lose its own clicks to it. The card is
+         read-only except its one button, so it lets clicks pass through to
+         whatever is actually on the map beneath it; the button opts back
+         in explicitly. */
+      pointer-events: none;
+      position: absolute;
+      top: 12px;
+      z-index: 440;
+    }
+
+    .map-water-summary[hidden] {
+      display: none;
+    }
+
+    #mapWaterSummaryButton {
+      pointer-events: auto;
+    }
+
+    /* Stepped aside while a marker popup is open (see the map.on("popupopen"
+       ...) listener) -- a popup's own controls must never lose a click to
+       this card, however the two happen to overlap on screen. display:none
+       (not just pointer-events) so the card's own button -- which opts back
+       into pointer-events above -- is removed from hit-testing too, not
+       just the card's background. */
+    .map-water-summary.map-water-summary-yield {
+      display: none !important;
+    }
+
+    @media (max-width: 980px) {
+      .map-water-summary {
+        display: none !important;
+      }
+    }
+
+    .map-water-summary-head {
+      align-items: baseline;
+      display: flex;
+      gap: 8px;
+      justify-content: space-between;
+    }
+
+    .map-water-summary-head .eyebrow {
+      margin: 0;
+    }
+
+    .map-water-summary-head strong {
+      color: var(--green);
+      font-size: 0.85rem;
+      font-weight: 750;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .map-water-summary-state {
+      color: var(--muted);
+      font-size: 0.78rem;
+      font-weight: 700;
+      margin: 0;
+    }
+
+    .map-water-summary-primary {
+      color: var(--text);
+      font-size: 1.05rem;
+      font-weight: 800;
+      line-height: 1.3;
+      margin: 0;
+    }
+
+    .map-water-summary-detail {
+      color: var(--muted);
+      font-size: 0.8rem;
+      line-height: 1.5;
+      margin: 0;
+    }
+
+    #mapWaterSummaryButton {
+      min-height: 40px;
+    }
+
     .panel {
       align-content: start;
       background: var(--panel);
@@ -280,12 +376,31 @@
       padding: 16px;
     }
 
+    /* Boxless by default -- .panel-left/.panel-right's own children render as
+       direct grid items of .panel, so 設定/ドローン/mobile see the exact same
+       flat single-scroll-area layout as before this wrapper existed. Only the
+       body[data-mode="basic"] desktop rule (near the other basic-mode-only
+       overrides) turns them into real, independently laid-out boxes. */
+    .panel-left,
+    .panel-right {
+      display: contents;
+    }
+
     .card {
       background: #fff;
       border: 1px solid var(--line);
       border-radius: 10px;
       display: grid;
       gap: 10px;
+      /* CSS Grid items default to min-width: auto, which refuses to shrink
+         below the intrinsic width of their content. A wide child (the
+         mini-card carousel, a long NMEA filename, ...) then forces this
+         card -- and .panel above it -- wider than the viewport instead of
+         wrapping or scrolling internally. This is the actual root cause of
+         the Basic-mode panel becoming horizontally draggable; it is not
+         fixed by overflow-x: hidden anywhere, only by letting grid items
+         shrink to their track's real width. */
+      min-width: 0;
       padding: 14px;
     }
 
@@ -327,6 +442,35 @@
       content: "＋";
       font-size: 1rem;
       font-weight: 800;
+    }
+
+    /* Shared close-button look for every card that slides down attached
+       below #mapWaterSummary on desktop 基本モード (#basicWaterRecordCard,
+       .gate-card) -- display:none by default; each card's own
+       .basic-*-attached rule turns it on only while that card is actually
+       floating, so it stays invisible in every other context (mobile/設定/
+       ドローン, or the card's own normal flowing position). */
+    .basic-attached-close {
+      display: none;
+      align-items: center;
+      background: var(--panel, #fbfaf5);
+      border: 1px solid var(--line, #d8d8ca);
+      border-radius: 999px;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 0.9rem;
+      height: 28px;
+      justify-content: center;
+      line-height: 1;
+      padding: 0;
+      width: 28px;
+    }
+
+    .basic-attached-close:hover,
+    .basic-attached-close:focus-visible {
+      background: #eaf3ec;
+      border-color: var(--green);
+      color: var(--text);
     }
 
     details.card[open] > summary {
@@ -403,6 +547,11 @@
     .input-row {
       display: grid;
       gap: 4px;
+      /* Grid items default to min-width:auto, and a <select>'s min-content is
+         the width of its LONGEST OPTION -- so one long 圃場名 made
+         #basicActiveFieldSelect ~440px wide and pushed the whole card past
+         its panel. Same root cause as `.card { min-width: 0 }` above. */
+      min-width: 0;
     }
 
     .input-row label {
@@ -418,6 +567,7 @@
       border-radius: 6px;
       color: var(--text);
       font: inherit;
+      min-width: 0;
       padding: 8px 9px;
       width: 100%;
     }
@@ -435,6 +585,13 @@
     }
 
     .kv strong {
+      /* A long unbroken value -- most often an NMEA filename like
+         とても長いNMEAファイル名前...0123456789012345.txt -- has no wrap
+         opportunity, so its min-content became the min-content of the whole
+         圃場の管理 grid track and pushed the card past its panel. Allow the
+         value itself to wrap instead of widening its container. */
+      min-width: 0;
+      overflow-wrap: anywhere;
       text-align: right;
     }
 
@@ -651,6 +808,72 @@
       margin-top: 6px;
       padding: 5px 10px;
       width: 100%;
+    }
+
+    /* 境界を直線化's floating "done bar" — bottom-center over the map,
+       distinct from .map-quick-toolbar's bottom-left card so the two never
+       fight for the same corner. Sized against #map-wrap's own width (its
+       `position: relative` positioning parent), not the viewport — in
+       Basic mode's 3-column desktop layout the map is only the center
+       column, often much narrower than 100vw, and a viewport-sized bar
+       there would run under Leaflet's bottom-right zoom control. Wraps to
+       two lines by default (not just <640px) for the same reason. */
+    .map-edit-bar {
+      align-items: center;
+      background: rgba(255, 255, 255, 0.97);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      bottom: 14px;
+      box-shadow: var(--shadow);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px 12px;
+      justify-content: center;
+      left: 50%;
+      max-width: calc(100% - 24px);
+      padding: 10px 14px;
+      position: absolute;
+      transform: translateX(-50%);
+      z-index: 470;
+    }
+
+    .map-edit-bar-status {
+      color: var(--text);
+      flex: 1 1 auto;
+      font-size: 0.8rem;
+      font-weight: 700;
+      text-align: center;
+    }
+
+    .map-edit-bar-actions {
+      display: flex;
+      flex-shrink: 0;
+      gap: 6px;
+    }
+
+    .map-edit-bar-button {
+      background: #f5f6f1;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      color: var(--text);
+      cursor: pointer;
+      font-size: 0.78rem;
+      font-weight: 700;
+      padding: 8px 14px;
+      white-space: nowrap;
+    }
+
+    .map-edit-bar-button.primary {
+      background: var(--green);
+      border-color: var(--green);
+      color: #fff;
+    }
+
+    .map-edit-bar-button.primary:disabled {
+      background: #a8b3a0;
+      border-color: #a8b3a0;
+      color: #fff;
+      cursor: not-allowed;
     }
 
     @media (max-width: 760px) {
@@ -1152,6 +1375,13 @@
       flex: 0 0 auto;
     }
 
+
+    /* Desktop keeps the upload in the right rail, so the header twin is off.
+       The max-width:980px block below is the only thing that turns it on. */
+    .header-nmea-upload {
+      display: none;
+    }
+
     .data-status {
       align-items: center;
       color: var(--muted);
@@ -1211,20 +1441,6 @@
 
     .engineering-nav {
       margin-top: 8px;
-    }
-
-    .engineering-nav > summary {
-      color: var(--muted);
-      cursor: pointer;
-      font-size: 0.78rem;
-      font-weight: 750;
-      min-height: 36px;
-      padding: 8px 2px;
-      width: fit-content;
-    }
-
-    .engineering-nav[open] > summary {
-      margin-bottom: -4px;
     }
 
     .workspace-tab {
@@ -1518,6 +1734,360 @@
       padding: 18px;
     }
 
+    /* Desktop-only 基本モード layout: the MAP IS THE CANVAS. .map-wrap fills
+       the entire workspace edge-to-edge and 圃場の管理/今日の水門判断 (left)
+       and NMEAアップロード/測量ログ/水管理/観察 (right) float on top of it as
+       translucent cards, so map imagery stays visible behind both rails
+       instead of being walled off by opaque grid columns.
+
+       This replaces the earlier literal 3-column grid (320px | map | 430px)
+       -- see docs/STAGE1_BASIC_FLOATING_MAP_DASHBOARD.md. All three items now
+       share ONE grid cell (grid-area: 1/1) and are layered with z-index
+       rather than placed side by side, which is what lets the map run the
+       full width underneath the rails.
+
+       Scoped to body[data-mode="basic"] and >=981px so 設定/ドローン keep the
+       existing 2-column shell (map + single .panel, both above) and mobile
+       basic-mode is untouched -- see the max-width:980px blocks, which this
+       never overlaps. Higher-specificity attribute selectors here win over
+       the plain `.panel`/`.panel-left` rules regardless of source order. */
+    @media (min-width: 981px) {
+      /* One row, one column: the single cell every layer stacks into.
+         grid-template-rows stays explicit (rather than implicit) for the same
+         reason as the 3-column version -- items with a definite grid-area do
+         not depend on auto-placement, so .map-wrap's height:100% always has a
+         definite row to resolve against and cannot collapse to 0px. */
+      body[data-mode="basic"] main {
+        --basic-rail-left-width: 320px;
+        --basic-rail-right-width: 400px;
+        --basic-rail-inset: 20px;
+        /* Distance from a viewport edge to the inner edge of that rail --
+           used by the map overlays/Leaflet controls below to step clear of
+           the floating rails. */
+        /* Vertical band the pinned 水管理ポイント toolbar owns in the
+           bottom-left corner. The left rail is shortened by exactly this
+           while the toolbar is visible, so the two can never overlap at any
+           scroll position. A FIXED reserve sized for the toolbar's worst
+           case (armed + 2+ fields, measured 304px) left a large, usually-
+           empty gap whenever the toolbar was actually in a shorter state
+           (idle, single field, ~150-190px) -- which is most of the time.
+           Instead this tracks the toolbar's REAL current height, written
+           onto :root as --basic-quick-toolbar-live-height by a
+           ResizeObserver (see "Floating-rail aware fitBounds" below, same
+           area) every time it changes -- armed/idle, field-row shown or
+           not, anything. +20px is the safety margin over the exact
+           measured height; the 220px fallback covers the brief window
+           before the observer's first measurement lands (close to the
+           idle/single-field case, the common state at first paint). */
+        --basic-quick-toolbar-reserve: calc(var(--basic-quick-toolbar-live-height, 220px) + 20px);
+        --basic-rail-left-clear: calc(var(--basic-rail-left-width) + var(--basic-rail-inset) + 12px);
+        --basic-rail-right-clear: calc(var(--basic-rail-right-width) + var(--basic-rail-inset) + 12px);
+        /* Height of the top band reserved for #mapWaterSummary. Read back by
+           floatingChromeInset() so the CSS cap and the fitBounds reservation
+           can never drift apart. */
+        --basic-summary-reserve: 200px;
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-rows: minmax(0, 1fr);
+      }
+
+      /* Full-bleed base layer. z-index:0 (not auto) deliberately makes
+         .map-wrap a stacking context, so every Leaflet pane inside it --
+         tiles 200 ... markers 600, popups 700, controls 800 -- is contained
+         BELOW the rails' z-index:1 instead of leaking into main's stacking
+         context and rendering through the frosted cards. */
+      body[data-mode="basic"] .map-wrap {
+        grid-area: 1 / 1;
+        z-index: 0;
+      }
+
+      /* .panel itself goes boxless so .panel-left/.panel-right -- promoted
+         to main's own grid items by display: contents above -- become the
+         floating rails. */
+      body[data-mode="basic"] .panel {
+        display: contents;
+      }
+
+      /* The RAIL is only a scroll container and a column of positions: it is
+         fully transparent and pointer-transparent, so the map stays visible
+         AND clickable in the gaps between cards. Each .card inside opts back
+         into pointer events and carries the frosted-glass treatment, which
+         is what makes these read as separate floating cards (the ASCII
+         layout in the request) rather than one long translucent slab -- and
+         avoids nesting every card inside a second card. */
+      body[data-mode="basic"] .panel-left,
+      body[data-mode="basic"] .panel-right {
+        align-content: start;
+        background: none;
+        display: grid;
+        gap: 12px;
+        grid-area: 1 / 1;
+        margin: var(--basic-rail-inset);
+        /* Cap at the workspace height minus both margins so a long rail
+           scrolls internally instead of growing the page. */
+        max-height: calc(100% - (2 * var(--basic-rail-inset)));
+        min-height: 0;
+        overflow-y: auto;
+        pointer-events: none;
+        z-index: 1;
+      }
+
+      body[data-mode="basic"] .panel-left {
+        justify-self: start;
+        width: var(--basic-rail-left-width);
+      }
+
+      body[data-mode="basic"] .panel-right {
+        justify-self: end;
+        width: var(--basic-rail-right-width);
+      }
+
+      body[data-mode="basic"] .panel-left > .card,
+      body[data-mode="basic"] .panel-right > .card {
+        background: rgba(251, 250, 245, 0.84);
+        backdrop-filter: blur(8px) saturate(110%);
+        -webkit-backdrop-filter: blur(8px) saturate(110%);
+        border: 1px solid rgba(24, 49, 40, 0.12);
+        border-radius: 16px;
+        box-shadow: 0 8px 28px rgba(24, 49, 40, 0.14);
+        pointer-events: auto;
+      }
+
+      /* 現在の圃場 stacks in the narrow left rail. The satellite thumbnail +
+         metadata two-up (190px + rest) was sized for the old ~380-430px
+         panel; inside the 320px rail it starved the metadata column until
+         nowrap labels like 水管理ポイント overflowed the card. Stacked, the
+         preview gets the rail's full width -- which reads better anyway --
+         and every 元NMEA/面積 row has room. */
+      body[data-mode="basic"] .panel-left .basic-field-current {
+        grid-template-columns: minmax(0, 1fr);
+      }
+
+      /* Without backdrop-filter the same rgba background would let map
+         imagery read straight through the text. Fall back to a nearly opaque
+         card -- still the project's off-white, just no live blur. */
+      @supports not ((backdrop-filter: blur(8px)) or (-webkit-backdrop-filter: blur(8px))) {
+        body[data-mode="basic"] .panel-left > .card,
+        body[data-mode="basic"] .panel-right > .card {
+          background: rgba(251, 250, 245, 0.97);
+        }
+      }
+
+      /* Map overlays and Leaflet's own control corners step inward so they
+         are never stranded underneath a rail. All offsets derive from the
+         rail widths above, so the two cannot drift apart. */
+      body[data-mode="basic"] .basemap-toggle {
+        right: var(--basic-rail-right-clear);
+      }
+
+      /* 水管理ポイント is the ONE overlay that does NOT step inward. It is
+         pinned to the true bottom-left corner of the canvas and stays there:
+         it appears only while a field is actually being edited, and while it
+         is up its position must not depend on how far the 圃場の管理 rail
+         happens to be scrolled, or on how tall that rail's cards are.
+
+         Being independent of the rail only works if the rail can never be
+         drawn over it -- .map-wrap is a z-index:0 stacking context, so nothing
+         inside it (this toolbar included) can ever paint above the z-index:1
+         rails, no matter what z-index it is given. The rail is therefore
+         SHORTENED to end above the toolbar, below. */
+      body[data-mode="basic"] .map-quick-toolbar {
+        left: var(--basic-rail-inset);
+        bottom: var(--basic-rail-inset);
+      }
+
+      /* Only while the toolbar is actually on screen -- it carries [hidden]
+         the rest of the time, and there is no reason to shorten the rail then.
+         Without this the last card of a scrolled rail slides straight over the
+         pinned toolbar and hides it, which is the behaviour this replaces. */
+      body[data-mode="basic"]:has(#waterQuickToolbar:not([hidden])) .panel-left {
+        max-height: calc(
+          100% - (2 * var(--basic-rail-inset)) - var(--basic-quick-toolbar-reserve)
+        );
+      }
+
+      /* The compact 今日の水門判断 read sits in the one genuinely free corner
+         left on the canvas: the top of the band between the rails. The old
+         upper-LEFT corner is now under the 圃場の管理 rail; centre-bottom was
+         tried and rejected because it collides with BOTH the 水管理ポイント
+         toolbar (bottom-left of the same band) and the fitted field polygon.
+
+         Its height is capped to --basic-summary-reserve so the band it can
+         occupy is a known constant, which is what lets fitBounds below keep
+         the field clear of it deterministically -- rather than depending on
+         whether the card happened to be visible at the moment of the fit. */
+      body[data-mode="basic"] .map-water-summary {
+        left: var(--basic-rail-left-clear);
+        top: 12px;
+        bottom: auto;
+        transform: none;
+        max-height: calc(var(--basic-summary-reserve) - 16px);
+        overflow-y: auto;
+      }
+
+      /* 水位・観察を記録 (#basicWaterRecordCard), attached below #mapWaterSummary
+         as a slide-down panel triggered by the summary's own "水位を記録"
+         button -- desktop 基本モード only. Mobile/設定/ドローン keep this card
+         exactly where it has always lived (a normal flowing section) and are
+         completely unaffected: the .basic-water-record-attached class below
+         is only ever added by JS from that one desktop-basic code path, and
+         even then this whole block only matches inside body[data-mode="basic"]
+         at >=981px, so the class alone (e.g. lingering after a resize down to
+         mobile) has zero effect outside that combination.
+
+         Not moved in the DOM -- #mapWaterSummary is itself desktop-only
+         ([hidden] below 980px, its own media rule), so nesting this card as
+         a literal child would silently drop it from mobile, where it is a
+         normal always-usable section today, not something gated behind a
+         desktop-only overlay. position:fixed sidesteps needing DOM
+         descendance for CSS positioning: this app's shell does not scroll on
+         desktop (only individual panels do), so viewport-relative
+         positioning behaves identically to .map-wrap-relative positioning
+         here. --basic-summary-live-bottom is #mapWaterSummary's OWN live
+         bottom edge (viewport px, plus an 8px gap), kept in sync by
+         syncMapWaterSummaryReserve() -- both from a ResizeObserver and,
+         critically, synchronously at the end of renderMapWaterSummary()
+         itself, for the exact same reason --basic-quick-toolbar-live-height
+         needs its own synchronous hook above: a ResizeObserver alone is
+         asynchronous, leaving a real, observed window where this card would
+         sit at the OLD (pre-change) position for a frame after the summary's
+         own height just changed. */
+      /* The whole point of the slide-down redesign: this card no longer sits
+         permanently in the right rail on desktop -- it only exists on screen
+         once #mapWaterSummaryButton has actually attached it (see
+         toggleAttachedWaterRecordCard()). Without this rule the card renders
+         in its old always-visible flowing position AS WELL AS the fixed
+         slide-down copy once attached, which is not what "move it so it only
+         appears on demand" means. Scoped to :not(.basic-water-record-attached)
+         so it stops applying the instant the class is added, handing off
+         cleanly to the fixed-position rule below. */
+      body[data-mode="basic"] #basicWaterRecordCard:not(.basic-water-record-attached) {
+        display: none;
+      }
+
+      body[data-mode="basic"] #basicWaterRecordCard.basic-water-record-attached {
+        position: fixed;
+        left: var(--basic-rail-left-clear);
+        top: var(--basic-summary-live-bottom, 200px);
+        width: min(320px, calc(100% - var(--basic-rail-left-clear) - var(--basic-rail-right-clear) - 12px));
+        margin: 0;
+        max-height: 0;
+        opacity: 0;
+        overflow: hidden;
+        pointer-events: none;
+        transition: max-height 0.28s ease, opacity 0.2s ease;
+      }
+
+      body[data-mode="basic"] #basicWaterRecordCard.basic-water-record-attached.is-open {
+        max-height: min(520px, calc(100vh - var(--basic-summary-live-bottom, 200px) - 24px));
+        opacity: 1;
+        overflow-y: auto;
+        pointer-events: auto;
+      }
+
+      /* Dismissal affordance: while attached, clicking #mapWaterSummaryButton
+         again also closes it (see toggleAttachedWaterRecordCard()), but a
+         floating panel with no obvious "away" to scroll to needs an explicit
+         close control too. Hidden everywhere else -- .basic-water-record-
+         attached is desktop-basic-only, so this never appears in the normal
+         (mobile/設定/ドローン) rendering of the same card. */
+      #basicWaterRecordCard.basic-water-record-attached .basic-attached-close {
+        display: block;
+        position: absolute;
+        top: 10px;
+        right: 10px;
+      }
+
+      /* .gate-card (今日の水門判断), attached below #mapWaterSummary the same
+         way #basicWaterRecordCard is -- see that rule's own long comment for
+         why position:fixed + a live --basic-summary-live-bottom top offset
+         instead of DOM nesting. Triggered by #mapWaterSummaryButton's
+         "詳細を見る" state (toggleAttachedGateCard()) rather than the old
+         scrollIntoView(.gate-card), which stopped reaching anything once the
+         card left the left rail's normal flow -- see the hide rule below.
+
+         Left-rail fallout: 水管理 (#waterManagementCard) sits directly after
+         .gate-card in the DOM and needs no reordering -- once .gate-card is
+         display:none it simply moves up into the slot .gate-card used to
+         occupy, immediately under 圃場の管理. That collapse is the entire
+         point: the farmer used to have to scroll past the full verdict card
+         to reach 生育ステージ; now both 圃場の管理 and 水管理 fit above the
+         fold, and the verdict is one click away on the map instead of a
+         permanent, always-open detail block down the left side. */
+      body[data-mode="basic"] .gate-card:not(.basic-gate-card-attached) {
+        display: none;
+      }
+
+      body[data-mode="basic"] .gate-card.basic-gate-card-attached {
+        position: fixed;
+        left: var(--basic-rail-left-clear);
+        top: var(--basic-summary-live-bottom, 200px);
+        width: min(400px, calc(100% - var(--basic-rail-left-clear) - var(--basic-rail-right-clear) - 12px));
+        margin: 0;
+        max-height: 0;
+        opacity: 0;
+        overflow: hidden;
+        pointer-events: none;
+        transition: max-height 0.28s ease, opacity 0.2s ease;
+      }
+
+      body[data-mode="basic"] .gate-card.basic-gate-card-attached.is-open {
+        max-height: min(600px, calc(100vh - var(--basic-summary-live-bottom, 200px) - 24px));
+        opacity: 1;
+        overflow-y: auto;
+        pointer-events: auto;
+      }
+
+      .gate-card.basic-gate-card-attached .basic-attached-close {
+        display: block;
+        position: absolute;
+        top: 10px;
+        right: 10px;
+      }
+
+      /* Centred on the FREE canvas between the rails, not on the viewport:
+         viewport-centring put this 420px card under the 地図/航空写真 toggle
+         at 1366px, because the gap between the rails is much narrower than
+         the (now full-bleed) map. Also dropped below the toggle's band so
+         the two can never share a row at any width. */
+      body[data-mode="basic"] .empty-state {
+        left: calc(
+          var(--basic-rail-left-clear) +
+          (100% - var(--basic-rail-left-clear) - var(--basic-rail-right-clear)) / 2
+        );
+        max-width: min(
+          420px,
+          calc(100% - var(--basic-rail-left-clear) - var(--basic-rail-right-clear) - 16px)
+        );
+        top: 84px;
+      }
+
+      /* Leaflet's bottom-right corner holds BOTH the +/- zoom control and the
+         attribution, so one margin keeps each clear of the right rail. The
+         control stays bottom-right (Leaflet's own setPosition, unchanged) --
+         this only insets the corner, it does not relocate or duplicate it. */
+      body[data-mode="basic"] .leaflet-bottom.leaflet-right {
+        margin-right: calc(var(--basic-rail-right-width) + var(--basic-rail-inset));
+      }
+
+      /* Same reasoning as .empty-state just above: .map-edit-bar's base rule
+         centers on #map-wrap, which is full-bleed here -- viewport-centred
+         it would drift under the right rail instead of the actual free
+         canvas between the two floating rails. Unlike .empty-state (pinned
+         near the top), this bar shares the bottom-right corner with
+         Leaflet's zoom control, which is only inset to clear the right
+         RAIL card, not this bar -- so the free-canvas math also reserves
+         the control's own ~44px footprint on the right, or a narrow window
+         (rails wide relative to viewport) lets the two overlap. */
+      body[data-mode="basic"] .map-edit-bar {
+        --map-edit-bar-right-clear: calc(var(--basic-rail-right-clear) + 48px);
+        left: calc(
+          var(--basic-rail-left-clear) +
+          (100% - var(--basic-rail-left-clear) - var(--map-edit-bar-right-clear)) / 2
+        );
+        max-width: calc(100% - var(--basic-rail-left-clear) - var(--map-edit-bar-right-clear) - 16px);
+      }
+    }
+
     .card {
       background: var(--panel);
       border-color: var(--line);
@@ -1617,6 +2187,28 @@
     .water-hero-mini-volume {
       color: var(--muted);
       font-size: 0.75rem;
+    }
+
+    /* Desktop only (matches the app's existing >980px breakpoint, e.g.
+       index.html:860/1828's `main` column switch): a horizontally-scrolling
+       carousel is reasonable touch UX on a phone, but on a mouse-driven
+       desktop panel it reads as broken drag-scrolling. Above 980px the
+       cards wrap into a responsive grid instead and the scrollbar goes
+       away entirely. Left untouched at <=980px -- mobile keeps the exact
+       same flex/overflow-x:auto carousel it already had. */
+    @media (min-width: 981px) {
+      .water-hero-carousel {
+        display: grid;
+        gap: 8px;
+        grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+        margin: 0;
+        overflow-x: visible;
+        padding: 0;
+      }
+
+      .water-hero-mini-card {
+        min-width: 0;
+      }
     }
 
     .water-hero-field-label {
@@ -1720,6 +2312,225 @@
 
     .water-hero-forecast-prob {
       font-size: 0.72rem;
+    }
+
+    /* --------------------------------------------------------------------
+       水管理 / Water Management: growth-stage recommendation card
+
+       Reuses the app's existing card/.input-row/.panel-button vocabulary and
+       borrows .water-hero-stale for the stale-reading banner rather than
+       defining a second warning style. Nothing here introduces a new colour
+       that is not already in the palette above.
+       -------------------------------------------------------------------- */
+
+    .water-mgmt-card {
+      gap: 10px;
+    }
+
+    .water-mgmt-grid {
+      display: grid;
+      gap: 8px;
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .water-mgmt-cell {
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      display: grid;
+      gap: 2px;
+      padding: 8px 10px;
+    }
+
+    .water-mgmt-label {
+      color: var(--muted);
+      font-size: 0.72rem;
+      font-weight: 700;
+    }
+
+    .water-mgmt-label .en {
+      display: block;
+      font-size: 0.64rem;
+      font-weight: 500;
+    }
+
+    /* Same treatment `.card h2 .en` already gets, applied to this card's form
+       labels so the English gloss reads as a gloss rather than running into
+       the Japanese. */
+    .water-mgmt-card .input-row label .en,
+    .water-mgmt-card .water-mgmt-evidence .details-title .en {
+      color: var(--muted);
+      font-size: 0.72rem;
+      font-weight: 500;
+      margin-left: 6px;
+    }
+
+    .water-mgmt-value {
+      font-size: 1.02rem;
+      line-height: 1.3;
+    }
+
+    .water-mgmt-sub {
+      color: var(--muted);
+      font-size: 0.76rem;
+      margin: 0;
+    }
+
+    .water-mgmt-measure-row input {
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* Sign convention, stated at the point of entry. The datum is what makes a
+       water level meaningful, and -150 (AWD) vs +150 are opposite field
+       states -- so this sits directly under the input rather than in help
+       text the farmer has to go looking for. */
+    .water-mgmt-sign-hint {
+      margin-top: -4px;
+      line-height: 1.5;
+    }
+
+    /* The stage was inferred from the regional calendar, not observed. Styled
+       as a quiet annotation rather than an alert: it is normal, expected, and
+       correctable -- not an error. */
+    .water-mgmt-estimate-note {
+      color: var(--muted);
+      font-style: italic;
+      margin-top: -4px;
+    }
+
+    /* Daily loss is deliberately set apart from 理論追加水量 above it: one is
+       exact geometry, the other an estimate with an error bar, and the layout
+       should not invite adding them together. */
+    .water-mgmt-loss {
+      border-top: 1px dashed var(--line);
+      margin-top: 4px;
+      padding-top: 8px;
+    }
+
+    .water-mgmt-status-cell .water-mgmt-value {
+      font-size: 0.95rem;
+    }
+
+    .water-mgmt-status-cell[data-status="below-range"] {
+      border-color: #fb923c;
+    }
+
+    .water-mgmt-status-cell[data-status="above-range"] {
+      border-color: #38bdf8;
+    }
+
+    .water-mgmt-status-cell[data-status="within-range"] {
+      border-color: var(--green);
+    }
+
+    .water-mgmt-volume {
+      background: #eef4f5;
+      border: 1px solid #c5d8dc;
+      border-radius: 10px;
+      display: grid;
+      gap: 2px;
+      padding: 10px 12px;
+    }
+
+    .water-mgmt-volume-value {
+      font-size: 1.3rem;
+      font-weight: 800;
+      line-height: 1.25;
+    }
+
+    .water-mgmt-recommendation {
+      background: #f7f9f4;
+      border-left: 3px solid var(--green);
+      border-radius: 6px;
+      font-size: 0.84rem;
+      line-height: 1.6;
+      margin: 0;
+      padding: 9px 11px;
+    }
+
+    .water-mgmt-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .water-mgmt-actions .panel-button {
+      flex: 1 1 auto;
+    }
+
+    .water-mgmt-evidence {
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 8px 10px;
+    }
+
+    .water-mgmt-evidence summary {
+      cursor: pointer;
+      font-size: 0.82rem;
+      font-weight: 700;
+    }
+
+    .water-mgmt-evidence .details-content {
+      display: grid;
+      gap: 8px;
+      padding-top: 8px;
+    }
+
+    .water-mgmt-conditional {
+      background: #fffbeb;
+      border: 1px solid #fcd34d;
+      border-radius: 6px;
+      font-size: 0.76rem;
+      line-height: 1.6;
+      padding: 8px 10px;
+    }
+
+    .water-mgmt-sources {
+      display: grid;
+      gap: 8px;
+    }
+
+    .water-mgmt-source {
+      border-top: 1px dashed var(--line);
+      display: grid;
+      font-size: 0.76rem;
+      gap: 2px;
+      line-height: 1.55;
+      padding-top: 8px;
+    }
+
+    .water-mgmt-source:first-child {
+      border-top: 0;
+      padding-top: 0;
+    }
+
+    .water-mgmt-source-org {
+      color: var(--muted);
+      font-weight: 700;
+    }
+
+    .water-mgmt-source-title {
+      font-weight: 700;
+    }
+
+    .water-mgmt-source a {
+      overflow-wrap: anywhere;
+    }
+
+    .water-mgmt-source-caveat {
+      color: #92400e;
+    }
+
+    .water-mgmt-source-verification {
+      color: var(--muted);
+      font-size: 0.72rem;
+    }
+
+    @media (max-width: 980px) {
+      .water-mgmt-grid {
+        grid-template-columns: 1fr;
+      }
     }
 
     .disclaimer {
@@ -1837,6 +2648,46 @@
       .gate-card {
         order: -1;
       }
+
+      /* On a phone the upload moves up to the header, immediately left of
+         使い方, so it is reachable without scrolling the panel. Gated on
+         body[data-mode="basic"] rather than a data-mode attribute on the
+         element itself: the mode gate works by rolling `display` back to the
+         UA default, which would fight this rule (see the note above <main>). */
+      body[data-mode="basic"] .header-nmea-upload {
+        align-items: center;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        color: var(--green);
+        cursor: pointer;
+        display: inline-flex;
+        flex: 0 0 auto;
+        font: inherit;
+        font-size: 0.82rem;
+        font-weight: 800;
+        gap: 6px;
+        justify-content: center;
+        line-height: 1;
+        min-height: 44px;
+        min-width: 44px;
+        padding: 0 12px;
+      }
+
+      body[data-mode="basic"] .header-nmea-upload:hover,
+      body[data-mode="basic"] .header-nmea-upload:focus-visible {
+        background: #eaf3ec;
+        border-color: var(--green);
+      }
+
+      /* Exactly ONE upload affordance per viewport: the card's own button
+         stands down while the header carries it. The card itself stays --
+         it still holds 測位点 count, the rejection message and the boundary
+         picker -- and #basicNmeaInput stays in the DOM inside it, which is
+         what the header button forwards its click to. */
+      body[data-mode="basic"] .basic-upload-button {
+        display: none;
+      }
     }
 
     @media (max-width: 760px) {
@@ -1919,9 +2770,6 @@
 
       .engineering-nav {
         margin-top: 2px;
-      }
-
-      .engineering-nav:not([open]) {
         padding-bottom: 3px;
       }
 
@@ -2017,11 +2865,13 @@
        The button stays a 44x44 target and keeps its accessible name from
        aria-label, so nothing is lost to a screen reader or to voice control. */
     @media (max-width: 480px) {
-      .basic-help-button-label {
+      .basic-help-button-label,
+      .header-nmea-upload-label {
         display: none;
       }
 
-      .basic-help-button {
+      .basic-help-button,
+      body[data-mode="basic"] .header-nmea-upload {
         padding: 0;
       }
     }
@@ -2085,21 +2935,51 @@
             <span class="app-subtitle">みちびきで、水門判断をもっと確かに。</span>
           </h1>
         </div>
+        <!-- DEMO PLACEMENT (temporary, for live preview only): moved next to
+             the wordmark per an explicit user request to see it here. The
+             documented layout this replaces was:
+                 スイスイナビ        [? 使い方] [ Kai ▾ ]
+             i.e. after 使い方 at the far right (brief §26) -- see git history
+             /ask the user before deciding which position ships. -->
+        <div id="accountControl" class="account-control" hidden>
+          <!-- Subtle by design (brief §26): three states, no dashboard. The
+               detail lives in the menu below and in 設定 → アカウント. -->
+          <span id="syncStatusChip" class="sync-status-chip" role="status" aria-live="polite" hidden></span>
+          <button id="accountMenuButton" class="account-menu-button" type="button"
+                  aria-haspopup="menu" aria-controls="accountMenu" aria-expanded="false">
+            <span id="accountMenuLabel" class="account-menu-label">アカウント</span>
+            <span class="account-menu-caret" aria-hidden="true">▾</span>
+          </button>
+          <div id="accountMenu" class="account-menu" role="menu" hidden>
+            <p id="accountMenuIdentity" class="account-menu-identity" hidden></p>
+            <p id="accountMenuStatus" class="account-menu-status"></p>
+            <p id="accountMenuSync" class="account-menu-sync"></p>
+            <button id="accountMenuSyncNowButton" type="button" role="menuitem" hidden>今すぐ同期</button>
+            <button id="accountMenuLoginButton" type="button" role="menuitem">ログイン / アカウント作成</button>
+            <button id="accountMenuLogoutButton" type="button" role="menuitem" hidden>ログアウト</button>
+          </div>
+        </div>
         <!-- Right-hand end of the brand row. 使い方 is deliberately NOT
              mode-gated: one authoritative help control, always in the same
              place, so it can never be hunted for. It sits after
-             .header-actions.
-
-             The account control sits after 使い方, matching the layout the
-             accounts brief specifies:
-                 スイスイナビ        [? 使い方] [ Kai ▾ ]
-             It is hidden entirely when no cloud is configured, so a
-             device-only install keeps exactly the header it has today. -->
+             .header-actions. -->
         <div class="brand-row-actions">
           <div class="header-actions" data-mode="settings">
             <span id="headerDataStatus" class="data-status"><span aria-hidden="true"></span>実証データ待機中</span>
             <button id="workspacePrimaryAction" class="action-button" type="button">選択中データの測位点を表示</button>
           </div>
+          <!-- Phone-only NMEA upload, sitting immediately LEFT of 使い方.
+               It is a <button> that forwards to the ONE existing
+               #basicNmeaInput rather than a second <input type="file">: the
+               parse/register flow, the deliberate absence of an accept
+               filter (see #basicNmeaInput) and every existing test binding
+               all stay on that single element. On desktop this is hidden and
+               the upload lives in the right rail's 圃場を登録する card. -->
+          <button id="headerNmeaUploadButton" class="header-nmea-upload" type="button"
+                  aria-label="NMEAをアップロード">
+            <span aria-hidden="true">⬆</span>
+            <span class="header-nmea-upload-label">NMEA</span>
+          </button>
           <!-- aria-label is required, not decorative: the 使い方 label is
                dropped below 480px and the "?" glyph is aria-hidden, so without
                it the button would have no accessible name on a phone. -->
@@ -2109,24 +2989,6 @@
             <span aria-hidden="true">?</span>
             <span class="basic-help-button-label">使い方</span>
           </button>
-          <div id="accountControl" class="account-control" hidden>
-            <!-- Subtle by design (brief §26): three states, no dashboard. The
-                 detail lives in the menu below and in 設定 → アカウント. -->
-            <span id="syncStatusChip" class="sync-status-chip" role="status" aria-live="polite" hidden></span>
-            <button id="accountMenuButton" class="account-menu-button" type="button"
-                    aria-haspopup="menu" aria-controls="accountMenu" aria-expanded="false">
-              <span id="accountMenuLabel" class="account-menu-label">アカウント</span>
-              <span class="account-menu-caret" aria-hidden="true">▾</span>
-            </button>
-            <div id="accountMenu" class="account-menu" role="menu" hidden>
-              <p id="accountMenuIdentity" class="account-menu-identity" hidden></p>
-              <p id="accountMenuStatus" class="account-menu-status"></p>
-              <p id="accountMenuSync" class="account-menu-sync"></p>
-              <button id="accountMenuSyncNowButton" type="button" role="menuitem" hidden>今すぐ同期</button>
-              <button id="accountMenuLoginButton" type="button" role="menuitem">ログイン / アカウント作成</button>
-              <button id="accountMenuLogoutButton" type="button" role="menuitem" hidden>ログアウト</button>
-            </div>
-          </div>
         </div>
       </div>
       <nav class="mode-nav" aria-label="モード選択">
@@ -2146,8 +3008,12 @@
           <span class="mode-tab-sub">その他の機能</span>
         </button>
       </nav>
-      <details class="engineering-nav" data-mode="settings">
-        <summary>詳細・開発メニュー</summary>
+      <!-- 詳細・開発メニュー's click-to-expand <details> was removed: the
+           workspace tabs are always shown directly now, no extra click to
+           reveal them. .engineering-nav keeps its name/data-mode gating
+           (still Settings-only, hidden in 基本/ドローン) so nothing else
+           needs to change to find or hide it. -->
+      <div class="engineering-nav" data-mode="settings">
         <nav class="workspace-nav" aria-label="詳細・開発画面">
           <button class="workspace-tab active" type="button" data-workspace-target="decision" aria-selected="true">判断デモ</button>
           <button class="workspace-tab" type="button" data-workspace-target="survey" aria-selected="false">QZ1測量</button>
@@ -2156,7 +3022,7 @@
           <button class="workspace-tab" type="button" data-workspace-target="analysis" aria-selected="false">詳細解析</button>
           <button class="workspace-tab" type="button" data-workspace-target="devtools" aria-selected="false">開発ツール</button>
         </nav>
-      </details>
+      </div>
     </header>
 
     <!-- There is exactly ONE farmer-facing verdict surface: .gate-card in the
@@ -2173,13 +3039,37 @@
     <main>
       <div class="map-wrap">
         <div id="map"></div>
+        <!-- Desktop-only (see .map-water-summary's max-width:980px rule):
+             a compact READ of 今日の水門判断, not a second decision engine.
+             Every value here comes from the same renderWaterHero() render
+             pass that builds the full hero card below -- see
+             renderMapWaterSummary(), called from inside renderWaterHero()
+             with the same `need`/`decision`/`activeField` it already
+             computed. There is no independent calculation and no separate
+             active-field state; changing the field anywhere updates both
+             surfaces from the one render. -->
+        <div id="mapWaterSummary" class="map-water-summary" hidden>
+          <div class="map-water-summary-head">
+            <span class="eyebrow">今日の水門判断</span>
+            <strong id="mapWaterSummaryField"></strong>
+          </div>
+          <p id="mapWaterSummaryState" class="map-water-summary-state"></p>
+          <p id="mapWaterSummaryPrimary" class="map-water-summary-primary"></p>
+          <p id="mapWaterSummaryDetail" class="map-water-summary-detail"></p>
+          <button id="mapWaterSummaryButton" class="panel-button" type="button"></button>
+        </div>
         <div class="basemap-toggle" role="group" aria-label="背景地図">
           <button id="basemapMapButton" class="active" type="button" data-basemap="map" aria-pressed="true">地図</button>
           <button id="basemapAerialButton" type="button" data-basemap="aerial" aria-pressed="false">航空写真</button>
         </div>
         <div id="emptyState" class="empty-state">
-          <strong id="emptyStateTitle">QZ1ログが未読込です</strong>
-          <span id="emptyStateDetail">NMEAファイル（.nmea）をアップロードするか、測量JSONを読み込むと測位点が表示されます。</span>
+          <!-- Matches body's own default data-mode="basic" (see <body> below)
+               so first paint -- before switchMode()/resetEmptyState() run --
+               is already correct for the common case. Deep-linking straight
+               into 設定/ドローン is corrected immediately by switchMode()
+               calling resetEmptyState(). -->
+          <strong id="emptyStateTitle">圃場はまだ登録されていません</strong>
+          <span id="emptyStateDetail">NMEAをアップロードしてください</span>
         </div>
         <div id="waterQuickToolbar" class="map-quick-toolbar" data-workspace="fields" data-mode="basic settings" hidden>
           <p class="map-quick-toolbar-title">水管理ポイント</p>
@@ -2199,6 +3089,26 @@
           <p id="waterQuickStatus" class="map-quick-toolbar-status" role="status" aria-live="polite" hidden></p>
           <button id="waterQuickCancelButton" class="map-quick-toolbar-cancel" type="button" hidden>キャンセル</button>
         </div>
+        <!-- 境界を直線化 (straighten boundary): a bottom-center floating bar
+             over the map itself, not a side-panel card -- the farmer is
+             tapping corner points on the map while this is open, so the
+             status/完了 controls have to be visible without looking away
+             from what they're tapping. data-workspace intentionally
+             omitted, same reasoning as #droneModeGateCard: this only ever
+             opens as a direct reaction to the registered-fields card's
+             境界を直線化 button, in whichever mode/workspace the farmer
+             already has open, so it must not be reset by
+             switchWorkspace()'s blanket `section.hidden = ...` pass over
+             every `[data-workspace]` element. Visibility is owned entirely
+             by beginBoundaryStraighten()/endBoundaryStraighten(). -->
+        <div id="boundaryStraightenBar" class="map-edit-bar" data-mode="basic settings" hidden>
+          <span id="boundaryStraightenStatus" class="map-edit-bar-status" role="status" aria-live="polite"></span>
+          <div class="map-edit-bar-actions">
+            <button id="boundaryStraightenResetButton" class="map-edit-bar-button" type="button">選び直す</button>
+            <button id="boundaryStraightenCancelButton" class="map-edit-bar-button" type="button">キャンセル</button>
+            <button id="boundaryStraightenConfirmButton" class="map-edit-bar-button primary" type="button" disabled>完了</button>
+          </div>
+        </div>
       </div>
 
       <aside class="panel">
@@ -2207,6 +3117,22 @@
              判断ルール thresholds, 圃場・水門 data sources) stays Settings-only,
              and so does the データを選ぶ card below: in 基本モード the ONE
              active field is #basicFieldSummaryCard, immediately above. -->
+
+        <!-- .panel-left / .panel-right are plain wrappers, `display: contents`
+             by default (see the .panel-left, .panel-right rule) so every card
+             below still lays out as ONE flat list of direct grid children of
+             .panel, exactly as before this split -- unchanged in 設定/ドローン
+             and on mobile. Only body[data-mode="basic"] at >=981px turns them
+             into real boxes and promotes them to main's own grid columns
+             (desktop 3-column basic layout: 圃場管理/今日の水門判断 on the
+             left, map centre, upload/action cards on the right). The cut
+             point below (right after .gate-card) is the ONLY reordering:
+             everything before it keeps its exact relative DOM order inside
+             .panel-left, everything after keeps its exact relative order
+             inside .panel-right, so 設定/ドローン's visual order (driven by
+             plain DOM order once both wrappers collapse via display:contents)
+             is byte-for-byte the same as before this change. -->
+        <div class="panel-left">
 
         <!-- First sign-in on a device that already has locally registered
              paddies. Neither uploading them silently nor discarding them is
@@ -2236,8 +3162,12 @@
         <section id="basicFieldManagementCard" class="card" data-mode="basic">
           <span class="eyebrow">圃場の管理</span>
           <p class="meta">登録済みの圃場を確認・選択し、新しい圃場を登録します。</p>
-          <button id="basicMeasureFieldButton" class="panel-button primary basic-field-register-button" type="button">＋ 新しい圃場を測る・登録する</button>
 
+          <!-- ＋ 新しい圃場を測る・登録する used to live here. It only ever
+               scrolled to #basicStage1Card's NMEA upload -- now directly
+               visible in the right rail (desktop) and in the header
+               (mobile), so a second entry point that just jumped to the
+               first was redundant. Do not reintroduce it. -->
           <div id="basicFieldEmptyState" class="field-annotation-empty">
             圃場はまだ登録されていません
           </div>
@@ -2317,6 +3247,12 @@
         </section>
 
         <section class="card gate-card" data-workspace="decision" data-mode="basic settings">
+          <!-- Desktop 基本モード only (see .basic-attached-close's own CSS
+               comment): closes the slide-down panel when this card is
+               attached below #mapWaterSummary. Invisible in every other
+               context this same card renders in (mobile/設定/ドローン, where
+               it stays a normal flowing left-rail section). -->
+          <button id="gateCardCloseButton" class="basic-attached-close" type="button" aria-label="閉じる">✕</button>
           <span class="eyebrow">今日の水門判断</span>
           <h2>気象と圃場の状況からの推奨</h2>
           <p id="decisionDataWarning" class="data-source-warning" role="status" aria-live="polite" hidden></p>
@@ -2337,7 +3273,7 @@
             <p id="waterHeroStaleWarning" class="water-hero-stale" role="status" aria-live="polite" hidden></p>
 
             <div class="water-hero-stats">
-              <div class="water-hero-stat"><span>必要水量（目安）</span><strong id="waterHeroVolume">—</strong></div>
+              <div class="water-hero-stat"><span id="waterHeroVolumeLabel">必要水量（目安）</span><strong id="waterHeroVolume">—</strong></div>
               <div class="water-hero-stat"><span>実施目安</span><strong id="waterHeroTiming">—</strong></div>
               <div class="water-hero-stat"><span>信頼度</span><strong id="waterHeroConfidence">—</strong></div>
             </div>
@@ -2350,11 +3286,135 @@
 
             <div id="waterHeroForecast" class="water-hero-forecast"></div>
 
-            <button id="waterHeroRecordButton" class="panel-button primary" type="button">水位を記録する</button>
+            <!-- 水位を記録する used to live here. The map-corner summary's
+                 own 水位を記録 button (#mapWaterSummaryButton, missing-
+                 measurement state) is now the one entry point on desktop --
+                 it opens 水位・観察を記録 as a slide-down panel in place
+                 instead of scrolling here. #basicRecordWaterButton (圃場の
+                 管理) still reaches the same card as a fallback outside
+                 desktop 基本モード. Do not reintroduce a second button here. -->
           </div>
 
           <p class="disclaimer">※ 本アプリは判断支援です。最終判断と水門の操作は必ず人が行ってください。必要水量は圃場面積と水深から算出した目安で、浸透・漏水・蒸発・通水ロスは考慮していません。</p>
         </section>
+
+        <!-- 水管理 / Water Management: the evidence-based recommendation card.
+             Sits directly under 今日の水門判断 and shares its exact field
+             context (#basicActiveFieldSelect) and its data-workspace/data-mode
+             gating, so it is one more read of the SAME selected field rather
+             than a second, competing surface.
+             Division of labour with the hero above it:
+               hero  = "what do I do today", weather-driven (evaluateGate) and
+                       measured against the farmer's own 目標水位 in cm;
+               this  = "what depth does this growth stage call for, per NARO /
+                       MAFF, and how much water is that", in mm with sources.
+             All arithmetic lives in js/water/water-recommendation.js; this
+             markup and renderWaterManagementCard() only display it. -->
+        <section id="waterManagementCard" class="card water-mgmt-card" data-workspace="decision" data-mode="basic settings">
+          <span class="eyebrow">水管理</span>
+          <h2>生育ステージに応じた水管理<span class="en">Water Management</span></h2>
+
+          <p id="waterMgmtEmptyState" class="field-annotation-empty" hidden>
+            圃場を登録すると、生育ステージに応じた参考水深と必要水量を表示できます。
+          </p>
+
+          <div id="waterMgmtContent" hidden>
+            <div class="water-mgmt-grid">
+              <div class="water-mgmt-cell">
+                <span class="water-mgmt-label">圃場面積<span class="en">Field area</span></span>
+                <strong id="waterMgmtArea" class="water-mgmt-value">—</strong>
+              </div>
+              <div class="water-mgmt-cell">
+                <span class="water-mgmt-label">参考水深<span class="en">Recommended</span></span>
+                <strong id="waterMgmtTarget" class="water-mgmt-value">—</strong>
+                <span id="waterMgmtMode" class="water-mgmt-sub"></span>
+              </div>
+            </div>
+
+            <div class="input-row">
+              <label for="waterMgmtStageSelect">生育ステージ<span class="en">Growth stage</span></label>
+              <select id="waterMgmtStageSelect"></select>
+            </div>
+            <!-- Shown only while the stage came from the regional calendar
+                 rather than from the farmer. A guess presented as an
+                 observation is the failure this feature must not commit. -->
+            <p id="waterMgmtStageEstimateNote" class="water-mgmt-sub water-mgmt-estimate-note" hidden></p>
+
+            <div class="input-row water-mgmt-measure-row">
+              <label for="waterMgmtDepthInput">現在の水位 (mm)<span class="en">Current water level</span></label>
+              <!-- No min="0": the datum is the soil surface and the value is
+                   signed, so a below-surface water table (AWD) is a valid
+                   reading. inputmode="text" rather than "numeric" so the
+                   phone keypad exposes a minus key. -->
+              <input id="waterMgmtDepthInput" type="number" step="1" inputmode="text">
+            </div>
+            <p class="water-mgmt-sub water-mgmt-sign-hint">田面基準　＋：地表面より上（湛水）／−：地表面より下（例 −150 mm）</p>
+            <p id="waterMgmtDepthReadout" class="water-mgmt-sub" role="status" aria-live="polite"></p>
+            <p id="waterMgmtStaleWarning" class="water-hero-stale" role="status" aria-live="polite" hidden></p>
+
+            <div class="water-mgmt-cell water-mgmt-status-cell">
+              <span class="water-mgmt-label">状態<span class="en">Status</span></span>
+              <strong id="waterMgmtStatus" class="water-mgmt-value">—</strong>
+            </div>
+
+            <!-- Labelled 理論 (theoretical) in the heading itself, not only in
+                 the footnote: this is area x depth change, never an irrigation
+                 plan. Hidden entirely for the drainage/unknown states so no
+                 volume is ever shown next to a stage that must not be filled. -->
+            <div id="waterMgmtVolumeBlock" class="water-mgmt-volume" hidden>
+              <span class="water-mgmt-label">理論追加水量<span class="en">Estimated standing-water adjustment</span></span>
+              <strong id="waterMgmtVolumeM3" class="water-mgmt-volume-value">—</strong>
+              <span id="waterMgmtVolumeLiters" class="water-mgmt-sub"></span>
+              <span id="waterMgmtVolumeDirection" class="water-mgmt-sub"></span>
+            </div>
+
+            <!-- Shown INSTEAD of the volume block when no water level has been
+                 recorded. The deficit is unknowable without a measurement, but
+                 the conversion RATE depends only on the QZ1-surveyed area, so
+                 this is real information rather than an assumed reading. -->
+            <div id="waterMgmtRateBlock" class="water-mgmt-volume" hidden>
+              <span class="water-mgmt-label">水深10mmあたり<span class="en">Per 10mm of depth</span></span>
+              <strong id="waterMgmtRateM3" class="water-mgmt-volume-value">—</strong>
+              <span id="waterMgmtRateLiters" class="water-mgmt-sub"></span>
+              <span class="water-mgmt-sub">水位を記録すると、必要な水深差と水量を計算します。</span>
+            </div>
+
+            <!-- The SECOND number, kept visually separate from the first on
+                 purpose. 理論追加水量 is exact geometry; this is an estimate
+                 with a stated error bar. Adding them into one figure would
+                 present a guess with the authority of a measurement. -->
+            <div id="waterMgmtLossBlock" class="water-mgmt-volume water-mgmt-loss" hidden>
+              <span class="water-mgmt-label">1日あたりの減水量（推定）<span class="en">Estimated daily loss</span></span>
+              <strong id="waterMgmtLossRange" class="water-mgmt-volume-value">—</strong>
+              <span id="waterMgmtLossBreakdown" class="water-mgmt-sub"></span>
+              <span id="waterMgmtLossCaveat" class="water-mgmt-sub"></span>
+            </div>
+
+            <p id="waterMgmtRecommendation" class="water-mgmt-recommendation" role="status" aria-live="polite"></p>
+
+            <div class="water-mgmt-actions">
+              <button id="waterMgmtUpdateButton" class="panel-button primary" type="button">計測値を更新</button>
+              <button id="waterMgmtApplyTargetButton" class="panel-button" type="button" hidden>参考値を目標水位に反映</button>
+            </div>
+            <p id="waterMgmtApplyTargetMessage" class="meta" role="status" aria-live="polite" hidden></p>
+
+            <details id="waterMgmtEvidence" class="water-mgmt-evidence">
+              <summary><span class="details-title">根拠<span class="en">Evidence</span></span></summary>
+              <div class="details-content">
+                <p id="waterMgmtStageNote" class="meta"></p>
+                <div id="waterMgmtConditional" class="water-mgmt-conditional" hidden></div>
+                <div id="waterMgmtSourceList" class="water-mgmt-sources"></div>
+                <p id="waterMgmtRequirementNote" class="meta"></p>
+                <p id="waterMgmtCaveat" class="meta"></p>
+              </div>
+            </details>
+          </div>
+
+          <p class="disclaimer">※ 参考水深は平年条件の目安であり、「最適な水深」ではありません。理論追加水量は圃場面積×水深差の幾何計算です。実際の必要用水量は、気象・土壌・浸透・排水・通水効率によって異なります。水門の操作は必ず人が行ってください。</p>
+        </section>
+
+        </div>
+        <div class="panel-right">
 
         <!-- みちびき活用の実証 / QZ1-DGNSS 測位品質 used to sit here, in
              基本モード. It answers "how far can I trust this QZ1 measurement?",
@@ -2590,27 +3650,36 @@
           </div>
         </details>
 
-        <details id="waterControlPanel" class="card paddy-collapsible" data-workspace="fields" data-mode="basic settings" hidden>
-          <summary><span class="details-title">水管理ポイント<span class="en">Water management points</span></span></summary>
-          <div class="details-content">
-            <div class="input-row">
-              <label for="wcpTargetFieldSelect">対象圃場</label>
-              <select id="wcpTargetFieldSelect"></select>
-            </div>
-            <div class="wcp-type-buttons">
-              <button id="wcpAddGateButton" class="panel-button" type="button" disabled>水門を追加</button>
-              <button id="wcpAddInletButton" class="panel-button" type="button" disabled>給水口を追加</button>
-              <button id="wcpAddOutletButton" class="panel-button" type="button" disabled>排水口を追加</button>
-              <button id="wcpAddSensorButton" class="panel-button" type="button" disabled>水位センサ位置を追加</button>
-              <button id="wcpAddPhotoButton" class="panel-button" type="button" disabled>撮影地点を追加</button>
-            </div>
-            <div class="veg-actions">
-              <button id="wcpPositionCurrentButton" class="panel-button primary" type="button" disabled>現在のQZ1位置に追加</button>
-              <button id="wcpPositionMapClickButton" class="panel-button" type="button" disabled>地図をクリックして追加</button>
-            </div>
-            <p id="wcpAddMessage" class="meta" role="status" aria-live="polite"></p>
-          </div>
-        </details>
+        <!-- The visible 水管理ポイント card was removed: it duplicated the
+             on-map #waterQuickToolbar (left side of the map, always visible
+             in 基本モード), and its "現在のQZ1位置に追加" live-position mode had
+             no equivalent there -- a deliberate, informed loss, not an
+             oversight (see docs/STAGE1_BASIC_FLOATING_MAP_DASHBOARD.md).
+
+             This #waterControlPanel id is kept on a genuinely hidden holder,
+             NOT deleted outright, because #wcpTargetFieldSelect and
+             #wcpAddMessage are load-bearing shared state/feedback for the
+             SURVIVING #waterQuickToolbar, not leftovers from the deleted UI:
+               - #wcpTargetFieldSelect is the canonical target-field value —
+                 #basicActiveFieldSelect's change handler cascades into it,
+                 and it two-way-syncs with #waterQuickFieldSelect. Deleting it
+                 throws in that sync handler (`el.wcpTargetFieldSelect.value =
+                 ...` has no optional-chaining guard on the assignment target).
+               - #wcpAddMessage is where setWcpMessage() writes for BOTH
+                 placement paths, including the "◯◯を追加しました" success
+                 confirmation createWaterControlPoint() shows after every
+                 successful placement, on-map-toolbar included.
+             Two Settings-only entry points (現地調査ワークフロー step 3, 判断
+             デモ's 水管理ポイントを追加する button) still try to .open/scroll
+             this id and focus the deleted #wcpAddGateButton; both degrade to
+             a harmless no-op (the id exists, `.open` on a <div> is inert,
+             `?.focus()` on a missing button is a no-op) rather than a crash.
+             基本モード's own equivalent, #basicAddWaterPointButton, was
+             rewired to the surviving toolbar instead of left broken. -->
+        <div id="waterControlPanel" hidden>
+          <select id="wcpTargetFieldSelect"></select>
+          <p id="wcpAddMessage" role="status" aria-live="polite"></p>
+        </div>
 
         <!-- Moved verbatim out of the Field Recording card (#recPanel) by the
              Stage-1 simplification so Basic mode keeps its water workflow
@@ -2626,6 +3695,11 @@
              基本モード still gets the card through data-mode. -->
         <details id="basicWaterRecordCard" class="card paddy-collapsible" data-workspace="survey" data-mode="basic settings" open hidden>
           <summary><span class="details-title">水位・観察を記録<span class="en">Mark observation</span></span></summary>
+          <!-- Desktop 基本モード only (see .basic-attached-close's own
+               CSS comment): closes the slide-down panel when this card is
+               attached below #mapWaterSummary. Invisible in every other
+               context this same card renders in. -->
+          <button id="basicWaterRecordCloseButton" class="basic-attached-close" type="button" aria-label="閉じる">✕</button>
           <div class="details-content">
             <div class="input-row">
               <label for="recObsTypeSelect">観測タイプ</label>
@@ -2723,6 +3797,15 @@
               </div>
               <div class="veg-actions">
                 <button id="selFeatureSaveButton" class="panel-button primary" type="button">保存</button>
+                <!-- Shown only for a field/track that has ALREADY been
+                     straightened once before -- see this button's own JS
+                     comment (renderSelectedFeature()) for why: the FIRST
+                     straightening stays the prominent 境界を直線化 button on
+                     the registered-fields card itself, but a farmer touching
+                     up an already-straightened boundary again is a rarer,
+                     more deliberate action that belongs behind 編集 instead
+                     of cluttering that card's button row indefinitely. -->
+                <button id="selFeatureStraightenButton" class="panel-button" type="button" hidden>境界を直線化</button>
                 <button id="selFeatureDeleteButton" class="panel-button danger" type="button">削除</button>
               </div>
               <p id="selFeatureMessage" class="meta" role="status" aria-live="polite"></p>
@@ -3527,9 +4610,13 @@
             <button id="droneModeGoMeasureButton" class="panel-button primary" type="button">圃場を測る</button>
           </div>
           <div id="droneFieldSummary" class="decision-field-summary" hidden>
+            <div class="input-row" id="droneFieldSelectRow">
+              <label for="droneActiveFieldSelect">圃場を選ぶ</label>
+              <select id="droneActiveFieldSelect"></select>
+            </div>
             <div class="kv"><span>圃場</span><strong id="droneFieldName">—</strong></div>
             <div class="kv"><span>面積</span><strong id="droneFieldArea">—</strong></div>
-            <p class="meta">この圃場の境界を、ドローンの巡回範囲の基準として使用します（安全マージンの適用は今後実装予定）。</p>
+            <p class="meta">この圃場の境界を、ドローンの巡回範囲の基準として使用します（安全マージンの適用は今後実装予定）。地図上の圃場をクリックしても選び直せます。</p>
           </div>
         </section>
 
@@ -3717,6 +4804,7 @@
           <p id="workflowNextTask" class="workflow-next-task" role="status" aria-live="polite"></p>
           <div id="workflowStepsContainer" class="workflow-steps"></div>
         </section>
+        </div>
       </aside>
     </main>
   </div>
@@ -4023,8 +5111,151 @@
       ]
     };
 
-    const map = L.map("map", { zoomControl: true }).setView([34.65, 135.83], 14);
+    const map = L.map("map", { zoomControl: false }).setView([34.65, 135.83], 14);
     window.map = map;
+    // Desktop wants the +/- zoom control bottom-right, out of the way of the
+    // new map-corner water summary (upper-left) and the 地図/航空写真 toggle
+    // (upper-right). Mobile keeps Leaflet's default top-left, unchanged from
+    // before this existed. One control, repositioned via Leaflet's own API
+    // (control.setPosition) rather than relocated with absolute CSS, and
+    // kept in sync if the window is resized across the breakpoint.
+    const desktopViewportQuery = window.matchMedia("(min-width: 981px)");
+    const zoomControl = L.control.zoom({
+      position: desktopViewportQuery.matches ? "bottomright" : "topleft"
+    }).addTo(map);
+    desktopViewportQuery.addEventListener("change", (event) => {
+      zoomControl.setPosition(event.matches ? "bottomright" : "topleft");
+    });
+
+    // Recenter on the farmer's current GPS position on every load, instead
+    // of always opening on the fixed Nara-area default above -- most useful
+    // when they're standing in or near the field itself. Fire-and-forget:
+    // denial, timeout, or no geolocation support (desktop without GPS, HTTP
+    // instead of HTTPS) just leaves the default view in place, same as
+    // before this existed -- this is a convenience, never a hard requirement
+    // to use the app, so it never surfaces an error of its own.
+    if (globalThis.navigator?.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const lat = Number(position.coords.latitude);
+          const lon = Number(position.coords.longitude);
+          if (Number.isFinite(lat) && Number.isFinite(lon)) {
+            map.setView([lat, lon], 16);
+          }
+        },
+        () => {},
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+      );
+    }
+
+    // --- Floating-rail aware fitBounds -------------------------------------
+    // In desktop 基本モード the map runs full-bleed UNDERNEATH the floating
+    // 圃場の管理/NMEA rails, so the container's centre is no longer the centre
+    // of what the farmer can actually see. Fitting a field to the raw
+    // container therefore parks part of the polygon behind a rail (and behind
+    // the bottom map-summary card).
+    //
+    // Rather than patch each of the several fitBounds() call sites -- and any
+    // future one -- the padding is injected once here, from the rails' LIVE
+    // measured geometry, using Leaflet's own paddingTopLeft/paddingBottomRight
+    // options. Outside desktop 基本モード the rails are display:contents (no
+    // box), floatingChromeInset() returns null, and every call behaves exactly
+    // as it did before. Callers' own padding is preserved -- the larger of the
+    // two wins per axis -- so nothing loses the breathing room it asked for.
+    function floatingChromeInset() {
+      const leftRail = document.querySelector(".panel-left");
+      const rightRail = document.querySelector(".panel-right");
+      if (!leftRail || !rightRail || getComputedStyle(leftRail).display === "contents") {
+        return null;
+      }
+      const mapRect = map.getContainer().getBoundingClientRect();
+      if (!mapRect.width || !mapRect.height) {
+        return null;
+      }
+      const leftRect = leftRail.getBoundingClientRect();
+      const rightRect = rightRail.getBoundingClientRect();
+      // Reserve the summary's whole CSS-capped band, NOT its live rect: the
+      // fit usually runs while the card is still hidden (it is only revealed
+      // once renderWaterHero has a field to describe), so measuring it here
+      // would reserve nothing and drop the field exactly where the card is
+      // about to appear.
+      const reserve = parseFloat(
+        getComputedStyle(document.querySelector("main")).getPropertyValue("--basic-summary-reserve")
+      );
+      return {
+        left: Math.max(0, leftRect.right - mapRect.left) + 12,
+        right: Math.max(0, mapRect.right - rightRect.left) + 12,
+        top: Number.isFinite(reserve) && reserve > 0 ? reserve : 12,
+        bottom: 12
+      };
+    }
+
+    // The toolbar's live height feeds --basic-quick-toolbar-reserve above,
+    // so the left rail's clip boundary always sits just above the toolbar's
+    // ACTUAL current state (idle/armed, field-row shown or not) instead of
+    // a fixed worst-case guess -- closing the gap in the common (shorter)
+    // states while still never overlapping in the tallest one.
+    //
+    // Two triggers, deliberately: fieldAnnotationController's
+    // onWaterQuickToolbarRendered hook calls this SYNCHRONOUSLY, in the same
+    // tick the toolbar's own content just changed (e.g. arming placement
+    // mode reveals a status line + キャンセル) -- a plain ResizeObserver alone
+    // is asynchronous (its callback runs on a later frame), which left a
+    // real, observed window where the rail hadn't shortened yet and could
+    // overlap the now-taller toolbar. The ResizeObserver stays as a backup
+    // for height changes from causes the hook can't see (viewport resize,
+    // async font-load reflow).
+    const quickToolbarEl = document.getElementById("waterQuickToolbar");
+    function syncQuickToolbarReserve() {
+      if (!quickToolbarEl) {
+        return;
+      }
+      const height = quickToolbarEl.getBoundingClientRect().height;
+      if (height > 0) {
+        document.documentElement.style.setProperty(
+          "--basic-quick-toolbar-live-height",
+          `${Math.ceil(height)}px`
+        );
+      }
+    }
+    if (quickToolbarEl && "ResizeObserver" in window) {
+      new ResizeObserver(syncQuickToolbarReserve).observe(quickToolbarEl);
+    }
+
+    const fitBoundsWithoutChrome = map.fitBounds.bind(map);
+    map.fitBounds = function fitBoundsClearOfFloatingChrome(bounds, options = {}) {
+      const inset = floatingChromeInset();
+      if (!inset) {
+        return fitBoundsWithoutChrome(bounds, options);
+      }
+      const base = options.padding ? L.point(options.padding) : L.point(0, 0);
+      const topLeft = options.paddingTopLeft ? L.point(options.paddingTopLeft) : base;
+      const bottomRight = options.paddingBottomRight ? L.point(options.paddingBottomRight) : base;
+      const merged = { ...options };
+      delete merged.padding;
+      merged.paddingTopLeft = L.point(
+        Math.max(topLeft.x, inset.left),
+        Math.max(topLeft.y, inset.top)
+      );
+      merged.paddingBottomRight = L.point(
+        Math.max(bottomRight.x, inset.right),
+        Math.max(bottomRight.y, inset.bottom)
+      );
+      return fitBoundsWithoutChrome(bounds, merged);
+    };
+    // A marker popup can open directly under the map-corner water summary
+    // (e.g. a 水管理ポイント near the upper-left of the field). pointer-
+    // events: none on the card already lets clicks on its plain text pass
+    // through, but the card's own button opts back into pointer-events and
+    // can still sit exactly where a popup's button is. Simplest correct
+    // fix: step the summary aside while any popup is open, rather than
+    // fighting it pixel-for-pixel with z-index/pointer-events.
+    map.on("popupopen", () => {
+      document.getElementById("mapWaterSummary")?.classList.add("map-water-summary-yield");
+    });
+    map.on("popupclose", () => {
+      document.getElementById("mapWaterSummary")?.classList.remove("map-water-summary-yield");
+    });
     const baseLayers = {
       map: L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
@@ -4083,18 +5314,49 @@
     const emptyState = document.getElementById("emptyState");
     const emptyStateTitle = document.getElementById("emptyStateTitle");
     const emptyStateDetail = document.getElementById("emptyStateDetail");
+    // 基本モード gets the farmer-facing wording (圃場の有無 is the concept
+    // that matters there); 設定/ドローン keep the fuller technical copy,
+    // since 現地測量ワークフロー also offers 測量JSON as an equally valid
+    // entry point that 基本モード does not expose.
     const DEFAULT_EMPTY_STATE = {
-      title: "QZ1ログが未読込です",
-      detail: "NMEAファイル（.nmea）をアップロードするか、測量JSONを読み込むと測位点が表示されます。"
+      basic: {
+        title: "圃場はまだ登録されていません",
+        detail: "NMEAをアップロードしてください"
+      },
+      other: {
+        title: "QZ1ログが未読込です",
+        detail: "NMEAファイル（.nmea）をアップロードするか、測量JSONを読み込むと測位点が表示されます。"
+      }
     };
 
     function setEmptyState(title, detail) {
       emptyStateTitle.textContent = title;
       emptyStateDetail.textContent = detail;
+      // A caller reaching for setEmptyState() always has something specific
+      // to tell the farmer (a parse failure, a rejected upload) -- it must
+      // surface regardless of whatever updateEmptyStateVisibility() last
+      // decided from field/point counts.
+      emptyState.hidden = false;
     }
 
     function resetEmptyState() {
-      setEmptyState(DEFAULT_EMPTY_STATE.title, DEFAULT_EMPTY_STATE.detail);
+      const defaults = document.body.dataset.mode === "basic"
+        ? DEFAULT_EMPTY_STATE.basic
+        : DEFAULT_EMPTY_STATE.other;
+      setEmptyState(defaults.title, defaults.detail);
+    }
+
+    // Shown only when there is truly nothing to look at: no track parsed
+    // this session, no phone-GPS points, and -- the actual bug this fixes --
+    // no already-registered 圃場 either. Registered fields persist across
+    // reloads and draw their own polygons independently of parsedPoints, so
+    // without this a returning farmer with real data saw "QZ1ログが未読込
+    // です" over their own field. Called after every renderPoints()/phone
+    // render AND from onFieldsChanged (registration, deletion, import, and
+    // the initial mount) so it never goes stale in either direction.
+    function updateEmptyStateVisibility() {
+      const hasFields = (fieldAnnotationController?.fields?.length ?? 0) > 0;
+      emptyState.hidden = parsedPoints.length > 0 || phonePoints.length > 0 || hasFields;
     }
     const gpsMessage = document.getElementById("gpsMessage");
     const comparisonSummary = document.getElementById("comparisonSummary");
@@ -4264,12 +5526,26 @@
       userId: null
     };
 
-    // Pure water-depth/volume calculation for 今日の水門判断's quantitative
-    // hero (js/water/water-need.js) -- loaded once, near init's other lazy
-    // modules. renderWaterHero() no-ops until this resolves, which in
-    // practice is well before the first field/report render (local file,
-    // no network).
-    let computeWaterNeed = null;
+    // 水管理 / Water Management (growth-stage recommendation) modules, loaded
+    // lazily in init(). Both 今日の水門判断 and the 水管理 card render from
+    // these, so neither can show a number the other disagrees with.
+    // renderWaterManagementCard() shows an explicit "module failed to load"
+    // state rather than a blank card if any of these stay null, because a
+    // silent blank would be indistinguishable from "no recommendation".
+    //   waterRecommendation  -- the pure engine (target range -> status ->
+    //                           depth difference -> theoretical volume)
+    //   growthStageModel     -- the stage table and its persistence shape
+    //   waterMeasurementModel-- the { valueMm, source, measuredAt } record and
+    //                           its legacy-cm normalization
+    let waterRecommendation = null;
+    let growthStageModel = null;
+    //   gateDecisionModel    -- the single source of the 開ける/閉める/様子見 verdict
+    //   growthCalendarModel  -- regional cultivation calendar -> suggested stage
+    //   dailyLossModel       -- ETc = Kc x ETo + percolation, as a range
+    let gateDecisionModel = null;
+    let growthCalendarModel = null;
+    let dailyLossModel = null;
+    let waterMeasurementModel = null;
 
     // Local MAVLink backend. Override before load (e.g. from the console or a
     // future settings panel) if the backend runs on a different port.
@@ -4585,11 +5861,21 @@
         maxProbPct: Math.round(dailyProb.get(day) ?? 0)
       }));
 
+      // Today's FAO-56 reference evapotranspiration for this location, if the
+      // response carried it. Left as null (never 0) when absent, so
+      // daily-loss.js reports "unknown" rather than "no water is being lost".
+      const etoTimes = data?.daily?.time ?? [];
+      const etoValues = data?.daily?.et0_fao_evapotranspiration ?? [];
+      const etoIndex = etoTimes.indexOf(todayStr);
+      const rawEto = etoIndex >= 0 ? etoValues[etoIndex] : undefined;
+      const etoMmPerDay = Number.isFinite(rawEto) ? rawEto : null;
+
       return {
         rain24hMm: Math.round(rain24hMm * 10) / 10,
         daysSinceRain,
         forecastRainProbPct: Math.round(forecastRainProbPct),
-        dailyForecast
+        dailyForecast,
+        etoMmPerDay
       };
     }
 
@@ -4653,7 +5939,12 @@
       setWeatherFetchStatus("取得中…", "");
 
       try {
-        const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=precipitation,precipitation_probability&past_days=8&forecast_days=3&timezone=Asia%2FTokyo`;
+        // `et0_fao_evapotranspiration` is FAO-56 reference evapotranspiration
+        // (ETo) computed by Open-Meteo for this exact location, so no ETo model
+        // is reimplemented here -- js/water/daily-loss.js only applies the
+        // FAO 56 crop coefficient (ETc = Kc x ETo). Added as a `daily` field;
+        // the existing hourly precipitation parsing is untouched.
+        const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=precipitation,precipitation_probability&daily=et0_fao_evapotranspiration&past_days=8&forecast_days=3&timezone=Asia%2FTokyo`;
         const response = await fetch(url, { cache: "no-store" });
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}`);
@@ -4679,7 +5970,45 @@
       }
     }
 
+    /**
+     * The gate verdict for the ACTIVE field.
+     *
+     * Delegates to js/water/gate-decision.js, which sees the growth stage and
+     * the water measurement as well as the weather. Both surfaces that show a
+     * verdict (.gate-card and the 今日の水門判断 hero) call this one function,
+     * so they cannot contradict each other.
+     *
+     * This replaced a rainfall-only rule that had no idea what the crop was
+     * doing. Its worst failure: during 中干し or 落水期 with a few dry days it
+     * returned 開ける -- telling the farmer to flood a paddy that is being
+     * deliberately dried. decideGate() makes that structurally impossible by
+     * checking drainage stages before it looks at any weather value.
+     *
+     * The rainfall-only reasoning still exists inside decideGate() as its
+     * final fallback, for the case where no water level has been recorded --
+     * and it now says so on screen instead of implying it knew the level.
+     */
     function evaluateGate(weather, th) {
+      if (gateDecisionModel) {
+        const fieldId = document.getElementById("basicActiveFieldSelect")?.value || "";
+        const decision = gateDecisionModel.decideGate({
+          growthStage: resolvedGrowthStageForField(fieldId),
+          measurement: waterMeasurementModel
+            ? waterMeasurementModel.normalizeWaterMeasurement(readCurrentWaterLevels()[fieldId])
+            : null,
+          weather,
+          thresholds: th
+        });
+        // `reason` is the field name the existing .gate-card renderer reads;
+        // the richer fields (basis, timingJa, stageOverride) ride alongside for
+        // callers that want them.
+        return { ...decision, reason: decision.reasonJa };
+      }
+      return legacyRainfallOnlyGate(weather, th);
+    }
+
+    /** Pre-module fallback: the original rainfall-only rule, unchanged. */
+    function legacyRainfallOnlyGate(weather, th) {
       if (weather.rain24hMm >= th.heavyRain24hMm) {
         return {
           verdict: "close",
@@ -4961,6 +6290,40 @@
       return activeBoundary()?.points ?? [];
     }
 
+    /**
+     * Feeds 圃場解析デモ (paddyIntelligence) from whichever field is
+     * currently active app-wide, so a farmer who registers a field and picks
+     * it in 基本モード/ドローンモード sees its boundary there without a
+     * detour through 設定 → 測量チェック (the only other surface that used to
+     * write surveyedBoundary from a registered field -- see
+     * assuranceController's own onFieldChanged). activeBoundary() already
+     * prefers surveyedBoundary over demo data, so this is what actually makes
+     * "No field boundary loaded." go away for a field the farmer can already
+     * see drawn on the map.
+     */
+    function syncSurveyedBoundaryFromField(field) {
+      if (!field || !Array.isArray(field.coordinates) || field.coordinates.length < 3) {
+        return;
+      }
+      surveyedBoundary = field.coordinates.map(([lat, lon], index) => ({
+        id: `${field.id}:vertex-${index}`,
+        lat,
+        lon,
+        feature: "corner",
+        note: `圃場: ${field.name || field.id}`,
+        photoRef: ""
+      }));
+      refreshFieldOverlay();
+      paddyIntelligence?.refresh();
+    }
+
+    /** Looks up #basicActiveFieldSelect's current value and syncs it via syncSurveyedBoundaryFromField(). */
+    function syncSurveyedBoundaryForActiveField() {
+      const fieldId = document.getElementById("basicActiveFieldSelect")?.value;
+      const field = (fieldAnnotationController?.fields || []).find((candidate) => candidate.id === fieldId);
+      syncSurveyedBoundaryFromField(field);
+    }
+
     function polygonAreaSqm(points) {
       if (!Array.isArray(points) || points.length < 3) {
         return 0;
@@ -5001,16 +6364,16 @@
       return `${Math.round(area).toLocaleString()} m² / ${(area / 100).toFixed(2)} a / ${(area / 991.7).toFixed(2)} tan`;
     }
 
-    // Basic-mode area display only -- m²/a/ha, per the product spec. Distinct
-    // from formatAreaFull() (m²/a/tan) above, which the legacy 詳細解析 tab's
-    // 2 call sites keep using unchanged.
+    // Basic-mode area display -- m²/a/反. 反 (tan, ~991.7 m²) replaces ha:
+    // older farmers read paddy area in 尺貫法, not hectares, and this is the
+    // one farmer-facing surface where that matters. Same conversion factor
+    // formatAreaFull() already uses below, for the legacy 詳細解析 tab.
     function formatAreaBasic(area) {
       if (!Number.isFinite(area) || area <= 0) {
         return "—";
       }
 
-      const ha = area / 10000;
-      return `${Math.round(area).toLocaleString()} m² / ${(area / 100).toFixed(2)} a / ${ha.toFixed(3)} ha`;
+      return `${Math.round(area).toLocaleString()} m² / ${(area / 100).toFixed(2)} a / ${(area / 991.7).toFixed(2)}反`;
     }
 
     // 基本モード's active field is the app's ONE farmer-facing field context,
@@ -5217,37 +6580,75 @@
     // ---------------------------------------------------------------------
     // 今日の水門判断 quantitative hero.
     //
-    // computeWaterNeed() (js/water/water-need.js) is the ONLY place depth/
-    // volume arithmetic happens; everything here is presentation. It reads
-    // the two real, persisted per-field numbers this app has --
-    // readCurrentWaterLevelForField() and readTargetWaterLevels() -- plus
-    // field.properties.areaM2, and never fabricates a value that is missing.
+    // evaluateWaterManagement() (js/water/water-recommendation.js) is the ONLY
+    // place depth/volume arithmetic happens; everything here is presentation.
+    // The hero leads with the growth stage's reference depth from the surveyed
+    // area alone -- a water level is optional and only sharpens the answer --
+    // and never fabricates a value that is missing.
     // ---------------------------------------------------------------------
 
-    function fieldWaterNeed(field) {
-      if (!computeWaterNeed || !field) {
+    /**
+     * ONE engine for both water surfaces.
+     *
+     * The hero used to run on computeWaterNeed(), which needs a current level
+     * AND a hand-typed 目標水位 before it can say anything -- so with a freshly
+     * surveyed field it showed "現在の水位を記録すると…" while the 水管理 card
+     * sitting below it already knew the stage's reference depth. Two engines,
+     * two answers, same field.
+     *
+     * evaluateWaterManagement() is now the only source for both. It leads with
+     * the growth stage's reference depth using nothing but the surveyed area
+     * and the stage, and treats the measurement as OPTIONAL enrichment: supply
+     * one and it adds the deficit and the volume. It also knows 中干し/落水期,
+     * so the hero can no longer suggest filling a field that is being dried.
+     */
+    function fieldWaterResult(field) {
+      if (!waterRecommendation || !field) {
         return null;
       }
-      const currentEntry = readCurrentWaterLevelForField(field.id);
-      const targetValue = readTargetWaterLevels()[field.id];
-      return computeWaterNeed({
-        fieldId: field.id,
-        areaM2: Number.isFinite(field.properties?.areaM2) ? field.properties.areaM2 : undefined,
-        currentWaterLevelCm: currentEntry ? currentEntry.valueCm : undefined,
-        currentLevelRecordedAt: currentEntry ? currentEntry.recordedAt : undefined,
-        targetWaterLevelCm: Number.isFinite(targetValue) ? targetValue : undefined
+      return waterRecommendation.evaluateWaterManagement({
+        areaM2: field.properties?.areaM2,
+        // resolveGrowthStageForField() returns a RECORD ({ stage, source,
+        // regionId, isEstimate, ... }), not an id -- passing the object
+        // through normalizes to "unknown" and silently hides the stage.
+        growthStage: resolveGrowthStageForField(field.id)?.stage,
+        // Raw persisted entry: the engine normalizes both the new record and
+        // the legacy cm entry, so an old field needs no migration pass.
+        measurement: readCurrentWaterLevels()[field.id],
+        now: Date.now()
       });
     }
 
-    function waterNeedMiniLabel(need) {
-      if (!need || need.direction === "unknown") {
-        return "水位未記録";
+    /** True once a reading exists and the engine could act on it. */
+    function hasUsableMeasurement(result) {
+      return Boolean(result && result.measurement);
+    }
+
+    /** Compact per-field state for the multi-field carousel and the map corner. */
+    function waterNeedMiniLabel(result) {
+      if (!result) {
+        return "—";
       }
-      if (need.direction === "hold") {
-        return "維持";
+      const { STATUS } = waterRecommendation;
+      switch (result.status) {
+        case STATUS.unknownStage:
+          return "ステージ未設定";
+        case STATUS.noNumericTarget:
+          return result.target.modeLabelJa;
+        case STATUS.unreadableMeasurement:
+          return "要再記録";
+        // Without a reading the useful summary is the TARGET, not "no data".
+        case STATUS.missingMeasurement:
+          return `目標 ${result.target.targetMinMm}〜${result.target.targetMaxMm}mm`;
+        case STATUS.belowRange:
+          return `+${waterRecommendation.formatMm(result.deficitMinMm)}mm`;
+        case STATUS.aboveRange:
+          return `−${waterRecommendation.formatMm(result.excessMm)}mm`;
+        case STATUS.withinRange:
+          return "適正";
+        default:
+          return "—";
       }
-      const sign = need.direction === "add" ? "+" : "−";
-      return `${sign}${Math.abs(need.deltaWaterDepthCm).toFixed(1)}cm`;
     }
 
     function renderWaterHeroCarousel(fields, activeFieldId) {
@@ -5263,7 +6664,7 @@
       carousel.hidden = false;
       carousel.replaceChildren();
       fields.forEach((field) => {
-        const need = fieldWaterNeed(field);
+        const need = fieldWaterResult(field);
         const button = document.createElement("button");
         button.type = "button";
         button.className = "water-hero-mini-card";
@@ -5279,33 +6680,68 @@
         delta.textContent = waterNeedMiniLabel(need);
         const volume = document.createElement("span");
         volume.className = "water-hero-mini-volume";
-        volume.textContent = need && Number.isFinite(need.volumeM3) && need.volumeM3 > 0
-          ? `${need.volumeM3.toFixed(1)}m³`
+        const adj = need?.standingWaterAdjustment;
+        volume.textContent = adj && adj.areaKnown && Number.isFinite(adj.minM3) && adj.minM3 > 0
+          ? `${adj.minM3.toFixed(1)}m³`
           : "";
         button.append(name, delta, volume);
         carousel.append(button);
       });
     }
 
-    function waterHeroPrimaryMessage(need) {
-      if (!need || need.direction === "unknown") {
-        return "現在の水位を記録すると、必要な入水量を計算できます。";
+    /**
+     * The hero's headline. With NO measurement this is the recommendation
+     * itself -- the depth to aim for -- not a request for input. Recording a
+     * level upgrades it from "aim for this" to "add this much".
+     */
+    function waterHeroPrimaryMessage(result) {
+      if (!result) {
+        return "圃場を登録すると、生育ステージに応じた目標水深を表示します。";
       }
-      if (need.direction === "hold") {
-        return "現在の水位を維持してください";
+      const { STATUS } = waterRecommendation;
+      switch (result.status) {
+        case STATUS.unknownStage:
+          return "生育ステージを選ぶと、その時期の目標水深を表示します。";
+        case STATUS.noNumericTarget:
+          // 中干し / 落水期 / 登熟期: a depth target would be wrong here.
+          return `${result.stage.labelJa}：${result.target.modeLabelJa}`;
+        case STATUS.unreadableMeasurement:
+          return "保存されている水位を解釈できません。記録し直してください。";
+        case STATUS.missingMeasurement:
+          // THE ZERO-INPUT CASE. Lead with the answer, not with a request.
+          return `目標水深 ${result.target.targetMinMm}〜${result.target.targetMaxMm} mm（${result.target.modeLabelJa}）`;
+        case STATUS.belowRange: {
+          const { deficitMinMm, deficitMaxMm } = result;
+          return `水を ${waterRecommendation.formatMm(deficitMinMm)}〜${waterRecommendation.formatMm(deficitMaxMm)} mm 入れてください`;
+        }
+        case STATUS.aboveRange:
+          return `目標より ${waterRecommendation.formatMm(result.excessMm)} mm 高めです`;
+        case STATUS.withinRange:
+          return "現在の水位を維持してください";
+        default:
+          return `目標水深 ${result.target.targetMinMm}〜${result.target.targetMaxMm} mm`;
       }
-      const depth = Math.abs(need.deltaWaterDepthCm).toFixed(1);
-      return need.direction === "add" ? `水を ${depth} cm 入れてください` : `水位を約 ${depth} cm 下げてください`;
     }
 
-    function waterHeroTimingLabel(need, decision) {
-      if (!need || need.direction === "unknown") {
+    function waterHeroTimingLabel(result, decision) {
+      if (!result) {
         return "—";
       }
-      if (need.direction === "hold") {
+      const { STATUS } = waterRecommendation;
+      if (result.status === STATUS.noNumericTarget) {
+        return "入水不要";
+      }
+      if (result.status === STATUS.missingMeasurement) {
+        // Honest: we cannot time an action whose size we do not know yet.
+        return "水位を記録";
+      }
+      if (result.status === STATUS.withinRange) {
         return "不要";
       }
-      return decision?.verdict === "open" ? "今日〜明日" : "現地で確認";
+      if (result.status === STATUS.belowRange) {
+        return decision?.verdict === "open" ? "今日〜明日" : "現地で確認";
+      }
+      return "現地で確認";
     }
 
     const FORECAST_DAY_LABELS = ["今日", "明日", "明後日"];
@@ -5353,32 +6789,51 @@
 
       renderWaterHeroCarousel(fields, activeFieldId);
 
-      if (fields.length === 0 || !activeField || !computeWaterNeed) {
+      if (fields.length === 0 || !activeField || !waterRecommendation) {
         emptyState.hidden = fields.length !== 0;
         content.hidden = true;
+        renderMapWaterSummary(null, null, null);
+        renderWaterManagementCard();
         return;
       }
       emptyState.hidden = true;
       content.hidden = false;
 
-      const need = fieldWaterNeed(activeField);
+      const need = fieldWaterResult(activeField);
       document.getElementById("waterHeroFieldLabel").textContent = `${activeField.name || activeField.id} の推奨`;
       document.getElementById("waterHeroPrimary").textContent = waterHeroPrimaryMessage(need);
 
       const staleWarning = document.getElementById("waterHeroStaleWarning");
       if (need?.isStale) {
         staleWarning.hidden = false;
-        staleWarning.textContent = `最終水位記録: ${need.staleDays}日前 — この水位記録は古い可能性があります。現地で確認してください。`;
+        staleWarning.textContent = `最終水位記録: ${need.measurementAgeDays}日前 — この水位記録は古い可能性があります。現地で確認してください。`;
       } else {
         staleWarning.hidden = true;
       }
 
-      document.getElementById("waterHeroVolume").textContent = need && Number.isFinite(need.volumeM3)
-        ? (need.volumeM3 > 0 ? `約 ${need.volumeM3.toFixed(1)} m³` : "—")
-        : "—";
-      document.getElementById("waterHeroConfidence").textContent = !need || need.direction === "unknown"
+      // 必要水量: the deficit volume once a level is known, otherwise the
+      // per-10mm conversion rate -- pure geometry from the QZ1-surveyed area,
+      // which assumes NO current level. The farmer gets an actionable number
+      // on first open instead of a dash.
+      const adjustment = need?.standingWaterAdjustment;
+      const showVolume = Boolean(adjustment) && adjustment.areaKnown
+        && (adjustment.direction === "add" || adjustment.direction === "remove");
+      const rate = !showVolume && dailyLossModel
+        ? dailyLossModel.volumePerTenMm(activeField.properties?.areaM2)
+        : null;
+      const volumeLabel = document.getElementById("waterHeroVolumeLabel");
+      if (volumeLabel) {
+        volumeLabel.textContent = showVolume ? "必要水量（目安）" : "水深10mmあたり";
+      }
+      document.getElementById("waterHeroVolume").textContent = showVolume
+        ? waterRecommendation.formatVolumeRange(adjustment.minM3, adjustment.maxM3)
+        : (rate ? `約 ${rate.m3.toLocaleString("ja-JP", { maximumFractionDigits: 1 })} m³` : "—");
+
+      document.getElementById("waterHeroConfidence").textContent = !need
         ? "—"
-        : (need.isStale ? "低" : "高");
+        : (need.status === waterRecommendation.STATUS.missingMeasurement
+          ? "参考値"
+          : (need.isStale ? "低" : "高"));
 
       // Mirrors updateDecision()'s own threshold resolution exactly (settings
       // overrides over the profile defaults) so this label never disagrees
@@ -5399,7 +6854,221 @@
       document.getElementById("waterHeroTiming").textContent = waterHeroTimingLabel(need, decision);
 
       renderWaterHeroForecast();
+      renderMapWaterSummary(activeField, need, decision);
+      renderWaterManagementCard();
     }
+
+    /**
+     * Compact map-corner read of the same `need`/`decision` renderWaterHero()
+     * just computed -- passed in, never recomputed, so there is exactly one
+     * calculation per render and the two surfaces cannot disagree. CSS keeps
+     * this hidden entirely below the desktop breakpoint (map-water-summary
+     * [max-width:980px] rule); the early-return here only handles the
+     * zero-field/no-active-field case so a stale field name never lingers
+     * once fields are cleared.
+     */
+    function renderMapWaterSummary(field, need, decision) {
+      const card = document.getElementById("mapWaterSummary");
+      if (!card) {
+        return;
+      }
+      if (!field) {
+        card.hidden = true;
+        return;
+      }
+      card.hidden = false;
+
+      document.getElementById("mapWaterSummaryField").textContent = field.name || field.id;
+      document.getElementById("mapWaterSummaryState").textContent = waterNeedMiniLabel(need);
+      document.getElementById("mapWaterSummaryPrimary").textContent = waterHeroPrimaryMessage(need);
+
+      const detailEl = document.getElementById("mapWaterSummaryDetail");
+      const button = document.getElementById("mapWaterSummaryButton");
+      const adj = need?.standingWaterAdjustment;
+      const hasQuantity = Boolean(adj) && adj.areaKnown
+        && (adj.direction === "add" || adj.direction === "remove");
+      const probToday = weatherData?.dailyForecast?.[0]?.maxProbPct;
+      const probText = Number.isFinite(probToday) ? ` / 降水確率 ${probToday}%` : "";
+
+      if (hasQuantity) {
+        const volumeText = `約 ${waterRecommendation.formatVolumeRange(adj.minM3, adj.maxM3)} / `;
+        detailEl.textContent = `${volumeText}推奨操作: ${decision?.label ?? "—"}${probText}`;
+        button.textContent = "詳細を見る";
+      } else if (need && need.status === waterRecommendation.STATUS.missingMeasurement) {
+        // The recommendation stands on its own; the gate verdict is already
+        // stage- and weather-aware without a reading, so show both rather
+        // than blanking the card until someone measures.
+        detailEl.textContent = `推奨操作: ${decision?.label ?? "—"}${probText}`;
+        button.textContent = "水位を記録";
+      } else {
+        detailEl.textContent = decision?.label ? `推奨操作: ${decision.label}${probText}` : "";
+        button.textContent = "詳細を見る";
+      }
+      // Synchronous, not just the ResizeObserver below: renderMapWaterSummary
+      // just potentially changed this card's own height (new field name,
+      // new detail line length), and #basicWaterRecordCard's attached
+      // position depends on it -- see that CSS rule's own comment for why
+      // relying on the (asynchronous) observer alone leaves a real gap.
+      syncMapWaterSummaryReserve();
+    }
+
+    /** Keeps --basic-summary-live-bottom in sync with #mapWaterSummary's OWN live height -- read by #basicWaterRecordCard.basic-water-record-attached's `top`. */
+    function syncMapWaterSummaryReserve() {
+      const summary = document.getElementById("mapWaterSummary");
+      if (!summary || summary.hidden || getComputedStyle(summary).display === "none") {
+        return;
+      }
+      const bottom = summary.getBoundingClientRect().bottom;
+      if (bottom > 0) {
+        document.documentElement.style.setProperty("--basic-summary-live-bottom", `${Math.ceil(bottom) + 8}px`);
+      }
+    }
+    if ("ResizeObserver" in window) {
+      const mapSummaryElForObserver = document.getElementById("mapWaterSummary");
+      if (mapSummaryElForObserver) {
+        new ResizeObserver(syncMapWaterSummaryReserve).observe(mapSummaryElForObserver);
+      }
+    }
+
+    function isDesktopBasicMode() {
+      return document.body.dataset.mode === "basic" && window.matchMedia("(min-width: 981px)").matches;
+    }
+
+    /**
+     * 水位・観察を記録 (#basicWaterRecordCard) as a slide-down panel attached
+     * below #mapWaterSummary -- desktop 基本モード only. Toggling is class-
+     * based (.basic-water-record-attached + .is-open), not the native
+     * <details>[open] this element already carries statically-always-true:
+     * [open] is not CSS-transitionable (the UA stylesheet's open/closed
+     * content toggle is a display:none/block switch), and the class-based
+     * approach lets .basic-water-record-attached alone (present) vs. absent
+     * cleanly separate "attached to the map" from "normal flowing card"
+     * without touching the [open] semantics mobile/設定/ドローン still rely on
+     * -- see #basicWaterRecordCard.basic-water-record-attached's own CSS
+     * comment for the full reasoning.
+     */
+    /**
+     * Opens the attached card unconditionally (idempotent) -- the shared
+     * entry point for every desktop trigger, not just #mapWaterSummaryButton.
+     * #basicRecordWaterButton (圃場の管理's own 水位を記録) used to just scroll
+     * the always-visible card into view; now that the card is display:none by
+     * default on desktop (see the CSS rule scoped to
+     * :not(.basic-water-record-attached)), that scroll would land on nothing,
+     * so it opens through here too.
+     */
+    function openAttachedWaterRecordCard() {
+      const card = document.getElementById("basicWaterRecordCard");
+      if (!card) {
+        return;
+      }
+      // Both this card and .gate-card attach to the exact same spot below
+      // #mapWaterSummary -- only one can be open at a time or they'd overlap.
+      document.querySelector(".gate-card")?.classList.remove("is-open");
+      card.classList.add("basic-water-record-attached");
+      syncMapWaterSummaryReserve();
+      // requestAnimationFrame: adding basic-water-record-attached (which
+      // starts the card at max-height:0) and is-open in the SAME tick would
+      // never paint the 0 state as its own frame, so the transition would
+      // have nothing to animate FROM -- the card would just appear already
+      // expanded instead of visibly sliding down.
+      requestAnimationFrame(() => {
+        card.classList.add("is-open");
+        const typeSelect = document.getElementById("recObsTypeSelect");
+        if (typeSelect && [...typeSelect.options].some((option) => option.value === "water_level")) {
+          typeSelect.value = "water_level";
+        }
+        document.getElementById("recObsWaterLevelInput")?.focus();
+      });
+    }
+
+    function toggleAttachedWaterRecordCard() {
+      const card = document.getElementById("basicWaterRecordCard");
+      if (!card) {
+        return;
+      }
+      const alreadyOpen = card.classList.contains("basic-water-record-attached")
+        && card.classList.contains("is-open");
+      if (alreadyOpen) {
+        card.classList.remove("is-open");
+        return;
+      }
+      openAttachedWaterRecordCard();
+    }
+
+    document.getElementById("basicWaterRecordCloseButton")?.addEventListener("click", () => {
+      document.getElementById("basicWaterRecordCard")?.classList.remove("is-open");
+    });
+
+    // The native <details> disclosure toggle must not fight the class-based
+    // open/close above -- clicking the summary would otherwise natively flip
+    // [open] to false, which hides everything (including this card's own
+    // close button) via the UA stylesheet regardless of .is-open. Guarded to
+    // the attached state only: mobile/設定/ドローン's summary is unaffected.
+    document.querySelector("#basicWaterRecordCard > summary")?.addEventListener("click", (event) => {
+      if (document.getElementById("basicWaterRecordCard")?.classList.contains("basic-water-record-attached")) {
+        event.preventDefault();
+      }
+    });
+
+    /**
+     * .gate-card (今日の水門判断) as a slide-down panel attached below
+     * #mapWaterSummary -- desktop 基本モード only, mirroring
+     * openAttachedWaterRecordCard() exactly (see that function's own
+     * comment). Triggered by #mapWaterSummaryButton's "詳細を見る" state.
+     */
+    function openAttachedGateCard() {
+      const card = document.querySelector(".gate-card");
+      if (!card) {
+        return;
+      }
+      // Mutual exclusion with #basicWaterRecordCard -- see that function's
+      // own comment; both attach to the same spot below #mapWaterSummary.
+      document.getElementById("basicWaterRecordCard")?.classList.remove("is-open");
+      card.classList.add("basic-gate-card-attached");
+      syncMapWaterSummaryReserve();
+      requestAnimationFrame(() => {
+        card.classList.add("is-open");
+      });
+    }
+
+    function toggleAttachedGateCard() {
+      const card = document.querySelector(".gate-card");
+      if (!card) {
+        return;
+      }
+      const alreadyOpen = card.classList.contains("basic-gate-card-attached")
+        && card.classList.contains("is-open");
+      if (alreadyOpen) {
+        card.classList.remove("is-open");
+        return;
+      }
+      openAttachedGateCard();
+    }
+
+    document.getElementById("gateCardCloseButton")?.addEventListener("click", () => {
+      document.querySelector(".gate-card")?.classList.remove("is-open");
+    });
+
+    document.getElementById("mapWaterSummaryButton")?.addEventListener("click", () => {
+      const field = (fieldAnnotationController?.fields || [])
+        .find((candidate) => candidate.id === document.getElementById("basicActiveFieldSelect")?.value);
+      const need = field ? fieldWaterResult(field) : null;
+      if (!need || !hasUsableMeasurement(need)) {
+        if (isDesktopBasicMode()) {
+          toggleAttachedWaterRecordCard();
+        } else {
+          // Same destination as 圃場の管理's own 水位を記録 button.
+          document.getElementById("basicRecordWaterButton")?.click();
+        }
+      } else if (isDesktopBasicMode()) {
+        toggleAttachedGateCard();
+      } else {
+        // Mobile/設定/ドローン: .gate-card is still a normal flowing section,
+        // never display:none (see its own CSS rule's body[data-mode="basic"]
+        // scope), so scrolling to it still works exactly as before.
+        document.querySelector(".gate-card")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    });
 
     document.getElementById("waterHeroCarousel")?.addEventListener("click", (event) => {
       const button = event.target.closest("button[data-water-hero-field-id]");
@@ -5412,10 +7081,6 @@
         select.value = fieldId;
         select.dispatchEvent(new Event("change", { bubbles: true }));
       }
-    });
-
-    document.getElementById("waterHeroRecordButton")?.addEventListener("click", () => {
-      document.getElementById("basicRecordWaterButton")?.click();
     });
 
     /**
@@ -5443,6 +7108,20 @@
       if (field) {
         document.getElementById("droneFieldName").textContent = field.name || "—";
         document.getElementById("droneFieldArea").textContent = formatAreaBasic(field.properties?.areaM2);
+      }
+      // droneActiveFieldSelect is a second <select> of its own (populated by
+      // renderFieldTargetOptions, same as basicActiveFieldSelect), so its
+      // value never auto-follows basicActiveFieldSelect -- keep them in sync
+      // here every time the shared "current field" changes, from any source
+      // (map click, 基本モード dropdown, or this select itself).
+      const droneSelect = document.getElementById("droneActiveFieldSelect");
+      const droneSelectRow = document.getElementById("droneFieldSelectRow");
+      if (droneSelect && select && droneSelect.value !== select.value) {
+        droneSelect.value = select.value;
+      }
+      if (droneSelectRow) {
+        // Only worth showing a picker when there's an actual choice to make.
+        droneSelectRow.hidden = fields.length <= 1;
       }
       if (document.body.dataset.mode === "drone") {
         dronePanel.hidden = !field;
@@ -5568,7 +7247,27 @@
       }
       const all = readCurrentWaterLevels();
       if (Number.isFinite(valueCm)) {
-        all[fieldId] = { valueCm, recordedAt };
+        // Widened for 水管理: the entry now carries the measurement record
+        // ({ valueMm, reference, source, measuredAt }) ALONGSIDE the legacy
+        // valueCm/recordedAt pair, so this cm input and the mm input in the
+        // 水管理 card write one shared value instead of two that drift.
+        //
+        // BOTH WRITE PATHS NOW AGREE ON SIGN. This fallback used to fire for
+        // negatives -- buildWaterMeasurement() rejected them, so -15 cm was
+        // persisted here as a bare { valueCm, recordedAt } with no mm record,
+        // while the mm writer CLEARED the same reading. One farmer action,
+        // two different stored states, and the two cards disagreed about
+        // whether a measurement existed at all. Signed values are now valid,
+        // so -15 cm and -150 mm produce the identical record.
+        //
+        // The fallback remains solely for the module-not-loaded case, where it
+        // is byte-identical to the pre-existing behaviour.
+        const measurement = waterMeasurementModel?.buildWaterMeasurement({
+          valueMm: valueCm * 10, source: "manual", measuredAt: recordedAt
+        });
+        all[fieldId] = measurement
+          ? waterMeasurementModel.toPersistedEntry(measurement)
+          : { valueCm, recordedAt };
       } else {
         delete all[fieldId];
       }
@@ -5585,6 +7284,418 @@
         return null;
       }
       return entry;
+    }
+
+    // -------------------------------------------------------------------
+    // 水管理 / Water Management: growth-stage recommendation card.
+    //
+    // Controller only. Every number shown here is computed by
+    // evaluateWaterManagement() (js/water/water-recommendation.js) from three
+    // inputs this app already owns or now collects:
+    //   - field.properties.areaM2   (measured at registration, never re-derived)
+    //   - the per-field growth stage (new store below, manually selected)
+    //   - the per-field water-depth measurement record
+    //
+    // The measurement is READ AND WRITTEN THROUGH THE EXISTING
+    // suimonNaviCurrentWaterLevelV1 store, not a new one, so the mm card and
+    // the cm 水位 input in 水位・観察を記録 are two views of one value and can
+    // never drift apart. writeCurrentWaterLevel() above was widened to persist
+    // the { valueMm, source, measuredAt } record alongside the legacy
+    // valueCm/recordedAt pair; js/water/water-need.js and 今日の水門判断 still
+    // read the legacy pair unchanged.
+    // -------------------------------------------------------------------
+
+    // Per-field growth stage. A NEW key, so there is no existing value for a
+    // signed-in farmer to lose by namespacing it -- it is registered in
+    // SCOPED_STORAGE_KEYS (js/cloud/user-scope.js) and therefore private per
+    // account, like the field store itself.
+    const GROWTH_STAGE_STORAGE_KEY = "suimonNaviFieldGrowthStageV1";
+
+    function readGrowthStages() {
+      try {
+        const raw = accountScopedStorage.getItem(GROWTH_STAGE_STORAGE_KEY);
+        return raw ? JSON.parse(raw) : {};
+      } catch {
+        return {};
+      }
+    }
+
+    function readGrowthStageForField(fieldId) {
+      if (!fieldId || !growthStageModel) {
+        return null;
+      }
+      return growthStageModel.normalizeGrowthStageRecord(readGrowthStages()[fieldId]);
+    }
+
+    /** Stage id EXACTLY as stored -- no calendar inference. */
+    function growthStageIdForField(fieldId) {
+      const record = readGrowthStageForField(fieldId);
+      return record ? record.stage : (growthStageModel?.UNKNOWN_STAGE_ID || "unknown");
+    }
+
+    /**
+     * The stage actually used for recommendations.
+     *
+     * A farmer should not have to pick from a blank dropdown before the app
+     * will tell them anything, so when nothing has been chosen the regional
+     * cultivation calendar supplies a starting guess from the field's own
+     * latitude and today's date (js/water/growth-calendar.js).
+     *
+     * THE OVERRIDE RULE: a stage the farmer set manually always wins and is
+     * never overwritten by a later calendar evaluation. Their eyes on the crop
+     * beat a regional average, and an app that silently reverts a human
+     * correction teaches farmers to stop trusting it. `resolveGrowthStage()`
+     * owns that rule; this is only the lookup around it.
+     */
+    function resolveGrowthStageForField(fieldId) {
+      const stored = readGrowthStageForField(fieldId);
+      if (!growthCalendarModel) {
+        return {
+          stage: stored ? stored.stage : (growthStageModel?.UNKNOWN_STAGE_ID || "unknown"),
+          source: stored?.source || "manual",
+          isEstimate: false
+        };
+      }
+      const field = (fieldAnnotationController?.fields || []).find((f) => f.id === fieldId) || null;
+      return growthCalendarModel.resolveGrowthStage(stored, field, new Date());
+    }
+
+    /** Just the id, for callers that do not need the provenance. */
+    function resolvedGrowthStageForField(fieldId) {
+      return resolveGrowthStageForField(fieldId).stage;
+    }
+
+    function writeGrowthStageForField(fieldId, stageId, source = "manual") {
+      if (!fieldId || !growthStageModel) {
+        return;
+      }
+      const all = readGrowthStages();
+      const previous = growthStageModel.normalizeGrowthStageRecord(all[fieldId]);
+      const record = growthStageModel.buildGrowthStageRecord({
+        stage: stageId,
+        source,
+        // Preserved rather than dropped: these are the inputs a future
+        // transplanting-date / variety / accumulated-temperature derivation
+        // will need, and nothing else writes them yet.
+        transplantedOn: previous?.transplantedOn ?? null,
+        variety: previous?.variety ?? null,
+        updatedAt: Date.now()
+      });
+      if (record.stage === growthStageModel.UNKNOWN_STAGE_ID) {
+        delete all[fieldId];
+      } else {
+        all[fieldId] = record;
+      }
+      try {
+        accountScopedStorage.setItem(GROWTH_STAGE_STORAGE_KEY, JSON.stringify(all));
+      } catch {
+        // Storage full/unavailable -- the stage simply won't persist across reloads.
+      }
+      authController?.notifyLocalChange();
+    }
+
+    /**
+     * mm-first writer for the shared measurement store. `source` is a
+     * parameter, not a constant: an Intel RealSense D345 / water-level-sensor
+     * integration calls exactly this function with source "realsense" /
+     * "sensor" and nothing downstream changes.
+     */
+    function writeWaterMeasurementMm(fieldId, valueMm, source = "manual", measuredAt = Date.now()) {
+      if (!fieldId || !waterMeasurementModel) {
+        return null;
+      }
+      const all = readCurrentWaterLevels();
+      const measurement = waterMeasurementModel.buildWaterMeasurement({ valueMm, source, measuredAt });
+      if (measurement) {
+        all[fieldId] = waterMeasurementModel.toPersistedEntry(measurement);
+      } else {
+        delete all[fieldId];
+      }
+      writeCurrentWaterLevels(all);
+      authController?.notifyLocalChange();
+      return measurement;
+    }
+
+    function waterManagementActiveField() {
+      const fields = fieldAnnotationController?.fields || [];
+      const activeFieldId = document.getElementById("basicActiveFieldSelect")?.value || "";
+      return fields.find((candidate) => candidate.id === activeFieldId) || null;
+    }
+
+    function populateGrowthStageSelect() {
+      const select = document.getElementById("waterMgmtStageSelect");
+      if (!select || !growthStageModel || select.dataset.populated === "true") {
+        return;
+      }
+      select.replaceChildren();
+      growthStageModel.growthStageOptions().forEach((option) => {
+        const element = document.createElement("option");
+        element.value = option.value;
+        element.textContent = option.modeLabelJa && option.value !== growthStageModel.UNKNOWN_STAGE_ID
+          ? `${option.labelJa}（${option.modeLabelJa}）`
+          : option.labelJa;
+        select.append(element);
+      });
+      select.dataset.populated = "true";
+    }
+
+    function renderWaterManagementSources(result) {
+      const container = document.getElementById("waterMgmtSourceList");
+      if (!container) {
+        return;
+      }
+      container.replaceChildren();
+      result.sources.forEach((source) => {
+        const wrapper = document.createElement("div");
+        wrapper.className = "water-mgmt-source";
+
+        const org = document.createElement("span");
+        org.className = "water-mgmt-source-org";
+        org.textContent = source.organization;
+
+        const title = document.createElement("span");
+        title.className = "water-mgmt-source-title";
+        title.textContent = source.titleJa;
+
+        const supports = document.createElement("span");
+        supports.textContent = `この根拠が支持する内容: ${source.supportsJa}`;
+
+        const caveat = document.createElement("span");
+        caveat.className = "water-mgmt-source-caveat";
+        caveat.textContent = `留意点: ${source.caveatJa}`;
+
+        wrapper.append(org, title, supports, caveat);
+
+        // Bibliographic detail, where the source is a published paper rather
+        // than a guidance page -- so a reviewer can find the record itself.
+        if (source.journal) {
+          const citation = document.createElement("span");
+          const authors = Array.isArray(source.authors) ? source.authors.join("・") : "";
+          citation.textContent = `${authors}『${source.titleJa}』${source.journal} ${source.volume}: ${source.pages} (${source.publishedOn}) DOI ${source.doi}`;
+          wrapper.append(citation);
+        }
+
+        // How this citation was checked. A live-but-unread link and a page we
+        // actually fetched and quoted are different kinds of evidence, and the
+        // farmer/reviewer is told which one they are looking at.
+        const verification = document.createElement("span");
+        verification.className = "water-mgmt-source-verification";
+        verification.textContent = `確認状況: ${waterRecommendation.verificationLabel(source)}（${source.verification?.checkedOn || "—"} 時点）`;
+        wrapper.append(verification);
+
+        // The general-practice entry has no URL by design; rendering an empty
+        // link would imply a citation that does not exist.
+        if (source.url) {
+          const link = document.createElement("a");
+          link.href = source.url;
+          link.target = "_blank";
+          link.rel = "noopener noreferrer";
+          link.textContent = source.url;
+          wrapper.append(link);
+        }
+        container.append(wrapper);
+      });
+    }
+
+    function renderWaterManagementCard() {
+      const emptyState = document.getElementById("waterMgmtEmptyState");
+      const content = document.getElementById("waterMgmtContent");
+      if (!emptyState || !content) {
+        return;
+      }
+      const field = waterManagementActiveField();
+      if (!field || !waterRecommendation || !growthStageModel) {
+        emptyState.textContent = waterRecommendation && growthStageModel
+          ? "圃場を登録すると、生育ステージに応じた参考水深と必要水量を表示できます。"
+          : "水管理の計算モジュールを読み込めませんでした。ページを再読み込みしてください。";
+        emptyState.hidden = false;
+        content.hidden = true;
+        return;
+      }
+      emptyState.hidden = true;
+      content.hidden = false;
+      populateGrowthStageSelect();
+
+      // A "目標水位に反映しました" confirmation belongs to the field it was
+      // shown for; switching fields clears it rather than letting it read as
+      // a statement about the newly selected paddy.
+      const applyMessage = document.getElementById("waterMgmtApplyTargetMessage");
+      if (applyMessage && applyMessage.dataset.fieldId !== String(field.id)) {
+        applyMessage.hidden = true;
+        applyMessage.textContent = "";
+        applyMessage.dataset.fieldId = String(field.id);
+      }
+
+      const setText = (id, value) => {
+        const element = document.getElementById(id);
+        if (element) element.textContent = value;
+      };
+
+      // Resolved, not raw: with nothing chosen the regional calendar supplies a
+      // starting stage so the card can recommend a depth immediately, without
+      // the farmer picking from a blank dropdown first. A manual choice always
+      // wins (see resolveGrowthStageForField).
+      const stageResolution = resolveGrowthStageForField(field.id);
+      const stageId = stageResolution.stage;
+      const stageSelect = document.getElementById("waterMgmtStageSelect");
+      if (stageSelect && stageSelect.value !== stageId) {
+        stageSelect.value = stageId;
+      }
+      // Say so when the stage is inferred. A guess presented as an observation
+      // is the failure mode this whole feature is built to avoid.
+      const stageNote = document.getElementById("waterMgmtStageEstimateNote");
+      if (stageNote) {
+        stageNote.hidden = !stageResolution.isEstimate;
+        stageNote.textContent = stageResolution.isEstimate
+          ? `推定（${stageResolution.regionLabelJa}の標準作期）— 実際の生育に合わせて変更できます`
+          : "";
+      }
+
+      const result = waterRecommendation.evaluateWaterManagement({
+        areaM2: field.properties?.areaM2,
+        growthStage: stageId,
+        // The raw persisted entry: evaluateWaterManagement() normalizes both
+        // the new record and the legacy cm entry, so a field saved before this
+        // feature existed needs no migration pass.
+        measurement: readCurrentWaterLevels()[field.id],
+        now: Date.now()
+      });
+
+      setText("waterMgmtArea", formatAreaBasic(field.properties?.areaM2));
+
+      const hasNumericTarget = Number.isFinite(result.target.targetMinMm) && Number.isFinite(result.target.targetMaxMm);
+      setText("waterMgmtTarget", hasNumericTarget
+        ? `${result.target.targetMinMm}〜${result.target.targetMaxMm} mm`
+        : "数値目標なし");
+      setText("waterMgmtMode", hasNumericTarget
+        ? `${result.target.modeLabelJa}（${result.target.targetMinMm / 10}〜${result.target.targetMaxMm / 10} cm）`
+        : result.target.modeLabelJa);
+
+      // Never overwrite a value the farmer is in the middle of typing.
+      const depthInput = document.getElementById("waterMgmtDepthInput");
+      if (depthInput && document.activeElement !== depthInput) {
+        depthInput.value = result.measurement ? result.measurement.valueMm : "";
+      }
+      // Three distinct readouts, never two: a reading, no reading, and a stored
+      // value this model cannot interpret. The third used to render as "まだ
+      // 計測されていません" -- a false statement about the farmer's own data.
+      setText("waterMgmtDepthReadout", result.measurement
+        ? `${waterRecommendation.formatDepthWithCm(result.measurement.valueMm)} ／ 取得元: ${waterMeasurementModel.measurementSourceLabel(result.measurement.source)}`
+        : (result.status === waterRecommendation.STATUS.unreadableMeasurement
+          ? "保存されている値を解釈できません。記録し直してください。"
+          : "まだ計測されていません。"));
+
+      const staleWarning = document.getElementById("waterMgmtStaleWarning");
+      if (staleWarning) {
+        staleWarning.hidden = !result.isStale;
+        staleWarning.textContent = result.isStale
+          ? `この計測は${result.measurementAgeDays}日前のものです。現地で確認してください。`
+          : "";
+      }
+
+      const statusCell = document.querySelector(".water-mgmt-status-cell");
+      if (statusCell) statusCell.dataset.status = result.status;
+      setText("waterMgmtStatus", result.statusLabelJa);
+
+      // Volume is shown only when there is actually a depth change to make AND
+      // an area to multiply it by. The drainage/unknown/within-range states
+      // deliberately show no volume at all.
+      const volumeBlock = document.getElementById("waterMgmtVolumeBlock");
+      const adjustment = result.standingWaterAdjustment;
+      const showVolume = Boolean(adjustment) && adjustment.areaKnown
+        && (adjustment.direction === "add" || adjustment.direction === "remove");
+      if (volumeBlock) {
+        volumeBlock.hidden = !showVolume;
+      }
+
+      // ---- Per-10mm conversion rate, when there is no measurement --------
+      // The deficit is unknowable without a reading, but the rate is pure
+      // geometry from the QZ1-surveyed area, so the farmer gets something they
+      // can act on immediately without the app inventing a current level.
+      const rateBlock = document.getElementById("waterMgmtRateBlock");
+      if (rateBlock) {
+        const rate = dailyLossModel && !showVolume
+          ? dailyLossModel.volumePerTenMm(field.properties?.areaM2)
+          : null;
+        rateBlock.hidden = !rate;
+        if (rate) {
+          setText("waterMgmtRateM3", `約 ${rate.m3.toLocaleString("ja-JP", { maximumFractionDigits: 1 })} m³`);
+          setText("waterMgmtRateLiters", `${Math.round(rate.liters).toLocaleString("ja-JP")} L（面積 ${Math.round(rate.areaM2).toLocaleString("ja-JP")} m² × 10 mm）`);
+        }
+      }
+
+      // ---- Daily loss: the SECOND number, never merged with the first ----
+      const lossBlock = document.getElementById("waterMgmtLossBlock");
+      if (lossBlock) {
+        const loss = dailyLossModel
+          ? dailyLossModel.estimateDailyLoss({
+              etoMmPerDay: weatherData?.etoMmPerDay,
+              growthStage: stageId,
+              areaM2: field.properties?.areaM2
+            })
+          : null;
+        const showLoss = Boolean(loss && loss.applicable && loss.minMmPerDay !== null);
+        lossBlock.hidden = !showLoss;
+        if (showLoss) {
+          const mmRange = `${loss.minMmPerDay.toFixed(1)}〜${loss.maxMmPerDay.toFixed(1)} mm/日`;
+          const m3Range = loss.minM3PerDay === null
+            ? ""
+            : `（約 ${loss.minM3PerDay.toFixed(1)}〜${loss.maxM3PerDay.toFixed(1)} m³/日）`;
+          setText("waterMgmtLossRange", `${mmRange} ${m3Range}`);
+          setText("waterMgmtLossBreakdown",
+            `内訳: 蒸発散 ETc ${loss.etcMmPerDay.toFixed(1)} mm/日（ETo ${loss.etoMmPerDay.toFixed(1)} × Kc ${loss.kc.toFixed(2)}、FAO56）`
+            + ` ＋ 浸透 ${loss.percolation.minMm}〜${loss.percolation.maxMm} mm/日`);
+          // The error bar is stated, not implied. 華山(1964) puts the floor on
+          // how well any 減水深-based estimate can be known without measuring
+          // this particular field.
+          setText("waterMgmtLossCaveat",
+            `※ 浸透量は土壌・耕盤で大きく変わるため一般的な範囲です。減水深法による推定には ±${loss.errorMmPerDay} mm/日 程度の誤差が伴います（華山 1964）。上の理論追加水量とは別の数値で、単純に足し合わせないでください。`);
+        }
+      }
+      if (showVolume) {
+        setText("waterMgmtVolumeM3", waterRecommendation.formatVolumeRange(adjustment.minM3, adjustment.maxM3));
+        setText("waterMgmtVolumeLiters", waterRecommendation.formatVolumeRange(
+          adjustment.minLiters, adjustment.maxLiters, { unit: "L", digits: 0 }
+        ));
+        setText("waterMgmtVolumeDirection", adjustment.direction === "add"
+          ? "参考範囲まで入水した場合の理論値です。実際の必要用水量とは異なります。"
+          : "参考範囲の上限まで下げた場合の理論値です。落水の指示ではありません。");
+      }
+
+      setText("waterMgmtRecommendation", result.recommendationJa);
+
+      // Bridge to the farmer's own 目標水位 (cm), which 今日の水門判断 compares
+      // against: offered as an explicit action, never applied silently, and
+      // only where the stage actually has a numeric range to apply.
+      const applyButton = document.getElementById("waterMgmtApplyTargetButton");
+      if (applyButton) {
+        applyButton.hidden = !hasNumericTarget;
+        const midpointCm = hasNumericTarget
+          ? Math.round((result.target.targetMinMm + result.target.targetMaxMm) / 2) / 10
+          : null;
+        applyButton.dataset.targetCm = midpointCm === null ? "" : String(midpointCm);
+        applyButton.textContent = hasNumericTarget
+          ? `参考値（${midpointCm} cm）を目標水位に反映`
+          : "参考値を目標水位に反映";
+      }
+
+      // Evidence disclosure.
+      setText("waterMgmtStageNote", `${result.stage.labelJa} / ${result.stage.labelEn}: ${result.target.noteJa}`);
+      const conditional = document.getElementById("waterMgmtConditional");
+      if (conditional) {
+        conditional.replaceChildren();
+        const entries = result.target.conditional || [];
+        conditional.hidden = entries.length === 0;
+        entries.forEach((entry) => {
+          const line = document.createElement("p");
+          line.className = "meta";
+          line.textContent = `${entry.conditionJa}: ${entry.noteJa}`;
+          conditional.append(line);
+        });
+      }
+      renderWaterManagementSources(result);
+      setText("waterMgmtRequirementNote", `参考（研究値）: ${result.waterRequirementReference.noteJa}`);
+      setText("waterMgmtCaveat", result.caveatJa);
     }
 
     function formatAreaShort(area) {
@@ -6106,7 +8217,7 @@
       }
 
       renderBasicBoundaryOverlay();
-      emptyState.hidden = parsedPoints.length > 0 || phonePoints.length > 0;
+      updateEmptyStateVisibility();
       exportButton.disabled = parsedPoints.length === 0;
       syncLayerVisibility();
       updateComparisonSummary();
@@ -6377,7 +8488,7 @@
       });
 
       clearPhoneButton.disabled = phonePoints.length === 0;
-      emptyState.hidden = parsedPoints.length > 0 || phonePoints.length > 0;
+      updateEmptyStateVisibility();
       syncLayerVisibility();
       updateComparisonSummary();
 
@@ -6985,6 +9096,15 @@
       clearSurveyedGate();
       rebuildSurveyedBoundaryAndChannel();
       updateSummary();
+      // onFieldRegistered (below) unchecks this once the PREVIOUS upload's
+      // points turn into a field, decluttering the map. That hide is global
+      // state, not scoped to those specific points -- left alone, it would
+      // silently also hide THIS brand-new upload's points, which the farmer
+      // needs to see and tap to pick START/END for the field they are about
+      // to register. A fresh parse always means fresh points to look at.
+      if (!showQz1LayerInput.checked) {
+        showQz1LayerInput.checked = true;
+      }
       renderPoints();
       refreshFieldOverlay();
       if (assuranceController) {
@@ -7083,6 +9203,14 @@
         tab.classList.toggle("active", selected);
         tab.setAttribute("aria-selected", String(selected));
       });
+      // The map's #emptyState default wording is mode-specific (基本モード's
+      // simplified 圃場-centric copy vs 設定/ドローン's fuller technical
+      // copy). resetEmptyState() also forces it visible as a side effect of
+      // setEmptyState(), so updateEmptyStateVisibility() runs right after,
+      // synchronously, to re-derive the correct hidden state from the
+      // actual field/point counts before anything paints.
+      resetEmptyState();
+      updateEmptyStateVisibility();
       const defaultWorkspace = workspace ?? (mode === "settings" ? "decision" : "survey");
       switchWorkspace(defaultWorkspace, { updateHash: false });
       if (updateHash) {
@@ -7139,18 +9267,17 @@
     function applyRouteFromLocation() {
       const route = location.hash.slice(1).toLowerCase();
       const nestedSettings = route.match(/^settings\/([a-z]+)$/);
-      const engineeringNav = document.querySelector(".engineering-nav");
+      // .engineering-nav's workspace tabs are always visible now (the
+      // click-to-expand <details> was removed), so there is no open/closed
+      // state left to drive from the route.
       if (nestedSettings) {
-        if (engineeringNav) engineeringNav.open = true;
         switchMode("settings", { updateHash: false, workspace: nestedSettings[1] });
         return;
       }
       if (LEGACY_WORKSPACES.includes(route)) {
-        if (engineeringNav) engineeringNav.open = true;
         switchMode("settings", { updateHash: false, workspace: route });
         return;
       }
-      if (engineeringNav && route !== "settings") engineeringNav.open = false;
       if (PRODUCT_MODES.includes(route) || route === "") {
         switchMode(route || "basic", { updateHash: false });
         return;
@@ -7959,17 +10086,16 @@
       const isRealField = targetFieldId && targetFieldId !== DECISION_SAMPLE_VALUE && targetFieldId !== DECISION_DEMO_VALUE;
       switchWorkspace("fields");
       window.setTimeout(() => {
-        const waterPanel = document.getElementById("waterControlPanel");
         const wcpSelect = document.getElementById("wcpTargetFieldSelect");
         if (isRealField && wcpSelect && [...wcpSelect.options].some((option) => option.value === targetFieldId)) {
           wcpSelect.value = targetFieldId;
           wcpSelect.dispatchEvent(new Event("change", { bubbles: true }));
         }
-        if (waterPanel) {
-          waterPanel.open = true;
-          scrollElementWithinPanel(waterPanel, { block: "start" });
-        }
-        document.getElementById("wcpAddGateButton")?.focus();
+        // Destination is now the on-map #waterQuickToolbar (the removed
+        // #waterControlPanel's replacement) -- see the comment on that id.
+        // It's a fixed-position overlay on the always-visible map, not a
+        // panel card, so there's nothing to scroll into view; only focus.
+        document.querySelector('#waterQuickToolbar button[data-water-quick-type="gate"]')?.focus();
       }, 100);
     });
     document.querySelectorAll("[data-workspace-target]").forEach((tab) => {
@@ -8001,6 +10127,13 @@
       renderDroneModeGate();
       loadTargetWaterLevelForActiveField();
       fetchLiveWeather();
+      syncSurveyedBoundaryForActiveField();
+    });
+    // Drone mode's own field picker (index.html:4346-4349) drives the exact
+    // same #basicActiveFieldSelect cascade above -- via setActiveField, which
+    // also re-highlights the matching polygon on the map, same as clicking it.
+    document.getElementById("droneActiveFieldSelect")?.addEventListener("change", (event) => {
+      fieldAnnotationController?.setActiveField(event.target.value);
     });
     document.getElementById("recTargetWaterLevelInput")?.addEventListener("input", (event) => {
       const fieldId = document.getElementById("basicActiveFieldSelect")?.value;
@@ -8014,41 +10147,126 @@
       const value = event.target.value === "" ? NaN : Number(event.target.value);
       writeCurrentWaterLevel(fieldId, value);
       updateWaterLevelVerdict();
+      renderWaterHero(); // also refreshes the 水管理 card (same stored value, mm view)
+      updateDecision();  // ...and the gate, which now reads the same measurement
+    });
+
+    // ---- 水管理 / Water Management card ---------------------------------
+    //
+    // Every handler here writes through the SAME per-field stores the rest of
+    // Basic mode uses and then re-renders; none of them calculates anything.
+    // The arithmetic lives in js/water/water-recommendation.js.
+    document.getElementById("waterMgmtStageSelect")?.addEventListener("change", (event) => {
+      const fieldId = document.getElementById("basicActiveFieldSelect")?.value;
+      writeGrowthStageForField(fieldId, event.target.value, "manual");
+      renderWaterManagementCard();
+      // 今日の水門判断 now reads the same stage-based engine, so it has to
+      // repaint here too -- otherwise the hero keeps showing the previous
+      // stage's target while the 水管理 card below it already shows the new
+      // one. (Also refreshes the map-corner summary, which it renders.)
       renderWaterHero();
+      // The gate verdict now depends on the growth stage -- switching to 中干し
+      // must flip it to 閉める immediately. Without this the two cards sit on
+      // screen contradicting each other until some other event repaints the
+      // gate, which is the exact failure decideGate() was written to end.
+      updateDecision();
     });
-    // Points at Stage-1's own card now that the technical recording surface
-    // is Settings-only: in Basic mode "圃場を測る" means "load the walk you
-    // recorded and turn it into a field", not "open a WebSerial console".
-    document.getElementById("basicMeasureFieldButton")?.addEventListener("click", () => {
-      switchWorkspace("survey");
-      window.setTimeout(() => {
-        const card = document.getElementById("basicStage1Card");
-        scrollElementWithinPanel(card, { block: "start" });
-        document.getElementById(parsedPoints.length > 0 ? "basicPickStartButton" : "basicNmeaInput")?.focus();
-      }, 100);
+
+    document.getElementById("waterMgmtDepthInput")?.addEventListener("input", (event) => {
+      const fieldId = document.getElementById("basicActiveFieldSelect")?.value;
+      if (!fieldId) {
+        return;
+      }
+      const raw = event.target.value;
+      // `raw === ""` is checked FIRST and separately: Number("") is 0, so
+      // falling through would persist an emptied box as a reading of exactly
+      // 0 mm -- water level at the soil surface, which is a real and different
+      // answer from "not measured". A lone "-" mid-typing is likewise NaN and
+      // clears rather than committing a half-entered value.
+      const valueMm = raw === "" ? NaN : Number(raw);
+      if (raw === "" || !Number.isFinite(valueMm)) {
+        writeWaterMeasurementMm(fieldId, NaN);
+      } else {
+        // Negative accepted: the datum is the soil surface, so a sub-surface
+        // water table (AWD) is a valid reading, not an input error.
+        writeWaterMeasurementMm(fieldId, valueMm, "manual");
+      }
+      // Keep the cm input in 水位・観察を記録 showing the same value, sign
+      // included -- the two inputs are two views of ONE measurement.
+      const cmInput = document.getElementById("recObsWaterLevelInput");
+      if (cmInput && document.activeElement !== cmInput) {
+        cmInput.value = Number.isFinite(valueMm) ? valueMm / 10 : "";
+      }
+      updateWaterLevelVerdict();
+      renderWaterHero();
+      renderWaterManagementCard();
+      // The gate verdict reads the measurement now, so it must repaint too.
+      updateDecision();
     });
-    // 水管理ポイントを追加, from the farmer's own field card. Same destination
-    // as Settings' 水管理ポイントを追加する, minus the field-picking step: the
-    // active field is already chosen, so it is simply carried across.
+
+    document.getElementById("waterMgmtUpdateButton")?.addEventListener("click", () => {
+      // The value is already persisted on input; this button is the farmer's
+      // "done" affordance -- it commits focus, refreshes both water surfaces
+      // and re-stamps the measurement time so 経過日数 reflects this check.
+      const fieldId = document.getElementById("basicActiveFieldSelect")?.value;
+      const input = document.getElementById("waterMgmtDepthInput");
+      // Same guard shape as the input handler: "" is excluded before Number()
+      // so an empty box never re-stamps a fabricated 0 mm. Negatives commit
+      // normally -- an AWD reading is as real as a ponded one.
+      const valueMm = input && input.value !== "" ? Number(input.value) : NaN;
+      if (fieldId && Number.isFinite(valueMm)) {
+        writeWaterMeasurementMm(fieldId, valueMm, "manual", Date.now());
+      }
+      input?.blur();
+      renderWaterHero();
+      renderWaterManagementCard();
+      updateDecision();
+    });
+
+    document.getElementById("waterMgmtApplyTargetButton")?.addEventListener("click", (event) => {
+      const fieldId = document.getElementById("basicActiveFieldSelect")?.value;
+      const targetCm = Number(event.currentTarget.dataset.targetCm);
+      const message = document.getElementById("waterMgmtApplyTargetMessage");
+      if (!fieldId || !Number.isFinite(targetCm)) {
+        return;
+      }
+      // Explicit, farmer-initiated bridge into the existing 目標水位 store that
+      // 今日の水門判断 compares against. Never applied automatically: the
+      // reference range is a range, and picking its midpoint is a choice.
+      writeTargetWaterLevel(fieldId, targetCm);
+      const targetInput = document.getElementById("recTargetWaterLevelInput");
+      if (targetInput) {
+        targetInput.value = targetCm;
+      }
+      if (message) {
+        message.hidden = false;
+        message.dataset.fieldId = String(fieldId);
+        message.textContent = `目標水位を ${targetCm} cm に設定しました。今日の水門判断にも反映されます。`;
+      }
+      updateWaterLevelVerdict();
+      renderWaterHero();
+      renderWaterManagementCard();
+    });
+    // 水管理ポイントを追加, from the farmer's own field card. Stays in 基本モード
+    // entirely now: the on-map #waterQuickToolbar (left side of the map) is
+    // already visible there, so this no longer switches to Settings' 圃場
+    // データ workspace to reach the (now-removed) side-panel version of this
+    // workflow -- it just syncs the target field and hands off to the
+    // surviving toolbar's own 水門 button.
     document.getElementById("basicAddWaterPointButton")?.addEventListener("click", () => {
       const targetFieldId = document.getElementById("basicActiveFieldSelect")?.value;
-      switchWorkspace("fields");
-      window.setTimeout(() => {
-        const waterPanel = document.getElementById("waterControlPanel");
-        const wcpSelect = document.getElementById("wcpTargetFieldSelect");
-        if (targetFieldId && wcpSelect && [...wcpSelect.options].some((option) => option.value === targetFieldId)) {
-          wcpSelect.value = targetFieldId;
-          wcpSelect.dispatchEvent(new Event("change", { bubbles: true }));
-        }
-        if (waterPanel) {
-          waterPanel.open = true;
-          waterPanel.hidden = false;
-          scrollElementWithinPanel(waterPanel, { block: "start" });
-        }
-        document.getElementById("wcpAddGateButton")?.focus();
-      }, 100);
+      const wcpSelect = document.getElementById("wcpTargetFieldSelect");
+      if (targetFieldId && wcpSelect && [...wcpSelect.options].some((option) => option.value === targetFieldId)) {
+        wcpSelect.value = targetFieldId;
+        wcpSelect.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+      document.querySelector('#waterQuickToolbar button[data-water-quick-type="gate"]')?.focus();
     });
     document.getElementById("basicRecordWaterButton")?.addEventListener("click", () => {
+      if (isDesktopBasicMode()) {
+        openAttachedWaterRecordCard();
+        return;
+      }
       switchWorkspace("fields");
       window.setTimeout(() => {
         const waterCard = document.getElementById("basicWaterRecordCard");
@@ -8137,12 +10355,24 @@
         document.getElementById("reportGenerateButton")?.click();
       }, 100);
     });
+    // The header twin owns no <input>; it opens the single #basicNmeaInput.
+    // A programmatic .click() inside a real user-gesture handler is the
+    // standard hidden-file-input pattern and is honoured by iOS Safari.
+    document.getElementById("headerNmeaUploadButton")?.addEventListener("click", () => {
+      document.getElementById("basicNmeaInput")?.click();
+    });
     document.getElementById("droneModeGoMeasureButton")?.addEventListener("click", () => {
       switchMode("basic");
       window.setTimeout(() => {
         const card = document.getElementById("basicStage1Card");
         scrollElementWithinPanel(card, { block: "start" });
-        card?.querySelector(".basic-upload-button")?.focus();
+        // The card's button is display:none on phones, where the header
+        // twin carries the upload -- focus whichever one is really rendered.
+        const cardUpload = card?.querySelector(".basic-upload-button");
+        const uploadControl = cardUpload?.getClientRects().length
+          ? cardUpload
+          : document.getElementById("headerNmeaUploadButton");
+        uploadControl?.focus();
       }, 100);
     });
     document.querySelectorAll("[data-weather-scenario]").forEach((button) => {
@@ -8173,9 +10403,24 @@
     (async function init() {
       initSerialCard();
       try {
-        ({ computeWaterNeed } = await import("./js/water/water-need.js"));
+        // 水管理 card. Imported as namespaces (not destructured) so a new
+        // export -- a future stage derivation, another source -- is reachable
+        // without editing this call site.
+        [waterRecommendation, growthStageModel, waterMeasurementModel,
+         gateDecisionModel, growthCalendarModel, dailyLossModel] = await Promise.all([
+          import("./js/water/water-recommendation.js"),
+          import("./js/water/growth-stage-model.js"),
+          import("./js/water/water-measurement.js"),
+          import("./js/water/gate-decision.js"),
+          import("./js/water/growth-calendar.js"),
+          import("./js/water/daily-loss.js")
+        ]);
+        // The gate verdict now depends on the stage and the measurement, so a
+        // first render must happen after these land.
+        updateDecision();
+        renderWaterManagementCard();
       } catch (error) {
-        console.error("Water-need helper initialization failed", error);
+        console.error("Water-management recommendation initialization failed", error);
       }
       try {
         // Must land BEFORE FieldAnnotationController is constructed: the
@@ -8229,11 +10474,27 @@
           // own live map-click drawing (drone-mission zones / annotations)
           // for the next click — cancel it the moment placement mode starts.
           onEnterPlacementMode: () => paddyIntelligence?.cancelDrawing({ resetMode: true }),
+          // Re-measure #waterQuickToolbar SYNCHRONOUSLY every time its own
+          // content changes (arm/disarm, field-row shown or not) -- see the
+          // long comment next to syncQuickToolbarReserve()'s definition for
+          // why a ResizeObserver alone is not enough here.
+          onWaterQuickToolbarRendered: () => syncQuickToolbarReserve(),
           // Keep every field-selection surface in sync the moment a field is
           // registered, not just Basic mode's summary -- otherwise
           // decisionFieldSelect/reportFieldSelect only pick up new fields
           // once the user happens to visit 判断デモ/詳細解析 (which populate
           // lazily on their own mount/refresh).
+          // A freshly registered polygon replaces its own source track as the
+          // thing worth looking at, so drop the raw QZ1 measurement points
+          // from the map the moment registration succeeds. They stay
+          // available: re-tick 選択中データの測位点を表示, or use the
+          // registered-list card's per-field GNSS点を表示 button.
+          onFieldRegistered: () => {
+            if (showQz1LayerInput.checked) {
+              showQz1LayerInput.checked = false;
+              syncLayerVisibility();
+            }
+          },
           onFieldsChanged: () => {
             // Reports first: 現在の田圃 now reads its 元NMEA/測位信頼性/
             // 有効測位点 metadata out of fieldReportController, so refreshing
@@ -8243,6 +10504,10 @@
             renderBasicFieldSummary();
             renderDroneModeGate();
             populateDecisionFieldOptions();
+            // Covers mount (existing fields on a fresh load), registration
+            // and deletion alike -- renderAll() calls onFieldsChanged() at
+            // the end of every one of those, so this never goes stale.
+            updateEmptyStateVisibility();
             // Local write already happened (the controller persists before it
             // notifies). This only queues the cloud copy, and is a no-op for
             // a guest or an unconfigured install -- a registration is never
@@ -8258,7 +10523,21 @@
           },
           // Registered: the raw track has served its purpose and the field
           // polygon now carries the boundary, so the trimming UI stands down.
-          onBasicRegistered: () => clearBasicBoundarySelection()
+          onBasicRegistered: () => clearBasicBoundarySelection(),
+          // 編集 on the registered-fields card: #selFeatureForm's <details>
+          // is data-mode="settings" only, so from Basic mode the workspace
+          // gate leaves it display:none no matter what the controller just
+          // set .open to (same class of bug basicViewResultsButton above
+          // fixes for 圃場レポート). Switch there and scroll to it so the
+          // click actually shows the farmer something.
+          onRequestEdit: () => {
+            switchMode("settings", { workspace: "fields" });
+            window.setTimeout(() => {
+              const details = document.getElementById("selFeatureForm")?.closest("details");
+              if (details) details.open = true;
+              scrollElementWithinPanel(details, { block: "start" });
+            }, 100);
+          }
         });
         fieldAnnotationController.mount();
         paddyIntelligence.getFieldAnnotationExport = () => fieldAnnotationController.getExportData();
@@ -8290,7 +10569,9 @@
         // option list was just populated with the same value already
         // selected). Water-level restore has to run unconditionally here, or
         // a reload silently drops both the target and the current reading.
+        // 圃場解析デモ's boundary sync has the exact same gap.
         loadTargetWaterLevelForActiveField();
+        syncSurveyedBoundaryForActiveField();
       } catch (error) {
         console.error("Field report initialization failed", error);
         const warning = document.getElementById("reportMessage");
@@ -8327,9 +10608,6 @@
               select.dispatchEvent(new Event("change", { bubbles: true }));
             }
           },
-          // ＋ 新しい圃場を測る is the same journey as 圃場を測る, so it reuses
-          // that button rather than forking a second registration entry point.
-          onRequestNewField: () => document.getElementById("basicMeasureFieldButton")?.click(),
           getWaterTargets: () => readTargetWaterLevels(),
           setWaterTargets: (values) => {
             writeTargetWaterLevels(values);

@@ -19,6 +19,7 @@ import {
   DEFAULT_AUTO_CLOSE_THRESHOLD_M,
   FEATURE_TYPE_LABELS,
   FIELD_POLYGON_STYLE,
+  FIELD_POLYGON_SELECTED_STYLE,
   LOCAL_STORAGE_KEY,
   NEEDS_EXPORT_DATA_MESSAGE,
   NEEDS_FIELD_MESSAGE,
@@ -55,6 +56,8 @@ import {
   normalizeSeverity,
   normalizeWaterControlType,
   observationSourceLabel,
+  polygonAreaSquareMeters,
+  straightenBoundary,
   summarizeFixQuality,
   waterControlInternalType,
   WATER_CONTROL_EXPORT_TYPES
@@ -83,13 +86,19 @@ const ELEMENT_IDS = [
   "fieldRegForceCloseButton", "fieldRegSaveAsTrackButton", "fieldRegCancelCloseButton",
   // Registered fields/logs panel.
   "registeredFieldsContainer", "registeredListMessage", "registeredFieldsPanel",
+  // 境界を直線化 (straighten a noisy walked boundary into best-fit straight
+  // edges between farmer-picked corner points).
+  "boundaryStraightenBar", "boundaryStraightenStatus", "boundaryStraightenConfirmButton",
+  "boundaryStraightenResetButton", "boundaryStraightenCancelButton",
   // 現地調査ワークフロー guide panel.
   "workflowGuidePanel", "workflowProgressLabel", "workflowNextTask", "workflowStepsContainer",
   "fileInput", "exportAnalysisButton", "waterControlPanel", "fieldObservationsPanel",
-  // Water-management-point add workflow.
-  "wcpTargetFieldSelect", "wcpAddGateButton", "wcpAddInletButton", "wcpAddOutletButton",
-  "wcpAddSensorButton", "wcpAddPhotoButton", "wcpPositionCurrentButton", "wcpPositionMapClickButton",
-  "wcpAddMessage",
+  // Water-management-point add workflow. The visible panel (and its type/
+  // position buttons) was removed in favor of the on-map quick-toolbar
+  // below; wcpTargetFieldSelect/wcpAddMessage remain as shared state/
+  // feedback the surviving toolbar depends on -- see the comment on
+  // #waterControlPanel in index.html.
+  "wcpTargetFieldSelect", "wcpAddMessage",
   // Floating map quick-toolbar for water-management points (QZ1測量, fullscreen-friendly).
   "waterQuickToolbar", "waterQuickActiveField", "waterQuickFieldRow", "waterQuickFieldSelect",
   "waterQuickNoFieldMessage", "waterQuickStatus", "waterQuickCancelButton",
@@ -103,7 +112,7 @@ const ELEMENT_IDS = [
   "fieldCloseWarning", "fieldCloseWarningText", "fieldCloseForceCloseButton", "fieldCloseSaveAsTrackButton", "fieldCloseCancelButton",
   // Selected-feature editor (shared by fields / tracks / water points / observations).
   "selFeatureEmpty", "selFeatureForm", "selFeatureTypeRow", "selFeatureTypeSelect", "selFeatureNameInput", "selFeatureIdInput",
-  "selFeatureMemoInput", "selFeatureRelatedFieldSelect", "selFeatureSaveButton", "selFeatureDeleteButton", "selFeatureMessage",
+  "selFeatureMemoInput", "selFeatureRelatedFieldSelect", "selFeatureSaveButton", "selFeatureStraightenButton", "selFeatureDeleteButton", "selFeatureMessage",
   "selFeatureObsTypeRow", "selFeatureObsTypeSelect", "selFeatureSeverityRow", "selFeatureSeveritySelect",
   // Legend / summary.
   "fieldAnnotationLegend", "fieldAnnotationSummaryFields", "fieldAnnotationSummaryTracks",
@@ -111,6 +120,10 @@ const ELEMENT_IDS = [
   // Basic-mode single "current field" control (index.html mode shell) — reuses
   // this same populate function, never a second one.
   "basicActiveFieldSelect",
+  // Drone mode's own copy of the same "current field" picker, shown inline in
+  // #droneModeGateCard so a field can be chosen without leaving 基本モード's
+  // dropdown or hunting for the right polygon on the map.
+  "droneActiveFieldSelect",
   // Stage-1 (Basic mode) field-only registration dialog. Deliberately has no
   // measurement-type choice and no 境界トラック escape hatch — both remain
   // available on the Settings dialog above.
@@ -137,6 +150,25 @@ export class FieldAnnotationController {
     // its own -- it reads this.fields/basicActiveFieldSelect after every
     // renderAll(), the same point every other target-field select refreshes.
     this.onFieldsChanged = options.onFieldsChanged || (() => {});
+    // Fires once per successful 圃場ポリゴン registration. The raw uploaded
+    // QZ1/NMEA measurement points have done their job at that moment -- the
+    // polygon now carries the boundary -- and leaving them drawn buries the
+    // new field under its own source track. index.html uses this to switch
+    // 選択中データの測位点を表示 off; the farmer can bring the points back
+    // per field with the registered-list card's GNSS点を表示 button.
+    this.onFieldRegistered = options.onFieldRegistered || (() => {});
+    // Fires synchronously at the end of every renderQuickToolbar() call, so
+    // index.html can re-measure #waterQuickToolbar's height and update the
+    // left rail's clip boundary (--basic-quick-toolbar-live-height) in the
+    // SAME tick the toolbar's own height might have changed -- e.g. arming
+    // placement mode reveals a status line + キャンセル, growing the toolbar.
+    // A ResizeObserver alone is not enough here: it is asynchronous (fires
+    // on a later frame), so relying on it alone leaves a real, observed
+    // window where the rail hasn't shortened yet and can overlap the
+    // now-taller toolbar. This hook closes that window; the ResizeObserver
+    // remains as a backup for height changes from other causes (viewport
+    // resize, font-load reflow).
+    this.onWaterQuickToolbarRendered = options.onWaterQuickToolbarRendered || (() => {});
     // Stage-1 only: index.html owns the START/END markers on the map, so it
     // asks to be told when the farmer chooses 選び直す from the closure
     // warning (or cancels) and the selection UI has to come back.
@@ -144,6 +176,11 @@ export class FieldAnnotationController {
     // Stage-1 success path: lets index.html clear the START/END markers and
     // the trimming panel once the field actually exists.
     this.onBasicRegistered = options.onBasicRegistered || (() => {});
+    // 編集 in the registered-fields card opens #selFeatureForm's <details>,
+    // which is Settings-only (data-mode="settings") even though the card
+    // itself also renders in Basic mode. index.html switches to Settings/
+    // 圃場データ and scrolls there so the click has a visible result.
+    this.onRequestEdit = options.onRequestEdit || (() => {});
 
     this.fields = [];
     this.boundaryTracks = [];
@@ -164,7 +201,20 @@ export class FieldAnnotationController {
     // confirmOutsideFieldObservation()/cancelOutsideFieldObservation().
     this.pendingOutsideFieldObservation = null;
 
-    this.layers = { fields: L.layerGroup(), tracks: L.layerGroup(), waterPoints: L.layerGroup(), observations: L.layerGroup() };
+    this.layers = {
+      fields: L.layerGroup(), tracks: L.layerGroup(), waterPoints: L.layerGroup(),
+      observations: L.layerGroup(), gnssPoints: L.layerGroup(), cornerPicker: L.layerGroup()
+    };
+    this.fieldLayerById = new Map();
+    // Field/track ids currently showing their linked survey session's raw
+    // GNSS points on the map (登録済み圃場・測量ログ card's GNSS点を表示 toggle).
+    // Rebuilt from this set on every renderMapLayers() call, the same way
+    // fields/tracks themselves render from this.fields/this.boundaryTracks.
+    this.gnssVisibleIds = new Set();
+    // Active 境界を直線化 (straighten boundary) session, or null when not
+    // picking corners: { kind: "field" | "track", id, selected: Set<number> }
+    // -- selected holds indices into that record's own coordinates array.
+    this.cornerPicker = null;
     this.elements = {};
   }
 
@@ -180,6 +230,11 @@ export class FieldAnnotationController {
     this.layers.tracks.addTo(this.map);
     this.layers.waterPoints.addTo(this.map);
     this.layers.observations.addTo(this.map);
+    this.layers.gnssPoints.addTo(this.map);
+    // Added last so its click-to-toggle vertex markers always sit above the
+    // field/track layers during 境界を直線化 (otherwise the polygon fill
+    // underneath would eat the click first).
+    this.layers.cornerPicker.addTo(this.map);
     this.map.on("click", (event) => this.handleMapClick(event));
     // Bound once here, alongside the single map click listener above — never
     // re-registered per placement-mode toggle, so it can't accumulate either.
@@ -244,13 +299,6 @@ export class FieldAnnotationController {
       this.updateWaterPointButtonStates();
       this.renderQuickToolbar();
     });
-    el.wcpAddGateButton?.addEventListener("click", () => this.beginAddWaterPoint("gate"));
-    el.wcpAddInletButton?.addEventListener("click", () => this.beginAddWaterPoint("inlet"));
-    el.wcpAddOutletButton?.addEventListener("click", () => this.beginAddWaterPoint("outlet"));
-    el.wcpAddSensorButton?.addEventListener("click", () => this.beginAddWaterPoint("sensor"));
-    el.wcpAddPhotoButton?.addEventListener("click", () => this.beginAddWaterPoint("photo"));
-    el.wcpPositionCurrentButton?.addEventListener("click", () => this.addWaterControlPointAtCurrentPosition());
-    el.wcpPositionMapClickButton?.addEventListener("click", () => this.toggleMapClickAddMode());
 
     // Floating map quick-toolbar (mirrors the water-management panel above, but reachable without hunting the side panel in fullscreen).
     el.waterQuickFieldSelect?.addEventListener("change", () => {
@@ -287,10 +335,18 @@ export class FieldAnnotationController {
 
     // Selected-feature editor.
     el.selFeatureSaveButton?.addEventListener("click", () => this.saveSelectedFeature());
+    el.selFeatureStraightenButton?.addEventListener("click", () => {
+      if (this.selected) this.beginBoundaryStraighten(this.selected.kind, this.selected.record);
+    });
     el.selFeatureDeleteButton?.addEventListener("click", () => this.deleteSelectedFeature());
 
     // Registered fields/logs panel (event delegation — rows are rebuilt on render).
     el.registeredFieldsContainer?.addEventListener("click", (event) => this.handleRegisteredListClick(event));
+
+    // 境界を直線化 (straighten boundary).
+    el.boundaryStraightenConfirmButton?.addEventListener("click", () => this.confirmBoundaryStraighten());
+    el.boundaryStraightenResetButton?.addEventListener("click", () => this.resetBoundaryStraighten());
+    el.boundaryStraightenCancelButton?.addEventListener("click", () => this.endBoundaryStraighten());
 
     // 現地調査ワークフロー guide (event delegation — steps are rebuilt on render).
     el.workflowStepsContainer?.addEventListener("click", (event) => this.handleWorkflowStepClick(event));
@@ -712,8 +768,13 @@ export class FieldAnnotationController {
     return `${message} ${RAW_NMEA_SIZE_WARNING}`;
   }
 
+  /** Never hands back an id an existing session already uses — see makeSurveySessionId(). */
+  newSurveySessionId() {
+    return makeSurveySessionId(Date.now(), this.surveySessions.map((session) => session.id));
+  }
+
   registerFieldPolygon({ name, id, memo, coordinates, rawPoints, fileName, rawNmeaText, gapM, closedManually }) {
-    const sessionId = makeSurveySessionId();
+    const sessionId = this.newSurveySessionId();
     const uploadedAt = new Date().toISOString();
     const session = buildSurveySession({
       id: sessionId, name: `${name} 測量`, fieldId: id, sourceFileName: fileName,
@@ -734,11 +795,12 @@ export class FieldAnnotationController {
     this.cancelManualClosure();
     this.finishBasicRegistration(field);
     this.selectFeature("field", field);
+    this.onFieldRegistered(field);
     this.renderAll();
   }
 
   registerBoundaryTrack({ name, id, memo, coordinates, rawPoints, fileName, rawNmeaText, dialog }) {
-    const sessionId = makeSurveySessionId();
+    const sessionId = this.newSurveySessionId();
     const uploadedAt = new Date().toISOString();
     const session = buildSurveySession({
       id: sessionId, name: `${name} 測量`, fieldId: id, sourceFileName: fileName,
@@ -765,7 +827,7 @@ export class FieldAnnotationController {
   }
 
   registerWaterPointsSession({ name, id, memo, rawPoints, fileName, rawNmeaText }) {
-    const sessionId = makeSurveySessionId();
+    const sessionId = this.newSurveySessionId();
     const uploadedAt = new Date().toISOString();
     const session = buildSurveySession({
       id: sessionId, name: name || `${id} 測量`, fieldId: id, sourceFileName: fileName,
@@ -873,53 +935,14 @@ export class FieldAnnotationController {
     return { lat: Number(last.lat), lon: Number(last.lon) };
   }
 
-  beginAddWaterPoint(internalType) {
-    if (this.fields.length === 0) {
-      this.setWcpMessage("先に圃場を登録してください。");
-      return;
-    }
-    if (!this.elements.wcpTargetFieldSelect.value) {
-      this.setWcpMessage("対象の圃場を選択してください。");
-      return;
-    }
-    this.pendingWaterPointType = internalType;
-    this.setWcpMessage(`${WATER_CONTROL_TYPE_LABELS[internalType]}を追加する位置を選んでください。`);
-    this.updateWaterPointButtonStates();
-  }
-
-  addWaterControlPointAtCurrentPosition() {
-    if (!this.pendingWaterPointType) {
-      return;
-    }
-    const position = this.latestQz1Position();
-    if (!position) {
-      this.setWcpMessage("現在のQZ1位置がありません。QZ1データを読み込むか、ライブ接続してください。");
-      return;
-    }
-    this.createWaterControlPoint(position.lat, position.lon, "qz1_current_position");
-  }
-
-  toggleMapClickAddMode() {
-    if (!this.pendingWaterPointType) {
-      return;
-    }
-    if (this.mapClickAddActive) {
-      this.mapClickAddActive = false;
-      this.setWcpMessage("");
-      this.render();
-      return;
-    }
-    this.mapClickAddActive = true;
-    this.setWcpMessage(`地図をクリックして${WATER_CONTROL_TYPE_LABELS[this.pendingWaterPointType]}を配置してください。`);
-    this.render();
-  }
-
   /**
-   * Floating map-toolbar equivalent of beginAddWaterPoint() + toggleMapClickAddMode()
-   * combined into one click: a farmer working in fullscreen shouldn't need to
-   * find the side panel just to add a water point. Reuses the same
-   * pendingWaterPointType/mapClickAddActive flags handleMapClick() already
-   * watches, so placement/creation logic isn't duplicated.
+   * The map-click-armed entry point for adding a water-control point: a
+   * farmer working fullscreen on the map shouldn't need a side panel for
+   * this. This is now the ONLY placement path (the panel-based
+   * beginAddWaterPoint()/toggleMapClickAddMode() and the "現在のQZ1位置に追加"
+   * live-position shortcut were removed with the panel itself). Sets the
+   * same pendingWaterPointType/mapClickAddActive flags handleMapClick()
+   * already watches, so placement/creation logic isn't duplicated.
    */
   beginQuickAddWaterPoint(internalType) {
     if (this.fields.length === 0) {
@@ -988,6 +1011,7 @@ export class FieldAnnotationController {
         el.waterQuickCancelButton.hidden = true;
       }
     }
+    this.onWaterQuickToolbarRendered();
   }
 
   handleMapClick(event) {
@@ -1223,6 +1247,31 @@ export class FieldAnnotationController {
     this.revealSelectedEditor();
   }
 
+  /**
+   * Clicking a field polygon on the map sets the same #basicActiveFieldSelect
+   * ("圃場を選ぶ") that drives Basic mode's summary and Drone mode's gate card
+   * (index.html:9234), so a map click is an alternate path to that one
+   * dropdown selection rather than a second, independent concept of "selected
+   * field". Re-highlights even when the field was already active, so a click
+   * always gives visible feedback.
+   */
+  setActiveField(fieldId) {
+    const select = this.elements.basicActiveFieldSelect;
+    if (select && fieldId && select.value !== fieldId
+      && [...select.options].some((option) => option.value === fieldId)) {
+      select.value = fieldId;
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+    this.highlightActiveField();
+  }
+
+  highlightActiveField() {
+    const activeFieldId = this.elements.basicActiveFieldSelect?.value || "";
+    this.fieldLayerById.forEach((layer, fieldId) => {
+      layer.setStyle(fieldId === activeFieldId ? FIELD_POLYGON_SELECTED_STYLE : FIELD_POLYGON_STYLE);
+    });
+  }
+
   clearSelection() {
     this.selected = null;
     this.setSelFeatureMessage("");
@@ -1373,6 +1422,12 @@ export class FieldAnnotationController {
       this.focusRecordOnMap(kind, record);
     } else if (action === "edit") {
       this.selectFeature(kind, record);
+      // #selFeatureForm's <details> is data-mode="settings" only (the
+      // registered-fields card itself is "basic settings", so it renders in
+      // both -- but the editor it opens does not). Without this, 編集 from
+      // Basic mode sets details.open=true on a panel that stays display:none,
+      // so the click has no visible effect at all.
+      this.onRequestEdit();
     } else if (action === "delete") {
       this.selected = { kind, record };
       this.deleteSelectedFeature();
@@ -1380,7 +1435,21 @@ export class FieldAnnotationController {
       this.exportScoped(kind, record);
     } else if (action === "export-nmea") {
       this.exportRawNmea(record);
+    } else if (action === "toggle-gnss") {
+      this.toggleGnssPoints(record);
+    } else if (action === "straighten") {
+      this.beginBoundaryStraighten(kind, record);
     }
+  }
+
+  toggleGnssPoints(record) {
+    if (this.gnssVisibleIds.has(record.id)) {
+      this.gnssVisibleIds.delete(record.id);
+    } else {
+      this.gnssVisibleIds.add(record.id);
+    }
+    this.renderMapLayers();
+    this.renderRegisteredList();
   }
 
   focusRecordOnMap(kind, record) {
@@ -1417,6 +1486,104 @@ export class FieldAnnotationController {
       return;
     }
     downloadText(session.rawNmeaText, session.sourceFileName || `${record.name || record.id}.nmea.txt`);
+  }
+
+  // -------------------------------------------------------------------------
+  // 境界を直線化 (straighten a noisy walked boundary): the farmer picks which
+  // measured points are corners by clicking them on the map; each edge
+  // between two picked corners is replaced with straightenBoundary()'s
+  // best-fit line, so GPS wobble along a straight paddy edge averages out
+  // instead of being traced point-for-point.
+  // -------------------------------------------------------------------------
+
+  beginBoundaryStraighten(kind, record) {
+    if (!Array.isArray(record.coordinates) || record.coordinates.length < 3) {
+      return;
+    }
+    this.cornerPicker = { kind, id: record.id, selected: new Set() };
+    if (this.elements.boundaryStraightenBar) {
+      this.elements.boundaryStraightenBar.hidden = false;
+    }
+    this.updateBoundaryStraightenStatus();
+    this.renderMapLayers();
+  }
+
+  endBoundaryStraighten() {
+    this.cornerPicker = null;
+    this.layers.cornerPicker.clearLayers();
+    if (this.elements.boundaryStraightenBar) {
+      this.elements.boundaryStraightenBar.hidden = true;
+    }
+  }
+
+  toggleCornerIndex(index) {
+    if (!this.cornerPicker) {
+      return;
+    }
+    if (this.cornerPicker.selected.has(index)) {
+      this.cornerPicker.selected.delete(index);
+    } else {
+      this.cornerPicker.selected.add(index);
+    }
+    this.updateBoundaryStraightenStatus();
+    this.renderMapLayers();
+  }
+
+  resetBoundaryStraighten() {
+    if (!this.cornerPicker) {
+      return;
+    }
+    this.cornerPicker.selected.clear();
+    this.updateBoundaryStraightenStatus();
+    this.renderMapLayers();
+  }
+
+  updateBoundaryStraightenStatus() {
+    const el = this.elements;
+    if (!el.boundaryStraightenStatus) {
+      return;
+    }
+    const count = this.cornerPicker?.selected.size || 0;
+    setText(el.boundaryStraightenStatus, count === 0
+      ? "角になる点を地図でタップ（3点以上）"
+      : count < 3
+        ? `角を選択: ${count}点（あと${3 - count}点）`
+        : `角を選択: ${count}点`);
+    if (el.boundaryStraightenConfirmButton) {
+      el.boundaryStraightenConfirmButton.disabled = count < 3;
+    }
+  }
+
+  confirmBoundaryStraighten() {
+    if (!this.cornerPicker || this.cornerPicker.selected.size < 3) {
+      return;
+    }
+    const { kind, id, selected } = this.cornerPicker;
+    const record = kind === "field"
+      ? this.fields.find((field) => field.id === id)
+      : this.boundaryTracks.find((track) => track.id === id);
+    if (!record) {
+      this.endBoundaryStraighten();
+      return;
+    }
+    const straightened = straightenBoundary(record.coordinates, [...selected]);
+    if (!straightened) {
+      return;
+    }
+    record.coordinates = straightened;
+    if (kind === "field" && record.properties) {
+      record.properties.areaM2 = polygonAreaSquareMeters(straightened);
+      record.properties.updatedAt = new Date().toISOString();
+    }
+    // Drives the FIRST-time-only placement of the 境界を直線化 trigger --
+    // see buildRegisteredCard()'s and #selFeatureStraightenButton's own
+    // comments.
+    if (record.properties) {
+      record.properties.hasBeenStraightened = true;
+    }
+    this.persist();
+    this.endBoundaryStraighten();
+    this.renderAll();
   }
 
   // -------------------------------------------------------------------------
@@ -1495,21 +1662,32 @@ export class FieldAnnotationController {
       return;
     }
     const el = this.elements;
+    // The guide card itself now lives under 開発ツール, but every step here
+    // predates that move and still jumps to a target on whichever workspace
+    // that target has always lived on (1/5's own device-upload card is on
+    // 開発ツール too; 2-4's field panels are on 圃場データ; 5's export button
+    // is on 詳細解析). Without switching first, "jump to X" would scroll to
+    // an element hidden by the workspace it's not currently showing.
     switch (button.dataset.workflowStep) {
       case "1":
+        window.switchWorkspace?.("devtools");
         scrollWithinPanel(el.fileInput, { block: "center" });
         el.fileInput?.focus();
         break;
       case "2":
+        window.switchWorkspace?.("fields");
         scrollWithinPanel(el.registeredFieldsPanel, { block: "start" });
         break;
       case "3":
-        if (el.waterControlPanel) {
-          el.waterControlPanel.open = true;
-          scrollWithinPanel(el.waterControlPanel, { block: "start" });
-        }
+        // Destination is the on-map #waterQuickToolbar now (the removed
+        // #waterControlPanel's replacement -- see the comment on that id in
+        // index.html). It's a fixed-position overlay on the always-visible
+        // map, not a panel card, so there's nothing to scroll into view.
+        window.switchWorkspace?.("fields");
+        el.waterQuickToolbar?.querySelector('button[data-water-quick-type="gate"]')?.focus();
         break;
       case "4":
+        window.switchWorkspace?.("fields");
         if (el.fieldObservationsPanel) {
           el.fieldObservationsPanel.open = true;
           scrollWithinPanel(el.fieldObservationsPanel, { block: "start" });
@@ -1517,6 +1695,7 @@ export class FieldAnnotationController {
         this.beginQuickAddObservation();
         break;
       case "5":
+        window.switchWorkspace?.("analysis");
         el.exportAnalysisButton?.click();
         break;
       default:
@@ -1541,6 +1720,7 @@ export class FieldAnnotationController {
     this.renderQuickToolbar();
     this.renderFieldTargetOptions(this.elements.obsTargetFieldSelect);
     this.renderFieldTargetOptions(this.elements.basicActiveFieldSelect);
+    this.renderFieldTargetOptions(this.elements.droneActiveFieldSelect);
     this.updateObservationButtonStates();
     this.renderSelectedFeature();
     this.renderWorkflowPanel();
@@ -1553,15 +1733,20 @@ export class FieldAnnotationController {
     this.layers.tracks.clearLayers();
     this.layers.waterPoints.clearLayers();
     this.layers.observations.clearLayers();
+    this.layers.gnssPoints.clearLayers();
 
+    this.fieldLayerById = new Map();
+    const activeFieldId = this.elements.basicActiveFieldSelect?.value || "";
     this.fields.forEach((field) => {
-      L.polygon(field.coordinates, FIELD_POLYGON_STYLE)
+      const layer = L.polygon(field.coordinates, field.id === activeFieldId ? FIELD_POLYGON_SELECTED_STYLE : FIELD_POLYGON_STYLE)
         .bindTooltip(field.name || field.id, { permanent: true, direction: "center", className: "field-annotation-label" })
         .on("click", (event) => {
           event.originalEvent?.stopPropagation();
+          this.setActiveField(field.id);
           this.selectFeature("field", field);
         })
         .addTo(this.layers.fields);
+      this.fieldLayerById.set(field.id, layer);
     });
 
     this.boundaryTracks.forEach((track) => {
@@ -1602,6 +1787,73 @@ export class FieldAnnotationController {
           this.selectFeature("observation", obs);
         })
         .addTo(this.layers.observations);
+    });
+
+    this.renderGnssPointsLayer();
+    this.renderCornerPickerLayer();
+  }
+
+  /**
+   * Draws the linked survey session's raw measured points for every
+   * field/track id currently toggled on via the registered-list card's
+   * GNSS点を表示 button. Rebuilt from this.gnssVisibleIds on every
+   * renderMapLayers() call, self-healing stale ids (a deleted record simply
+   * yields no match and is dropped from the set).
+   */
+  renderGnssPointsLayer() {
+    if (this.gnssVisibleIds.size === 0) {
+      return;
+    }
+    [...this.gnssVisibleIds].forEach((id) => {
+      const record = this.fields.find((field) => field.id === id)
+        || this.boundaryTracks.find((track) => track.id === id);
+      if (!record) {
+        this.gnssVisibleIds.delete(id);
+        return;
+      }
+      const session = this.linkedSurveySession(record);
+      (session?.rawPoints || []).forEach((point) => {
+        const augmented = point.fixQuality === 2 || point.fixQuality === 4 || point.fixQuality === 5;
+        L.circleMarker([point.lat, point.lon], {
+          radius: 3, weight: 1, color: "#ffffff",
+          fillColor: augmented ? "#15803d" : "#d97706", fillOpacity: 0.9
+        })
+          .bindTooltip(`Fix ${Number.isFinite(point.fixQuality) ? point.fixQuality : "?"}`)
+          .addTo(this.layers.gnssPoints);
+      });
+    });
+  }
+
+  /**
+   * Draws one clickable marker per vertex of the record currently being
+   * straightened (境界を直線化), colored by whether the farmer has picked it
+   * as a corner yet. Clicking toggles membership in this.cornerPicker.selected
+   * — order doesn't matter here, straightenBoundary() sorts by position along
+   * the walked path before pairing up edges.
+   */
+  renderCornerPickerLayer() {
+    if (!this.cornerPicker) {
+      return;
+    }
+    const { kind, id, selected } = this.cornerPicker;
+    const record = kind === "field"
+      ? this.fields.find((field) => field.id === id)
+      : this.boundaryTracks.find((track) => track.id === id);
+    if (!record) {
+      this.endBoundaryStraighten();
+      return;
+    }
+    record.coordinates.forEach((coord, index) => {
+      const isCorner = selected.has(index);
+      L.circleMarker(coord, {
+        radius: isCorner ? 7 : 4, weight: isCorner ? 3 : 1, color: "#ffffff",
+        fillColor: isCorner ? "#b45309" : "#2563eb", fillOpacity: 0.95
+      })
+        .on("click", (event) => {
+          event.originalEvent?.stopPropagation();
+          this.toggleCornerIndex(index);
+        })
+        .addTo(this.layers.cornerPicker);
     });
   }
 
@@ -1784,6 +2036,20 @@ export class FieldAnnotationController {
     if (session?.rawNmeaStored) {
       actionDefs.push(["export-nmea", "元NMEAを書き出し"]);
     }
+    if (session?.rawPoints?.length > 0) {
+      const showingGnss = this.gnssVisibleIds.has(record.id);
+      actionDefs.push(["toggle-gnss", showingGnss ? "GNSS点を隠す" : "GNSS点を表示"]);
+    }
+    // Straightening needs at least a triangle's worth of raw vertices to be
+    // worth doing — a boundary already down to 3-4 points is already straight.
+    // Only offered here the FIRST time: once a boundary has already been
+    // straightened once (hasBeenStraightened), a repeat pass is a rarer,
+    // more deliberate touch-up that lives inside 編集 instead (see
+    // #selFeatureStraightenButton / renderSelectedFeature()) rather than
+    // permanently occupying a slot in this card's button row.
+    if (record.coordinates.length > 4 && !record.properties?.hasBeenStraightened) {
+      actionDefs.push(["straighten", "境界を直線化"]);
+    }
     actionDefs.forEach(([action, label]) => {
       const button = document.createElement("button");
       button.type = "button";
@@ -1792,6 +2058,9 @@ export class FieldAnnotationController {
       button.dataset.action = action;
       button.dataset.kind = kind;
       button.dataset.id = record.id;
+      if (action === "toggle-gnss") {
+        button.setAttribute("aria-pressed", String(this.gnssVisibleIds.has(record.id)));
+      }
       actions.append(button);
     });
     card.append(actions);
@@ -1874,6 +2143,26 @@ export class FieldAnnotationController {
     el.selFeatureNameInput.value = record.name || "";
     el.selFeatureIdInput.value = record.id || "";
     el.selFeatureMemoInput.value = record.properties?.memo || "";
+
+    // Second-and-later 境界を直線化 lives here rather than as a standalone
+    // button on the registered-fields card -- see this button's own markup
+    // comment in index.html. Deliberately NOT the >4-point floor
+    // buildRegisteredCard() uses for the first straightening: that floor
+    // means "not worth straightening AT ALL yet", but a re-straighten is
+    // requested precisely because the farmer wants to REDO their corner
+    // picks -- and most real paddies are quadrilaterals, so the common case
+    // is exactly 4 points after the first pass. Using the same floor here
+    // would make the button vanish for good the moment a farmer straightens
+    // an ordinary rectangular field, with no way back if they picked the
+    // wrong corners. The real floor is beginBoundaryStraighten()'s own
+    // (>=3 points, below which there is no polygon left to pick corners on).
+    if (el.selFeatureStraightenButton) {
+      el.selFeatureStraightenButton.hidden = !(
+        (kind === "field" || kind === "track")
+        && Array.isArray(record.coordinates) && record.coordinates.length >= 3
+        && record.properties?.hasBeenStraightened
+      );
+    }
 
     // The generic 種類 select only lists field/water-control types; an
     // observation uses its own type + severity selects instead.
@@ -2039,22 +2328,36 @@ function setText(element, value) {
 }
 
 /**
- * Scrolls `element` into view within its nearest .panel ancestor only.
- * Never delegates to the native Element.scrollIntoView() for panel
- * content: that method walks every scrollable ancestor including
+ * Scrolls `element` into view within its nearest actually-scrolling
+ * ancestor only. Never delegates to the native Element.scrollIntoView() for
+ * panel content: that method walks every scrollable ancestor including
  * `documentElement`, and — despite `body { overflow: hidden }` — still
  * moves `documentElement.scrollTop` as a side effect in this app's layout.
- * Since `.panel` is the only container meant to scroll (the map/header sit
- * in a fixed 100vh grid), that side effect desyncs the outer page from
- * .panel's own scroll position and renders as a large blank gap. Computing
- * the offset against .panel directly and calling panel.scrollTo() avoids
- * touching any ancestor outside .panel.
+ * Since the panel is the only container meant to scroll (the map/header sit
+ * in a fixed 100vh grid), that side effect desyncs the outer page from the
+ * panel's own scroll position and renders as a large blank gap. Computing
+ * the offset against the panel directly and calling panel.scrollTo() avoids
+ * touching any ancestor outside it.
+ *
+ * "The panel" is .panel-left/.panel-right on desktop 基本モード (where they
+ * are real, independently-scrolling boxes and .panel itself goes
+ * `display: contents`), and plain .panel everywhere else (設定/ドローン/
+ * mobile, where .panel-left/.panel-right are the boxless `display: contents`
+ * ones instead) -- see the .panel-left, .panel-right CSS. A `display:
+ * contents` element has no box, so scrollTo()/getBoundingClientRect() on it
+ * are no-ops; walk past it to find whichever wrapper is the real box.
  */
 function scrollWithinPanel(element, { block = "start" } = {}) {
   if (!element) {
     return;
   }
-  const panel = element.closest(".panel");
+  let panel = element.closest(".panel-left, .panel-right");
+  if (panel && getComputedStyle(panel).display === "contents") {
+    panel = null;
+  }
+  if (!panel) {
+    panel = element.closest(".panel");
+  }
   if (!panel) {
     element.scrollIntoView({ block });
     return;

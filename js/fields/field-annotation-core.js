@@ -73,6 +73,9 @@ export function normalizeWaterControlType(type) {
 // Single style source for both the map layer and the legend — colors are
 // never hard-coded a second time in the controller or CSS.
 export const FIELD_POLYGON_STYLE = { color: "#166534", fillColor: "#4ade80", fillOpacity: 0.12, weight: 3 };
+// Applied to whichever field currently matches #basicActiveFieldSelect, so a map click gives
+// the same visible feedback as picking it from the 圃場を選ぶ dropdown.
+export const FIELD_POLYGON_SELECTED_STYLE = { color: "#166534", fillColor: "#22c55e", fillOpacity: 0.38, weight: 4 };
 export const BOUNDARY_TRACK_STYLE = { color: "#b45309", weight: 3, dashArray: "6 5" };
 export const WATER_CONTROL_STYLES = {
   gate: { fillColor: "#2563eb" },
@@ -228,9 +231,41 @@ export function nextBoundaryTrackId(fieldId, existingTrackCountForField) {
   return `${fieldId}-track-${String(existingTrackCountForField + 1).padStart(3, "0")}`;
 }
 
-export function makeSurveySessionId(nowMs = Date.now()) {
+let lastSurveyStamp = null;
+let lastSurveySeq = 0;
+
+/**
+ * `survey-YYYYMMDD-HHMMSS`, with a `-N` suffix (N >= 2) whenever the same
+ * second is stamped twice. The clock alone has one-second resolution, so two
+ * fields registered back to back — routine in Settings → 圃場データ and in
+ * automated tests — used to get the *same* id, and every id lookup
+ * (`surveySessions.find(s => s.id === ...)`, e.g. resolvePrimarySurveySession
+ * in js/reports/field-report.js) then resolved the second field to the first
+ * field's session: wrong 元NMEAファイル名, 有効測位点 and 測位信頼性 on the
+ * farmer-facing report card.
+ *
+ * The first id in any given second keeps the plain `survey-<stamp>` shape, so
+ * ids already in localStorage stay exactly as they are; only the collisions
+ * grow a suffix. `takenIds` (the ids already stored) closes the case the
+ * in-memory counter can't see — a reload landing inside the same second as a
+ * previously stored session.
+ */
+export function makeSurveySessionId(nowMs = Date.now(), takenIds = null) {
   const stamp = new Date(nowMs).toISOString().replace(/[-:]/g, "").replace("T", "-").slice(0, 15);
-  return `survey-${stamp}`;
+  if (stamp === lastSurveyStamp) {
+    lastSurveySeq += 1;
+  } else {
+    lastSurveyStamp = stamp;
+    lastSurveySeq = 1;
+  }
+  const taken = takenIds ? new Set(Array.from(takenIds, (id) => String(id))) : null;
+  const idFor = (seq) => (seq === 1 ? `survey-${stamp}` : `survey-${stamp}-${seq}`);
+  let id = idFor(lastSurveySeq);
+  while (taken && taken.has(id)) {
+    lastSurveySeq += 1;
+    id = idFor(lastSurveySeq);
+  }
+  return id;
 }
 
 // ---------------------------------------------------------------------------
@@ -468,6 +503,91 @@ export function distanceMeters(a, b) {
   const dx = (b[1] - a[1]) * 111320 * Math.cos(lat);
   const dy = (b[0] - a[0]) * 111320;
   return Math.hypot(dx, dy);
+}
+
+function toLocalXY(origin, [lat, lon]) {
+  const metersPerDegreeLat = 111320;
+  const metersPerDegreeLon = 111320 * Math.cos(origin[0] * Math.PI / 180);
+  return [(lon - origin[1]) * metersPerDegreeLon, (lat - origin[0]) * metersPerDegreeLat];
+}
+
+function toLatLon(origin, [x, y]) {
+  const metersPerDegreeLat = 111320;
+  const metersPerDegreeLon = 111320 * Math.cos(origin[0] * Math.PI / 180);
+  return [origin[0] + y / metersPerDegreeLat, origin[1] + x / metersPerDegreeLon];
+}
+
+/**
+ * Total-least-squares best-fit line through a run of noisy points (PCA on
+ * the local covariance, not a y=a+bx regression) — works for near-vertical
+ * runs too, which an ordinary regression would blow up on. Returns a point
+ * on the line plus a unit direction vector.
+ */
+function fitLine(pointsXY) {
+  const n = pointsXY.length;
+  const meanX = pointsXY.reduce((sum, [x]) => sum + x, 0) / n;
+  const meanY = pointsXY.reduce((sum, [, y]) => sum + y, 0) / n;
+  let sxx = 0, sxy = 0, syy = 0;
+  pointsXY.forEach(([x, y]) => {
+    const dx = x - meanX;
+    const dy = y - meanY;
+    sxx += dx * dx;
+    sxy += dx * dy;
+    syy += dy * dy;
+  });
+  const angle = 0.5 * Math.atan2(2 * sxy, sxx - syy);
+  return { point: [meanX, meanY], dir: [Math.cos(angle), Math.sin(angle)] };
+}
+
+function intersectLines(l1, l2, fallback) {
+  const [x1, y1] = l1.point, [dx1, dy1] = l1.dir;
+  const [x2, y2] = l2.point, [dx2, dy2] = l2.dir;
+  const denom = dx1 * dy2 - dy1 * dx2;
+  if (Math.abs(denom) < 1e-9) {
+    return fallback;
+  }
+  const t = ((x2 - x1) * dy2 - (y2 - y1) * dx2) / denom;
+  return [x1 + dx1 * t, y1 + dy1 * t];
+}
+
+/**
+ * Replaces a noisy walked boundary with straight edges: each edge between
+ * two farmer-picked corners is fit as one best-fit line through every raw
+ * point along that run (averaging out GPS wobble), and each output vertex
+ * is the intersection of the two edges meeting there — not just the raw
+ * corner point's own single (possibly noisy) fix.
+ *
+ * `coordinates` is the closed walked path in order; `cornerIndices` are
+ * indices into it that the farmer picked, in any order (sorted here) —
+ * three or more required. Returns a new, shorter [lat, lon][] polygon with
+ * exactly cornerIndices.length vertices.
+ */
+export function straightenBoundary(coordinates, cornerIndices) {
+  const corners = [...new Set(cornerIndices)].sort((a, b) => a - b);
+  if (!Array.isArray(coordinates) || coordinates.length < 3 || corners.length < 3) {
+    return null;
+  }
+  const origin = coordinates[0];
+  const xy = coordinates.map((coord) => toLocalXY(origin, coord));
+  const n = xy.length;
+
+  const edges = corners.map((startIdx, i) => {
+    const endIdx = corners[(i + 1) % corners.length];
+    const run = [];
+    for (let idx = startIdx; ; idx = (idx + 1) % n) {
+      run.push(xy[idx]);
+      if (idx === endIdx) break;
+    }
+    // A single-segment run (adjacent corners) has no noise to average out —
+    // fitLine degenerates on <2 distinct points, so keep the raw endpoints.
+    return run.length >= 3 ? fitLine(run) : { point: run[0], dir: [run[1][0] - run[0][0], run[1][1] - run[0][1]] };
+  });
+
+  return edges.map((edge, i) => {
+    const prevEdge = edges[(i - 1 + edges.length) % edges.length];
+    const vertexXY = intersectLines(prevEdge, edge, xy[corners[i]]);
+    return toLatLon(origin, vertexXY);
+  });
 }
 
 // ---------------------------------------------------------------------------

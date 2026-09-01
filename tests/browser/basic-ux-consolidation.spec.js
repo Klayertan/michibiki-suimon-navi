@@ -166,6 +166,17 @@ test("Basic has exactly one farmer verdict, in the polished card", async ({ page
   await registerField(page, { nmea: LOOP_A, fileName: "one-verdict.nmea" });
   await page.goto("/");
 
+  // .gate-card no longer sits permanently in the left rail on desktop -- it
+  // only appears attached below #mapWaterSummary once the map's own button
+  // opens it (see .gate-card's own CSS comment). Recording a level first
+  // guarantees the button is in its "詳細を見る" state rather than "水位を
+  // 記録", regardless of what growth stage this field defaulted to.
+  await page.locator("#mapWaterSummaryButton").click();
+  await page.locator("#recObsWaterLevelInput").fill("3.2");
+  await page.locator("#recTargetWaterLevelInput").fill("5.5");
+  await expect(page.locator("#mapWaterSummaryButton")).toHaveText("詳細を見る");
+  await page.locator("#mapWaterSummaryButton").click();
+
   const card = page.locator(".gate-card");
   await expect(card).toBeVisible();
   await expect(card).toContainText("今日の水門判断");
@@ -174,10 +185,15 @@ test("Basic has exactly one farmer verdict, in the polished card", async ({ page
   await expect(card.locator("#verdictReason")).not.toBeEmpty();
   await expect(card.locator(".disclaimer")).toContainText("最終判断と水門の操作は必ず人が行ってください");
 
-  // One verdict element, one reason element, in the whole document.
+  // One verdict element, one reason element, in the whole document -- the
+  // desktop map-corner summary (#mapWaterSummary) intentionally repeats the
+  // "今日の水門判断" heading as a compact READ of this same card's data (see
+  // docs/STAGE1_BASIC_MAP_LAYOUT_POLISH.md), so the heading text itself can
+  // legitimately appear twice; what must stay singular is the actual
+  // verdict badge/reason, which live only in .gate-card.
   await expect(page.locator(".verdict")).toHaveCount(1);
   await expect(page.locator(".verdict-reason")).toHaveCount(1);
-  await expect(page.locator("text=今日の水門判断")).toHaveCount(1);
+  await expect(page.locator(".gate-card").locator("text=今日の水門判断")).toHaveCount(1);
 });
 
 test("the verdict class and reason follow the decision state through open/hold/close", async ({ page }) => {

@@ -96,9 +96,9 @@ test("データ種別 and 判断プロファイル are clearly separate fields, 
 test("水管理ポイント and 現地観察メモ counts are reflected once registered, replacing the empty-state notices", async ({ page }) => {
   await openSurveyWorkspace(page);
   await registerField(page);
-  await page.locator("#wcpTargetFieldSelect").selectOption("paddy-001");
-  await page.locator("#wcpAddGateButton").click();
-  await page.locator("#wcpPositionCurrentButton").click();
+  // Single field: auto-selected as the target already.
+  await page.locator('#waterQuickToolbar button[data-water-quick-type="gate"]').click();
+  await page.locator("#map").click({ position: { x: 300, y: 200 } });
   await page.locator("#obsTargetFieldSelect").selectOption("paddy-001");
   await page.locator("#obsAddWeedButton").click();
   await page.locator("#obsPositionQz1Button").click();
@@ -146,7 +146,9 @@ test("選択している圃場に水管理ポイントが無い場合、追加�
   await addButton.click();
 
   await expect(page.getByRole("button", { name: "圃場データ" })).toHaveClass(/active/);
-  await expect(page.locator("#waterControlPanel")).toBeVisible();
+  // Destination is the always-visible on-map toolbar now, not a scrolled
+  // side panel -- see the #waterControlPanel comment in index.html.
+  await expect(page.locator('#waterQuickToolbar button[data-water-quick-type="gate"]')).toBeFocused();
   await expect(page.locator("#wcpTargetFieldSelect")).toHaveValue("paddy-001");
 });
 
