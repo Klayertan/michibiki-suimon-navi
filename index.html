@@ -269,6 +269,27 @@
       color: #fff;
     }
 
+    #mapLocateButton {
+      font-size: 1.05rem;
+      min-width: 44px;
+      padding-inline: 10px;
+    }
+
+    .map-locate-message {
+      background: rgba(255, 255, 255, 0.97);
+      border: 1px solid rgba(24, 49, 40, 0.22);
+      border-radius: 10px;
+      box-shadow: 0 2px 10px rgba(24, 49, 40, 0.16);
+      color: var(--text);
+      font-size: 0.82rem;
+      max-width: min(320px, calc(100% - 24px));
+      padding: 8px 12px;
+      position: absolute;
+      right: 12px;
+      top: 62px;
+      z-index: 450;
+    }
+
     /* Compact 今日の水門判断 read, upper-left of the main map -- the space
        freed up by moving the zoom control to bottom-right. Desktop only:
        hidden outright below the app's existing 980px breakpoint so mobile
@@ -3061,7 +3082,13 @@
         <div class="basemap-toggle" role="group" aria-label="背景地図">
           <button id="basemapMapButton" class="active" type="button" data-basemap="map" aria-pressed="true">地図</button>
           <button id="basemapAerialButton" type="button" data-basemap="aerial" aria-pressed="false">航空写真</button>
+          <!-- Gesture-triggered, unlike the silent auto-recenter on load below:
+               many browsers (especially mobile) never even show the permission
+               prompt for a geolocation call that isn't inside a click handler,
+               so this is the only reliable way to get -- or retry -- it. -->
+          <button id="mapLocateButton" type="button" aria-label="現在地に移動">📍</button>
         </div>
+        <p id="mapLocateMessage" class="map-locate-message" role="status" aria-live="polite" hidden></p>
         <div id="emptyState" class="empty-state">
           <!-- Matches body's own default data-mode="basic" (see <body> below)
                so first paint -- before switchMode()/resetEmptyState() run --
@@ -4135,43 +4162,6 @@
           </div>
         </details>
 
-        <details class="card paddy-collapsible" data-workspace="analysis" data-mode="settings" open hidden>
-          <summary><span class="details-title">ドローン飛行計画<span class="en">Lawnmower path</span></span></summary>
-          <div class="details-content">
-          <div id="droneWarnings" class="paddy-warning-list paddy-drone-warning-list" role="status" aria-live="polite"></div>
-          <div class="input-row">
-            <label for="flightAltitudeInput">飛行高度 (m)</label>
-            <input id="flightAltitudeInput" type="number" min="1" step="1" inputmode="decimal" value="30">
-          </div>
-          <div class="input-row">
-            <label for="swathWidthInput">カメラ地上幅 / swath (m)</label>
-            <input id="swathWidthInput" type="number" min="1" step="0.5" inputmode="decimal" value="10">
-          </div>
-          <div class="input-row">
-            <label for="imageOverlapInput">画像オーバーラップ (%)</label>
-            <input id="imageOverlapInput" type="number" min="0" max="95" step="5" inputmode="numeric" value="70">
-          </div>
-          <div class="input-row">
-            <label for="flightSpeedInput">飛行速度 (m/s)</label>
-            <input id="flightSpeedInput" type="number" min="0.1" step="0.1" inputmode="decimal" value="4">
-          </div>
-          <div class="input-row">
-            <label for="flightAngleInput">経路角度 (degrees)</label>
-            <input id="flightAngleInput" type="number" step="5" inputmode="decimal" value="0">
-          </div>
-          <div class="input-row">
-            <label for="flightSafetyMarginInput">境界安全マージン (m)</label>
-            <input id="flightSafetyMarginInput" type="number" min="0" step="0.5" inputmode="decimal" value="1">
-          </div>
-          <div class="kv"><span>有効ライン間隔</span><strong id="flightSpacingMetric">—</strong></div>
-          <div class="kv"><span>飛行ライン数</span><strong id="flightLineMetric">—</strong></div>
-          <div class="kv"><span>推定経路長</span><strong id="flightLengthMetric">—</strong></div>
-          <div class="kv"><span>概算飛行時間</span><strong id="flightTimeMetric">—</strong></div>
-          <div class="kv"><span>概算写真枚数</span><strong id="flightPhotoMetric">—</strong></div>
-          <p class="meta">飛行禁止区域は可能な範囲でラインを分割します。交差が残る場合は警告と赤線で表示します。</p>
-          </div>
-        </details>
-
         <details class="card paddy-collapsible" data-workspace="analysis" data-mode="settings" hidden>
           <summary><span class="details-title">管理グリッド<span class="en">Management zones</span></span></summary>
           <div class="details-content">
@@ -4731,6 +4721,50 @@
             </section>
           </div>
         </details>
+
+        <!-- Moved from 詳細解析 into ドローンモード, alongside dronePanel --
+             planning a coverage flight belongs next to the drone that flies
+             it, not buried in the general analysis tab. Still reachable from
+             設定 too (data-workspace unchanged), same dual-tag pattern as
+             dronePanel/pilotPanel above. Gated the same way as dronePanel by
+             renderDroneModeGate() -- no field, no flight plan. -->
+        <details id="droneFlightPlanPanel" class="card paddy-collapsible" data-workspace="analysis" data-mode="drone settings" open hidden>
+          <summary><span class="details-title">ドローン飛行計画<span class="en">Lawnmower path</span></span></summary>
+          <div class="details-content">
+          <div id="droneWarnings" class="paddy-warning-list paddy-drone-warning-list" role="status" aria-live="polite"></div>
+          <div class="input-row">
+            <label for="flightAltitudeInput">飛行高度 (m)</label>
+            <input id="flightAltitudeInput" type="number" min="1" step="1" inputmode="decimal" value="30">
+          </div>
+          <div class="input-row">
+            <label for="swathWidthInput">カメラ地上幅 / swath (m)</label>
+            <input id="swathWidthInput" type="number" min="1" step="0.5" inputmode="decimal" value="10">
+          </div>
+          <div class="input-row">
+            <label for="imageOverlapInput">画像オーバーラップ (%)</label>
+            <input id="imageOverlapInput" type="number" min="0" max="95" step="5" inputmode="numeric" value="70">
+          </div>
+          <div class="input-row">
+            <label for="flightSpeedInput">飛行速度 (m/s)</label>
+            <input id="flightSpeedInput" type="number" min="0.1" step="0.1" inputmode="decimal" value="4">
+          </div>
+          <div class="input-row">
+            <label for="flightAngleInput">経路角度 (degrees)</label>
+            <input id="flightAngleInput" type="number" step="5" inputmode="decimal" value="0">
+          </div>
+          <div class="input-row">
+            <label for="flightSafetyMarginInput">境界安全マージン (m)</label>
+            <input id="flightSafetyMarginInput" type="number" min="0" step="0.5" inputmode="decimal" value="1">
+          </div>
+          <div class="kv"><span>有効ライン間隔</span><strong id="flightSpacingMetric">—</strong></div>
+          <div class="kv"><span>飛行ライン数</span><strong id="flightLineMetric">—</strong></div>
+          <div class="kv"><span>推定経路長</span><strong id="flightLengthMetric">—</strong></div>
+          <div class="kv"><span>概算飛行時間</span><strong id="flightTimeMetric">—</strong></div>
+          <div class="kv"><span>概算写真枚数</span><strong id="flightPhotoMetric">—</strong></div>
+          <p class="meta">飛行禁止区域は可能な範囲でラインを分割します。交差が残る場合は警告と赤線で表示します。</p>
+          </div>
+        </details>
+
         <!-- One manual-control surface. Keyboard and calibrated PS5 input use
              the same provider/controller/backend path. The browser sends only
              normalized intentions; the backend maps them to the vehicle's
@@ -5127,13 +5161,35 @@
       zoomControl.setPosition(event.matches ? "bottomright" : "topleft");
     });
 
+    /** Human-readable reason, for the one manual control and for diagnosing
+     *  the automatic attempt below via the console -- browsers give no other
+     *  way to tell "denied" apart from "no fix available" apart from "took
+     *  too long". */
+    function describeGeolocationError(error) {
+      switch (error?.code) {
+        case error?.PERMISSION_DENIED:
+          return "位置情報の利用が許可されていません。ブラウザのサイト設定で位置情報を許可してください。";
+        case error?.POSITION_UNAVAILABLE:
+          return "現在地を取得できませんでした。電波状況の良い場所で再度お試しください。";
+        case error?.TIMEOUT:
+          return "現在地の取得がタイムアウトしました。もう一度お試しください。";
+        default:
+          return "現在地を取得できません — HTTPS（またはlocalhost）と位置情報の許可が必要です。";
+      }
+    }
+
     // Recenter on the farmer's current GPS position on every load, instead
     // of always opening on the fixed Nara-area default above -- most useful
     // when they're standing in or near the field itself. Fire-and-forget:
     // denial, timeout, or no geolocation support (desktop without GPS, HTTP
     // instead of HTTPS) just leaves the default view in place, same as
     // before this existed -- this is a convenience, never a hard requirement
-    // to use the app, so it never surfaces an error of its own.
+    // to use the app, so it never blocks anything on failure. It does warn to
+    // the console (not the UI) so a silent failure is at least diagnosable;
+    // #mapLocateButton right below is the gesture-triggered, UI-visible retry
+    // -- several browsers (especially mobile) never show the permission
+    // prompt at all for a geolocation call that isn't inside a click handler,
+    // so this automatic attempt alone cannot be relied on.
     if (globalThis.navigator?.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
@@ -5143,10 +5199,40 @@
             map.setView([lat, lon], 16);
           }
         },
-        () => {},
+        (error) => {
+          console.warn(`[geolocation] auto-recenter on load failed: ${describeGeolocationError(error)}`, error);
+        },
         { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
       );
     }
+
+    const mapLocateButton = document.getElementById("mapLocateButton");
+    const mapLocateMessage = document.getElementById("mapLocateMessage");
+    mapLocateButton?.addEventListener("click", () => {
+      mapLocateMessage.hidden = true;
+      if (!globalThis.navigator?.geolocation) {
+        mapLocateMessage.textContent = describeGeolocationError(null);
+        mapLocateMessage.hidden = false;
+        return;
+      }
+      mapLocateButton.disabled = true;
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          mapLocateButton.disabled = false;
+          const lat = Number(position.coords.latitude);
+          const lon = Number(position.coords.longitude);
+          if (Number.isFinite(lat) && Number.isFinite(lon)) {
+            map.setView([lat, lon], 16);
+          }
+        },
+        (error) => {
+          mapLocateButton.disabled = false;
+          mapLocateMessage.textContent = describeGeolocationError(error);
+          mapLocateMessage.hidden = false;
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      );
+    });
 
     // --- Floating-rail aware fitBounds -------------------------------------
     // In desktop 基本モード the map runs full-bleed UNDERNEATH the floating
@@ -7125,6 +7211,10 @@
       }
       if (document.body.dataset.mode === "drone") {
         dronePanel.hidden = !field;
+        const flightPlanPanel = document.getElementById("droneFlightPlanPanel");
+        if (flightPlanPanel) {
+          flightPlanPanel.hidden = !field;
+        }
       }
     }
 
