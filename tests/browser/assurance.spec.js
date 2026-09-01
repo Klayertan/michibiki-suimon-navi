@@ -41,7 +41,7 @@ test("bundled QZ1 proof flows into the 測量チェック workspace", async ({ p
   await page.locator("#decisionFieldSelect").selectOption("__sample__");
   await page.getByRole("button", { name: "選択中データの測位点を表示" }).first().click();
   await expect(page.locator("#proofTotal")).toHaveText("206点");
-  await page.getByRole("button", { name: "測量チェック" }).click();
+  await page.evaluate(() => switchWorkspace("assurance"));
   await expect(page.locator("#assuranceQz1Session option")).toHaveCount(2);
   await expect(page.locator("#assuranceSessionSummary")).toContainText("206/426 有効fix");
   await page.locator(".assurance-dev-tools").evaluate((element) => { element.open = true; });
@@ -59,11 +59,16 @@ test("workspace navigation keeps the Leaflet map mounted and responsive", async 
   const map = page.locator("#map");
   await expect(map).toBeVisible();
   await map.evaluate((element) => { element.dataset.testIdentity = "mounted-once"; });
-  for (const name of ["QZ1測量", "測量チェック", "詳細解析", "判断デモ"]) {
+  for (const name of ["QZ1測量", "詳細解析", "判断デモ"]) {
     await page.getByRole("button", { name }).click();
     await expect(map).toBeVisible();
     await expect(map.locator(".leaflet-tile-pane")).toBeAttached();
   }
+  // 測量チェック has no tab of its own any more -- switched to directly,
+  // same as its only real entry point (スイスイナビの使い方) now does.
+  await page.evaluate(() => switchWorkspace("assurance"));
+  await expect(map).toBeVisible();
+  await expect(map.locator(".leaflet-tile-pane")).toBeAttached();
   await expect(map).toHaveAttribute("data-test-identity", "mounted-once");
 });
 
@@ -100,7 +105,7 @@ test("advanced settings and the SIMULATED dev-tools box are both collapsed by de
 
 test("QZ1-only mode: without a comparison GPS log, the result is never blank and shows the exact Mode A notice", async ({ page }) => {
   await registerFieldInFieldsTab(page);
-  await page.getByRole("button", { name: "測量チェック" }).click();
+  await page.evaluate(() => switchWorkspace("assurance"));
   await page.evaluate(() => {
     document.querySelectorAll("details[data-workspace='assurance']").forEach((card) => { card.open = true; });
   });
@@ -133,7 +138,7 @@ test("QZ1-only mode: without a comparison GPS log, the result is never blank and
 
 test("registered QZ1測量 survey sessions and fields are available in 測量チェック without re-uploading", async ({ page }) => {
   await registerFieldInFieldsTab(page);
-  await page.getByRole("button", { name: "測量チェック" }).click();
+  await page.evaluate(() => switchWorkspace("assurance"));
   await page.evaluate(() => {
     document.querySelectorAll("details[data-workspace='assurance']").forEach((card) => { card.open = true; });
   });
@@ -144,7 +149,7 @@ test("registered QZ1測量 survey sessions and fields are available in 測量チ
 
 test("測量チェックを実行 updates the summary cards, and 詳細設定/開発・テスト用 stay out of the way", async ({ page }) => {
   await registerFieldInFieldsTab(page);
-  await page.getByRole("button", { name: "測量チェック" }).click();
+  await page.evaluate(() => switchWorkspace("assurance"));
   await page.evaluate(() => {
     document.querySelectorAll("details[data-workspace='assurance']").forEach((card) => { card.open = true; });
     // Advanced settings/dev-tools were force-opened above only for the
@@ -164,7 +169,7 @@ test("なぜこの判定？ panel shows farmer-friendly 判定/理由/おすす�
   await page.locator("#decisionFieldSelect").selectOption("__sample__");
   await page.getByRole("button", { name: "選択中データの測位点を表示" }).first().click();
   await expect(page.locator("#proofTotal")).toHaveText("206点");
-  await page.getByRole("button", { name: "測量チェック" }).click();
+  await page.evaluate(() => switchWorkspace("assurance"));
   await page.evaluate(() => {
     document.querySelectorAll("details[data-workspace='assurance']").forEach((card) => { card.open = true; });
   });
@@ -190,7 +195,7 @@ test("なぜこの判定？ panel shows farmer-friendly 判定/理由/おすす�
 
 test("測量チェックJSONを書き出す still works for both QZ1-only and comparison results", async ({ page }) => {
   await registerFieldInFieldsTab(page);
-  await page.getByRole("button", { name: "測量チェック" }).click();
+  await page.evaluate(() => switchWorkspace("assurance"));
   await page.evaluate(() => {
     document.querySelectorAll("details[data-workspace='assurance']").forEach((card) => { card.open = true; });
   });

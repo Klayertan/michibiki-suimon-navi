@@ -382,11 +382,13 @@ test("Basic no longer shows みちびき活用の実証 / QZ1-DGNSS 測位品質
   await expect(page.locator("text=みちびき活用の実証")).toBeHidden();
 });
 
-test("設定 → 測量チェック owns the assurance card, and it exists exactly once", async ({ page }) => {
+test("測量チェック (assurance workspace) owns the assurance card, and it exists exactly once", async ({ page }) => {
   await openSettingsFields(page);
   await registerField(page, { nmea: LOOP_A, fileName: "4th.nmea" });
 
-  await page.locator('[data-workspace-target="assurance"]').click();
+  // 測量チェック has no tab of its own any more -- switched to directly,
+  // same as its only real entry point (スイスイナビの使い方) now does.
+  await page.evaluate(() => switchWorkspace("assurance"));
   await expect(page.locator("body")).toHaveAttribute("data-workspace", "assurance");
 
   const card = page.locator(".proof-card");
@@ -401,7 +403,11 @@ test("設定 → 測量チェック owns the assurance card, and it exists exact
 test("the assurance calculation and the map point-display action are unchanged", async ({ page }) => {
   await openSettingsFields(page);
   await registerField(page, { nmea: LOOP_A, fileName: "4th.nmea" });
-  await page.locator('[data-workspace-target="assurance"]').click();
+  // showSelectedDatasetOnMap() (triggered below) reads #decisionFieldSelect's
+  // value, which populateDecisionFieldOptions() only settles asynchronously
+  // after registration -- wait for it explicitly rather than racing it.
+  await expect(page.locator("#decisionFieldSelect")).not.toHaveValue("");
+  await page.evaluate(() => switchWorkspace("assurance"));
 
   // Same numbers the card always produced for this dataset: 5 fixes, 1 of
   // them fix quality 2.
@@ -425,11 +431,11 @@ test("the three top-level modes and the Settings workspaces are unchanged", asyn
   expect(modes.length).toBe(3);
   expect(modes[0]).toContain("基本モード");
   expect(modes[1]).toContain("ドローンモード"); // still the SECOND top-level mode
-  expect(modes[2]).toContain("そのほか");
+  expect(modes[2]).toContain("開発者モード");
 
   await page.goto("/#settings");
   const workspaces = await page.locator("[data-workspace-target]").allTextContents();
-  expect(workspaces).toEqual(["判断デモ", "QZ1測量", "測量チェック", "圃場データ", "詳細解析", "開発ツール"]);
+  expect(workspaces).toEqual(["判断デモ", "QZ1測量", "圃場データ", "詳細解析", "開発ツール"]);
 });
 
 test("there is exactly one help control, in the header, at a 44px target", async ({ page }) => {

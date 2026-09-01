@@ -131,6 +131,29 @@
   margin-top: 2px;
 }
 
+.basic-help-extra {
+  border-top: 1px solid var(--line, #d8d8ca);
+  display: grid;
+  gap: 6px;
+  margin: 14px 0 0;
+  padding-top: 12px;
+}
+
+.basic-help-extra strong {
+  font-size: 0.95rem;
+}
+
+.basic-help-extra span {
+  color: var(--muted, #607069);
+  font-size: 0.85rem;
+  line-height: 1.55;
+}
+
+.basic-help-extra button {
+  justify-self: start;
+  margin-top: 2px;
+}
+
 .basic-help-footnote {
   border-top: 1px solid var(--line, #d8d8ca);
   color: var(--muted, #607069);

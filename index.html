@@ -3025,7 +3025,7 @@
         </button>
         <button class="mode-tab" type="button" data-mode-target="settings" aria-selected="false">
           <span class="mode-tab-icon" aria-hidden="true">⚙</span>
-          <span>そのほか</span>
+          <span>開発者モード</span>
           <span class="mode-tab-sub">その他の機能</span>
         </button>
       </nav>
@@ -3038,7 +3038,11 @@
         <nav class="workspace-nav" aria-label="詳細・開発画面">
           <button class="workspace-tab active" type="button" data-workspace-target="decision" aria-selected="true">判断デモ</button>
           <button class="workspace-tab" type="button" data-workspace-target="survey" aria-selected="false">QZ1測量</button>
-          <button class="workspace-tab" type="button" data-workspace-target="assurance" aria-selected="false">測量チェック</button>
+          <!-- 測量チェック removed as a standalone tab -- reachable now only
+               from スイスイナビの使い方 (see #basicHelpOpenAssuranceButton).
+               data-workspace="assurance" cards, WORKSPACES/LEGACY_WORKSPACES,
+               and #assurance hash routing are all unchanged: switchWorkspace
+               ("assurance") still works exactly as before, from any caller. -->
           <button class="workspace-tab" type="button" data-workspace-target="fields" aria-selected="false">圃場データ</button>
           <button class="workspace-tab" type="button" data-workspace-target="analysis" aria-selected="false">詳細解析</button>
           <button class="workspace-tab" type="button" data-workspace-target="devtools" aria-selected="false">開発ツール</button>
@@ -4875,7 +4879,12 @@
           <span>登録した圃場ごとに水位や水管理情報を記録します。</span>
         </li>
       </ol>
-      <p class="basic-help-footnote">詳しい機能は「設定 → その他の機能」から利用できます。</p>
+      <div class="basic-help-extra">
+        <strong>測量チェック</strong>
+        <span>QZ1の測位品質を確認し、再測量が必要な範囲を判定します。</span>
+        <button id="basicHelpOpenAssuranceButton" class="panel-button" type="button">測量チェックを開く</button>
+      </div>
+      <p class="basic-help-footnote">詳しい機能は「開発者モード」から利用できます。</p>
     </div>
   </div>
 
@@ -10399,6 +10408,14 @@
       if (event.key === "Escape" && basicHelpDialog && !basicHelpDialog.hidden) {
         setBasicHelpOpen(false);
       }
+    });
+    // 測量チェック has no standalone tab any more -- this is its only entry
+    // point. switchWorkspace("assurance") is unchanged and still needs
+    // Settings mode active for its data-mode="settings" cards to render.
+    document.getElementById("basicHelpOpenAssuranceButton")?.addEventListener("click", () => {
+      setBasicHelpOpen(false);
+      switchMode("settings");
+      switchWorkspace("assurance");
     });
 
     // ---- Stage-1 boundary trimming --------------------------------------
