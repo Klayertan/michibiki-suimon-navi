@@ -26,10 +26,13 @@ async function openAssuranceWorkspace(page) {
 async function registerFieldInFieldsTab(page) {
   await page.goto("/#settings/fields");
   await expect(page.locator("#fieldRegDialog")).toBeAttached({ timeout: 15_000 });
-  await page.evaluate(() => {
-    document.querySelectorAll("details[data-workspace='fields']").forEach((card) => { card.open = true; });
-  });
+  // #fileInput lives under 開発ツール now, not 圃場データ -- #fieldRegDialog's
+  // own visibility is upload-triggered (fieldAnnotationController.
+  // syncDialogVisibility()), not workspace-gated, so hopping over to
+  // 開発ツール for the upload and straight back doesn't disturb it.
+  await page.evaluate(() => switchWorkspace("devtools"));
   await page.locator("#fileInput").setInputFiles({ name: "walk.txt", mimeType: "text/plain", buffer: Buffer.from(TIGHT_LOOP_NMEA) });
+  await page.evaluate(() => switchWorkspace("fields"));
   await page.locator("#fieldRegConfirmButton").click();
 }
 

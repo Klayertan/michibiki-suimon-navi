@@ -2142,7 +2142,7 @@
         </button>
         <button class="mode-tab" type="button" data-mode-target="settings" aria-selected="false">
           <span class="mode-tab-icon" aria-hidden="true">⚙</span>
-          <span>設定</span>
+          <span>そのほか</span>
           <span class="mode-tab-sub">その他の機能</span>
         </button>
       </nav>
@@ -2423,68 +2423,6 @@
           <button id="exportFieldButton" class="panel-button primary" type="button" disabled>圃場データを書き出し (field.json)</button>
           <p id="dataSourceNote" class="meta"></p>
           <p class="meta">測位点を地図のポップアップで「圃場の角」「水路」「水門」にタグ付けすると、その場で境界線・水路・水門位置が描画されます。圃場の角は外周を歩いた順にタグ付けしてください（3点以上で境界線が描画されます）。</p>
-        </section>
-
-        <!-- Settings-only since the Stage-1 simplification: Basic mode gets
-             the compact #basicStage1Card below instead. Nothing here was
-             removed — 測量JSON import/export, layer filters, スマホGPS and the
-             parse-quality summary all still live here for power users. -->
-        <section class="card survey-tools" data-workspace="fields" data-mode="settings" hidden>
-          <span class="eyebrow">現地測量ワークフロー</span>
-          <h2>QZ1ログを読み込む</h2>
-          <p class="meta">NMEAログを地図に表示し、測位品質の確認や圃場・水門のタグ付けを行います。</p>
-          <div class="survey-action-grid">
-            <label class="action-button">
-              NMEAをアップロード
-              <!-- No accept filter, deliberately: iOS Safari hands the list to
-                   the native Files picker, which greys out .nmea (no platform
-                   UTType) and made a farmer's own recording unselectable on an
-                   iPhone while opening fine on a Mac. accept="*/*" would go
-                   through the same filtering, so the attribute is absent
-                   entirely and the file is validated after selection by
-                   js/gnss/nmea-file-intake.js + the existing parser. JSON
-                   inputs below keep their filter -- .json has a UTType. -->
-              <input id="fileInput" type="file">
-            </label>
-            <label class="action-button secondary">
-              測量JSONを読み込み
-              <input id="importInput" type="file" accept=".json,application/json">
-            </label>
-            <button id="exportButton" class="action-button secondary" type="button" disabled>測量JSONを書き出し</button>
-            <button id="locateButton" class="action-button locate" type="button">現在地を表示</button>
-            <button id="recordPhoneButton" class="action-button phone" type="button">スマホGPSを記録</button>
-            <button id="clearPhoneButton" class="action-button secondary" type="button" disabled>スマホGPS点をクリア</button>
-          </div>
-          <div class="layer-grid">
-            <label class="filter"><input id="showFieldLayer" type="checkbox" checked>圃場</label>
-            <label class="filter"><input id="showQz1Layer" type="checkbox" checked>QZ1</label>
-            <label class="filter"><input id="showPhoneLayer" type="checkbox" checked>スマホGPS</label>
-            <label class="filter"><input id="augmentedOnly" type="checkbox">DGNSS fixのみ</label>
-          </div>
-          <div id="summary" class="summary" aria-live="polite" hidden>
-            <span class="summary-item">総ポイント: <strong id="totalPoints">0</strong></span>
-            <span class="summary-item"><span class="dot green"></span>DGNSS fix: <strong id="augmentedPoints">0</strong></span>
-            <span class="summary-item"><span class="dot orange"></span>GPS単独: <strong id="gpsPoints">0</strong></span>
-            <span class="summary-item">スキップ行: <strong id="skippedLines">0</strong></span>
-            <span class="summary-item">認識外: <strong id="ignoredLines">0</strong></span>
-            <span class="summary-item">タグ: <strong id="tagCounts">—</strong></span>
-            <span id="comparisonSummary" class="summary-item" hidden>比較: <strong id="comparisonText"></strong></span>
-          </div>
-          <div id="gpsMessage" class="gps-message" role="status" aria-live="polite" hidden></div>
-        </section>
-
-        <!-- Settings-only since the Stage-1 simplification. This five-step
-             checklist is genuinely useful the first time through, but it
-             consumed most of Basic mode's vertical space and only got less
-             relevant as fields accumulated (steps 3-5 stay "done" forever
-             once one field has water points / observations / an export).
-             Basic mode now points at the constant-size ? help control on
-             #basicStage1Card instead. -->
-        <section id="workflowGuidePanel" class="card workflow-guide" data-workspace="fields" data-mode="settings" hidden>
-          <h2>現地調査ワークフロー</h2>
-          <p id="workflowProgressLabel" class="workflow-progress-label"></p>
-          <p id="workflowNextTask" class="workflow-next-task" role="status" aria-live="polite"></p>
-          <div id="workflowStepsContainer" class="workflow-steps"></div>
         </section>
 
         <!-- Stage 1, farmer-facing: load QZ1/NMEA -> trim the walked track to
@@ -3714,6 +3652,71 @@
           <summary><span class="details-title">手動操縦（開発者向け）<span class="en">Manual Control</span></span></summary>
           <div id="pilotRoot" class="details-content"></div>
         </details>
+
+        <!-- Relocated off 圃場データ to 開発ツール: this duplicated the
+             farmer-facing upload flow on #basicStage1Card without adding
+             anything a normal user needed. Nothing was removed — 測量JSON
+             import/export, layer filters, スマホGPS and the parse-quality
+             summary all still live here for power users, just under 開発ツール
+             instead of the tab a farmer actually looks at. Placed after
+             dronePanel/pilotPanel so those two stay the first devtools cards. -->
+        <section class="card survey-tools" data-workspace="devtools" data-mode="settings" hidden>
+          <span class="eyebrow">現地測量ワークフロー</span>
+          <h2>QZ1ログを読み込む</h2>
+          <p class="meta">NMEAログを地図に表示し、測位品質の確認や圃場・水門のタグ付けを行います。</p>
+          <div class="survey-action-grid">
+            <label class="action-button">
+              NMEAをアップロード
+              <!-- No accept filter, deliberately: iOS Safari hands the list to
+                   the native Files picker, which greys out .nmea (no platform
+                   UTType) and made a farmer's own recording unselectable on an
+                   iPhone while opening fine on a Mac. accept="*/*" would go
+                   through the same filtering, so the attribute is absent
+                   entirely and the file is validated after selection by
+                   js/gnss/nmea-file-intake.js + the existing parser. JSON
+                   inputs below keep their filter -- .json has a UTType. -->
+              <input id="fileInput" type="file">
+            </label>
+            <label class="action-button secondary">
+              測量JSONを読み込み
+              <input id="importInput" type="file" accept=".json,application/json">
+            </label>
+            <button id="exportButton" class="action-button secondary" type="button" disabled>測量JSONを書き出し</button>
+            <button id="locateButton" class="action-button locate" type="button">現在地を表示</button>
+            <button id="recordPhoneButton" class="action-button phone" type="button">スマホGPSを記録</button>
+            <button id="clearPhoneButton" class="action-button secondary" type="button" disabled>スマホGPS点をクリア</button>
+          </div>
+          <div class="layer-grid">
+            <label class="filter"><input id="showFieldLayer" type="checkbox" checked>圃場</label>
+            <label class="filter"><input id="showQz1Layer" type="checkbox" checked>QZ1</label>
+            <label class="filter"><input id="showPhoneLayer" type="checkbox" checked>スマホGPS</label>
+            <label class="filter"><input id="augmentedOnly" type="checkbox">DGNSS fixのみ</label>
+          </div>
+          <div id="summary" class="summary" aria-live="polite" hidden>
+            <span class="summary-item">総ポイント: <strong id="totalPoints">0</strong></span>
+            <span class="summary-item"><span class="dot green"></span>DGNSS fix: <strong id="augmentedPoints">0</strong></span>
+            <span class="summary-item"><span class="dot orange"></span>GPS単独: <strong id="gpsPoints">0</strong></span>
+            <span class="summary-item">スキップ行: <strong id="skippedLines">0</strong></span>
+            <span class="summary-item">認識外: <strong id="ignoredLines">0</strong></span>
+            <span class="summary-item">タグ: <strong id="tagCounts">—</strong></span>
+            <span id="comparisonSummary" class="summary-item" hidden>比較: <strong id="comparisonText"></strong></span>
+          </div>
+          <div id="gpsMessage" class="gps-message" role="status" aria-live="polite" hidden></div>
+        </section>
+
+        <!-- Relocated off 圃場データ to 開発ツール, alongside the upload card
+             above -- this five-step checklist is genuinely useful the first
+             time through, but it consumed most of Basic mode's vertical space
+             and only got less relevant as fields accumulated (steps 3-5 stay
+             "done" forever once one field has water points / observations /
+             an export). Basic mode now points at the constant-size ? help
+             control on #basicStage1Card instead. -->
+        <section id="workflowGuidePanel" class="card workflow-guide" data-workspace="devtools" data-mode="settings" hidden>
+          <h2>現地調査ワークフロー</h2>
+          <p id="workflowProgressLabel" class="workflow-progress-label"></p>
+          <p id="workflowNextTask" class="workflow-next-task" role="status" aria-live="polite"></p>
+          <div id="workflowStepsContainer" class="workflow-steps"></div>
+        </section>
       </aside>
     </main>
   </div>

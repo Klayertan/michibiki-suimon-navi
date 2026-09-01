@@ -40,11 +40,16 @@ async function openSurveyWorkspace(page) {
 }
 
 async function uploadNmea(page, nmeaText, fileName = "walk.txt") {
+  // #fileInput lives under 開発ツール now, not 圃場データ -- #fieldRegDialog's
+  // own visibility is upload-triggered, not workspace-gated, so hopping over
+  // to 開発ツール for the upload and straight back doesn't disturb it.
+  await page.evaluate(() => switchWorkspace("devtools"));
   await page.locator("#fileInput").setInputFiles({
     name: fileName,
     mimeType: "text/plain",
     buffer: Buffer.from(nmeaText)
   });
+  await page.evaluate(() => switchWorkspace("fields"));
 }
 
 test("uploading an NMEA file opens the registration dialog with sequential defaults", async ({ page }) => {

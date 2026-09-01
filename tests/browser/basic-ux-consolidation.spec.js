@@ -44,7 +44,12 @@ async function openSettingsFields(page) {
 
 /** Registers one field through the Settings path (fastest route to test data). */
 async function registerField(page, { nmea, fileName }) {
+  // #fileInput lives under 開発ツール now, not 圃場データ -- #fieldRegDialog's
+  // own visibility is upload-triggered, not workspace-gated, so hopping over
+  // to 開発ツール for the upload and straight back doesn't disturb it.
+  await page.evaluate(() => switchWorkspace("devtools"));
   await page.locator("#fileInput").setInputFiles({ name: fileName, mimeType: "", buffer: Buffer.from(nmea) });
+  await page.evaluate(() => switchWorkspace("fields"));
   await expect(page.locator("#fieldRegDialog")).toBeVisible();
   await page.locator("#fieldRegConfirmButton").click();
 }
@@ -404,7 +409,7 @@ test("the three top-level modes and the Settings workspaces are unchanged", asyn
   expect(modes.length).toBe(3);
   expect(modes[0]).toContain("基本モード");
   expect(modes[1]).toContain("ドローンモード"); // still the SECOND top-level mode
-  expect(modes[2]).toContain("設定");
+  expect(modes[2]).toContain("そのほか");
 
   await page.goto("/#settings");
   const workspaces = await page.locator("[data-workspace-target]").allTextContents();

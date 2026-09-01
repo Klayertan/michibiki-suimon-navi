@@ -114,11 +114,16 @@ test("the Settings uploader shares the same intake path, including the iOS shape
   await page.goto("/#settings/fields");
   await expect(page.locator("#fieldRegDialog")).toBeAttached({ timeout: 15_000 });
 
+  // #fileInput lives under 開発ツール now, not 圃場データ -- #fieldRegDialog's
+  // own visibility is upload-triggered, not workspace-gated, so hopping over
+  // to 開発ツール for the upload and straight back doesn't disturb it.
+  await page.evaluate(() => switchWorkspace("devtools"));
   await page.locator("#fileInput").setInputFiles({
     name: "field01.nmea",
     mimeType: "",
     buffer: Buffer.from(WALK_NMEA)
   });
+  await page.evaluate(() => switchWorkspace("fields"));
 
   // Settings' own post-parse behaviour: the whole-recording registration
   // dialog. Reaching it at all proves the shared parse ran.

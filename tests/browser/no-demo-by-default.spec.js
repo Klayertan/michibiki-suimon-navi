@@ -80,7 +80,12 @@ test("uploaded NMEA field data renders normally alongside the still-empty demo s
   await page.evaluate(() => {
     document.querySelectorAll("details[data-workspace='fields']").forEach((card) => { card.open = true; });
   });
+  // #fileInput lives under 開発ツール now, not 圃場データ -- #fieldRegDialog's
+  // own visibility is upload-triggered, not workspace-gated, so hopping over
+  // to 開発ツール for the upload and straight back doesn't disturb it.
+  await page.evaluate(() => switchWorkspace("devtools"));
   await page.locator("#fileInput").setInputFiles({ name: "walk.txt", mimeType: "text/plain", buffer: Buffer.from(nmea) });
+  await page.evaluate(() => switchWorkspace("fields"));
   await page.locator("#fieldRegConfirmButton").click();
 
   await expect(page.locator("#fieldAnnotationSummaryFields")).toHaveText("1");
