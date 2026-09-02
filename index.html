@@ -1932,6 +1932,18 @@
         right: var(--basic-rail-right-clear);
       }
 
+      /* The zoom control (moved to topright, see the zoomControl JS above
+         map creation) only ever got a vertical offset here to clear
+         .basemap-toggle's own height -- .leaflet-top.leaflet-right otherwise
+         stays at Leaflet's native ~10px-from-edge position, which sits well
+         inside where the floating right rail (#basicStage1Card et al., inset
+         by the wider --basic-rail-right-clear) starts. The card's top-right
+         corner ended up right under the +/- buttons. Same horizontal offset
+         as .basemap-toggle above fixes it the same way. */
+      body[data-mode="basic"] .leaflet-top.leaflet-right {
+        right: var(--basic-rail-right-clear);
+      }
+
       /* 水管理ポイント is the ONE overlay that does NOT step inward. It is
          pinned to the true bottom-left corner of the canvas and stays there:
          it appears only while a field is actually being edited, and while it
