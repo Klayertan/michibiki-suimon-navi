@@ -76,6 +76,23 @@ test("a guest can still ask for the login screen from the account menu", () => {
   assert.equal(shouldShowLoginScreen({ state: AUTH_GUEST, guestChosen: true, requested: true }), true);
 });
 
+test("requireAuth (production login gate) has no bypass — not guestChosen, not a stale guest state", () => {
+  // A guest choice remembered from BEFORE requireAuth was turned on must not
+  // let anyone in once it is on.
+  assert.equal(shouldShowLoginScreen({ state: AUTH_SIGNED_OUT, guestChosen: true, requireAuth: true }), true);
+  assert.equal(shouldShowLoginScreen({ state: AUTH_GUEST, guestChosen: true, requireAuth: true }), true);
+  // Not requested, either — requireAuth alone is enough.
+  assert.equal(shouldShowLoginScreen({ state: AUTH_SIGNED_OUT, guestChosen: false, requested: false, requireAuth: true }), true);
+});
+
+test("requireAuth never covers an authenticated farmer or a genuinely unconfigured/restoring app", () => {
+  assert.equal(shouldShowLoginScreen({ state: AUTH_UNKNOWN, requireAuth: true }), false);
+  assert.equal(shouldShowLoginScreen({ state: AUTH_UNAVAILABLE, requireAuth: true }), false);
+  for (const state of [AUTH_SIGNED_IN, AUTH_OFFLINE_AUTHENTICATED]) {
+    assert.equal(shouldShowLoginScreen({ state, requireAuth: true }), false, state);
+  }
+});
+
 test("the login screen never covers a signed-in farmer, online or offline", () => {
   for (const state of [AUTH_SIGNED_IN, AUTH_OFFLINE_AUTHENTICATED]) {
     assert.equal(shouldShowLoginScreen({ state, requested: true }), false, state);

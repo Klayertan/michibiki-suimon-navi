@@ -43,6 +43,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "See .env.example and docs/SAKURA_CLOUD_DEPLOYMENT.md."
         )
 
+    if settings.is_production and settings.max_registered_users is None:
+        # Fail closed: an unset registration cap in production must never be
+        # silently treated as "unlimited." See config.py's comment and
+        # docs/AUTH_ARCHITECTURE.md — "Registration cap".
+        raise RuntimeError(
+            "SUISUI_CLOUD_MAX_REGISTERED_USERS must be set in production "
+            "(fail closed, never unlimited). See .env.example and "
+            "docs/AUTH_ARCHITECTURE.md."
+        )
+
     app = FastAPI(
         title="SuisuiNavi Cloud API",
         version="0.1.0",

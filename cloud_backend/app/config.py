@@ -78,6 +78,29 @@ class Settings(BaseSettings):
     # default in a real deployment. See docs/AUTH_ARCHITECTURE.md.
     require_email_verification: bool = False
 
+    # -- registration cap (presentation/field-trial access control) -----------
+    # Open with no cap by default (max_registered_users unset) — the
+    # existing test suite and local dev both rely on registering as many
+    # accounts as a test needs. Production MUST set
+    # SUISUI_CLOUD_MAX_REGISTERED_USERS explicitly (enforced in main.py's
+    # startup check, same pattern as session_secret) — "unset" is never
+    # silently treated as "unlimited" in production; see
+    # docs/AUTH_ARCHITECTURE.md — "Registration cap" for the full reasoning
+    # and app/auth/service.py for the atomic enforcement itself.
+    registration_open: bool = True
+    max_registered_users: int | None = None
+
+    @field_validator("max_registered_users", mode="before")
+    @classmethod
+    def _blank_env_string_means_unset(cls, value):  # noqa: ANN001 - pydantic validator signature
+        # docker-compose's `${VAR:-}` interpolation (see docker-compose.yml)
+        # expands an unset variable to an empty STRING, not an absent one —
+        # so the container still gets SUISUI_CLOUD_MAX_REGISTERED_USERS="",
+        # which int-parses as an error rather than "no cap set" without this.
+        if isinstance(value, str) and value.strip() == "":
+            return None
+        return value
+
     # -- rate limiting (in-memory, single-process — see app/security.py) ------
     login_rate_limit_attempts: int = 10
     login_rate_limit_window_seconds: int = 300

@@ -2979,6 +2979,7 @@
           <label for="authDisplayNameInput">お名前（任意）</label>
           <input id="authDisplayNameInput" type="text" name="displayName" autocomplete="name">
         </div>
+        <p id="authLimitedAccessNote" class="auth-note" hidden>現在、このサービスは限定公開中です。</p>
         <p id="authMessage" class="auth-message" role="status" aria-live="polite" hidden></p>
         <button id="authSubmitButton" class="auth-submit-button" type="submit">ログイン</button>
       </form>
@@ -2988,7 +2989,7 @@
         <button id="authSwitchButton" class="auth-secondary-button" type="button">アカウントを作成</button>
       </div>
       <button id="authGuestButton" class="auth-guest-button" type="button">ログインせずに使う</button>
-      <p class="auth-note">ログインしなくても、圃場の測量・面積計算・水管理はこの端末だけで使えます。</p>
+      <p id="authGuestNote" class="auth-note">ログインしなくても、圃場の測量・面積計算・水管理はこの端末だけで使えます。</p>
     </div>
   </div>
 
@@ -10745,6 +10746,7 @@
       loadTargetWaterLevelForActiveField();
       fetchLiveWeather();
       syncSurveyedBoundaryForActiveField();
+      panMainMapToActiveField();
     });
     // Drone mode's own field picker (index.html:4346-4349) drives the exact
     // same #basicActiveFieldSelect cascade above -- via setActiveField, which

@@ -41,7 +41,12 @@ services:
       db:
         condition: service_healthy
     environment:
-      SUISUI_CLOUD_ENVIRONMENT: development
+      # Overridable (was hard-coded to "development" here — fixed so this
+      # same compose file can also be used for a production run with
+      # SUISUI_CLOUD_ENVIRONMENT=production set in .env; see
+      # docs/SAKURA_CLOUD_DEPLOYMENT.md §6). Defaults to development so the
+      # ordinary local-integration use of this file needs no .env change.
+      SUISUI_CLOUD_ENVIRONMENT: ${SUISUI_CLOUD_ENVIRONMENT:-development}
       SUISUI_CLOUD_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-suisuinavi}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db:5432/${POSTGRES_DB:-suisuinavi}
       SUISUI_CLOUD_SESSION_SECRET: ${SUISUI_CLOUD_SESSION_SECRET:?set SUISUI_CLOUD_SESSION_SECRET in .env}
       # Empty on purpose for local/dev: see app/config.py's own comment on
@@ -50,6 +55,12 @@ services:
       SUISUI_CLOUD_SESSION_COOKIE_DOMAIN: ${SUISUI_CLOUD_SESSION_COOKIE_DOMAIN:-}
       SUISUI_CLOUD_ALLOWED_ORIGINS: ${SUISUI_CLOUD_ALLOWED_ORIGINS:-http://127.0.0.1:4173,http://localhost:4173}
       SUISUI_CLOUD_REQUIRE_EMAIL_VERIFICATION: ${SUISUI_CLOUD_REQUIRE_EMAIL_VERIFICATION:-false}
+      # Registration cap (presentation/limited-access mode) — see
+      # .env.example and docs/AUTH_ARCHITECTURE.md "Registration cap".
+      # Required (no default) once SUISUI_CLOUD_ENVIRONMENT=production —
+      # app/main.py refuses to boot without it in that mode.
+      SUISUI_CLOUD_REGISTRATION_OPEN: ${SUISUI_CLOUD_REGISTRATION_OPEN:-true}
+      SUISUI_CLOUD_MAX_REGISTERED_USERS: ${SUISUI_CLOUD_MAX_REGISTERED_USERS:-}
     ports:
       - "127.0.0.1:${API_HOST_PORT:-8000}:8000"
     healthcheck:

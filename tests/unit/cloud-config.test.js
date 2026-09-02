@@ -37,6 +37,38 @@ test("sakura ignores a stray url/anonKey rather than requiring or rejecting them
   assert.equal(config.anonKey, "");
 });
 
+test("requireAuth defaults to false and is only ever true on an exact boolean true", () => {
+  const configured = normalizeCloudConfig({ provider: "sakura", apiBaseUrl: "https://api.example.jp" });
+  assert.equal(configured.requireAuth, false);
+
+  const explicitFalse = normalizeCloudConfig({ provider: "sakura", apiBaseUrl: "https://api.example.jp", requireAuth: false });
+  assert.equal(explicitFalse.requireAuth, false);
+
+  const truthyButNotTrue = normalizeCloudConfig({ provider: "sakura", apiBaseUrl: "https://api.example.jp", requireAuth: "true" });
+  assert.equal(truthyButNotTrue.requireAuth, false, "a string 'true' must not coerce to enabled");
+
+  const explicitTrue = normalizeCloudConfig({ provider: "sakura", apiBaseUrl: "https://api.example.jp", requireAuth: true });
+  assert.equal(explicitTrue.requireAuth, true);
+});
+
+test("requireAuth is always false on any unconfigured/misconfigured result, even if raw.requireAuth was true", () => {
+  // Never let a stray requireAuth: true lock a farmer out of an app that
+  // isn't even cloud-configured.
+  assert.equal(normalizeCloudConfig({ provider: "sakura", requireAuth: true }).requireAuth, false); // missing apiBaseUrl
+  assert.equal(normalizeCloudConfig({ provider: "supabase", requireAuth: true }).requireAuth, false); // missing url/anonKey
+  assert.equal(normalizeCloudConfig({ provider: "nope", requireAuth: true }).requireAuth, false); // unknown provider
+  assert.equal(
+    normalizeCloudConfig({ provider: "supabase", url: "https://a.supabase.co", anonKey: jwtWithRole("service_role"), requireAuth: true })
+      .requireAuth,
+    false
+  ); // rejected service_role key
+});
+
+test("the mock provider honors requireAuth, for browser-testing the production login gate without a real backend", () => {
+  assert.equal(normalizeCloudConfig({ provider: "mock", requireAuth: true }).requireAuth, true);
+  assert.equal(normalizeCloudConfig({ provider: "mock" }).requireAuth, false);
+});
+
 test("a supabase config never carries a stray apiBaseUrl", () => {
   const config = normalizeCloudConfig({
     provider: "supabase",

@@ -39,13 +39,18 @@ export function isResolving(state) {
  *     so the app opens straight into 基本モード exactly as it does today; an
  *     account screen with no backend would be a dead end in a paddy.
  *  3. Never once signed in (online or offline-cached).
- *  4. Never once the farmer has chosen 「ログインせずに使う」 — that choice is
+ *  4. Always, with no bypass at all, when `requireAuth` is set (the
+ *     production login gate — see docs/AUTH_ARCHITECTURE.md "Production
+ *     login gate") — this is checked BEFORE `guestChosen`/`requested`
+ *     specifically so a guest choice stored in localStorage from before
+ *     `requireAuth` was turned on cannot let anyone in.
+ *  5. Never once the farmer has chosen 「ログインせずに使う」 — that choice is
  *     remembered until they explicitly ask for the account screen.
- *  5. Shown on an explicit request (the account menu's ログイン item), even
+ *  6. Shown on an explicit request (the account menu's ログイン item), even
  *     from guest.
- *  6. Otherwise shown when cloud is available and nobody has decided yet.
+ *  7. Otherwise shown when cloud is available and nobody has decided yet.
  */
-export function shouldShowLoginScreen({ state, guestChosen = false, requested = false } = {}) {
+export function shouldShowLoginScreen({ state, guestChosen = false, requested = false, requireAuth = false } = {}) {
   if (state === AUTH_UNKNOWN) {
     return false;
   }
@@ -54,6 +59,9 @@ export function shouldShowLoginScreen({ state, guestChosen = false, requested = 
   }
   if (isAuthenticated(state)) {
     return false;
+  }
+  if (requireAuth) {
+    return true;
   }
   if (requested) {
     return true;

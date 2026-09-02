@@ -22,11 +22,17 @@ from .service import (
     AuthError,
     EmailAlreadyRegistered,
     InvalidCredentials,
+    RegistrationClosed,
     authenticate,
     create_session,
     register_user,
     revoke_session,
 )
+
+# Shown for BOTH "registration_open=false" and "cap reached" — never
+# distinguished, and the remaining slot count is never disclosed. See
+# app/auth/service.py's RegistrationClosed docstring.
+REGISTRATION_CLOSED_MESSAGE = "現在、新しいアカウントの登録を受け付けていません。"
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -109,6 +115,14 @@ async def register(
         # existence" (Phase 5): a *login* failure never says which of
         # email/password was wrong, but a duplicate *signup* honestly must.
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="email already registered") from exc
+    except RegistrationClosed as exc:
+        # 403: registration itself is not permitted right now — distinct
+        # from 409 (this address specifically is taken) and from 429 (rate
+        # limited, try again later). Never reveals whether this is the
+        # registration_open flag or the account cap, and never reveals a
+        # count — see REGISTRATION_CLOSED_MESSAGE / RegistrationClosed's
+        # docstring.
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=REGISTRATION_CLOSED_MESSAGE) from exc
     except AuthError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 

@@ -12,10 +12,12 @@ that stays valid until it expires no matter what the server does.
 
 from __future__ import annotations
 
+import asyncio
 import uuid
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import select
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import Settings
@@ -39,6 +41,15 @@ class EmailAlreadyRegistered(AuthError):
     pass
 
 
+class RegistrationClosed(AuthError):
+    """Registration is unavailable — either Settings.registration_open is
+    false, or the account cap (Settings.max_registered_users) has been
+    reached. Deliberately one exception, one public message, for both
+    causes (see auth/router.py's register()) — a visitor is never told
+    which, and never told how many slots remain. See
+    docs/AUTH_ARCHITECTURE.md — "Registration cap"."""
+
+
 class InvalidCredentials(AuthError):
     pass
 
@@ -49,6 +60,64 @@ class AccountDisabled(AuthError):
 
 class SessionInvalid(AuthError):
     pass
+
+
+# Arbitrary, fixed key namespacing this one advisory lock so it can never
+# collide with an unrelated pg_advisory_xact_lock elsewhere in a shared
+# database — any stable 64-bit constant works; this one has no meaning
+# beyond being memorable and unlikely to be reused by accident.
+_REGISTRATION_LOCK_KEY = 0x53554953_55495200  # "SUISUI\x00" as an int
+
+# Process-local fallback used only against SQLite — see
+# _serialize_registration()'s own docstring for why this is not the real
+# guarantee.
+_sqlite_registration_lock = asyncio.Lock()
+
+
+@asynccontextmanager
+async def _serialize_registration(db: AsyncSession):
+    """Ensures at most one registration transaction proceeds past the
+    account-limit check (register_user(), below) at a time — the fix for
+    the classic "SELECT COUNT then INSERT" race, where two concurrent
+    requests can both observe count=9 and both insert, producing 11 rows
+    for a cap of 10.
+
+    PostgreSQL (production): a transaction-scoped advisory lock
+    (``pg_advisory_xact_lock``). A second concurrent call blocks here until
+    the first registration's transaction commits or rolls back, at which
+    point PostgreSQL releases the lock automatically — so the second
+    request's subsequent COUNT is guaranteed to see the first request's
+    already-committed row under the default READ COMMITTED isolation
+    level. Chosen over a dedicated lock row + ``SELECT ... FOR UPDATE``
+    (would need a new table for one lock) or a unique constraint trick
+    (can't cleanly express "at most N rows," only "at most 1 of a value")
+    — an advisory lock needs no schema at all and is the standard
+    PostgreSQL answer to exactly this "serialize a critical section across
+    connections" problem. See docs/AUTH_ARCHITECTURE.md — "Registration
+    cap" for the full reasoning, and
+    tests/test_registration_limit_concurrency.py for the PostgreSQL-only
+    test that actually proves this (gated on
+    SUISUI_CLOUD_TEST_DATABASE_URL pointing at a real PostgreSQL — see that
+    test module's own docstring).
+
+    SQLite (tests by default, local dev without Docker): PostgreSQL's
+    advisory-lock function does not exist, so this falls back to a plain
+    in-process ``asyncio.Lock`` — correct only within one Python process,
+    the same single-process tradeoff app/security.py's RateLimiter already
+    accepts for the same underlying reason (no distributed coordination
+    primitive available without adding infrastructure this deployment
+    doesn't have). It is enough to make the SQLite-backed unit tests
+    meaningful for the *application-level* orchestration (lock → check
+    open → count → check cap → …), but it is NOT what protects a real
+    multi-connection PostgreSQL deployment — that is the branch above.
+    """
+    dialect = db.bind.dialect.name if db.bind is not None else ""
+    if dialect == "postgresql":
+        await db.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": _REGISTRATION_LOCK_KEY})
+        yield
+    else:
+        async with _sqlite_registration_lock:
+            yield
 
 
 class NewSession:
@@ -64,33 +133,54 @@ class NewSession:
 async def register_user(
     db: AsyncSession, settings: Settings, *, email: str, password: str, display_name: str
 ) -> User:
-    normalized = normalize_email(email)
-    existing = await db.scalar(select(User).where(User.email == normalized))
-    if existing is not None:
-        # Deliberately the SAME exception (and, in the router, the same HTTP
-        # response) as any other registration failure would be vague about —
-        # see auth/router.py's comment on not disclosing account existence
-        # any more than the frontend's own UX already requires. Signup is the
-        # one place Supabase's own behavior (and this app's existing
-        # auth-errors.js message "このメールアドレスは既に登録されています") does
-        # disclose it, so this mirrors that rather than inventing stricter
-        # behavior the frontend does not expect.
-        raise EmailAlreadyRegistered()
-    if len(password) < settings.min_password_length:
-        raise AuthError(f"password must be at least {settings.min_password_length} characters")
+    async with _serialize_registration(db):
+        # Gates checked first, cheapest first, before ever touching the
+        # email uniqueness lookup or paying for an Argon2 hash — see
+        # docs/AUTH_ARCHITECTURE.md — "Registration cap" for the exact
+        # ordering this mirrors (acquire lock → check open → count → check
+        # cap → check duplicate email → hash → create → commit).
+        if not settings.registration_open:
+            raise RegistrationClosed()
+        if settings.max_registered_users is not None:
+            # Counts every row in `users` — there is no separate
+            # administrative/service-account class in this schema (see
+            # docs/AUTH_ARCHITECTURE.md), so this is genuinely "every
+            # account, including the presenter's own." Read inside the
+            # locked section so a second waiting request only sees this
+            # count after the first request's own commit/rollback has
+            # already happened — see _serialize_registration()'s docstring.
+            registered_count = await db.scalar(select(func.count()).select_from(User))
+            if (registered_count or 0) >= settings.max_registered_users:
+                raise RegistrationClosed()
 
-    user = User(
-        id=uuid.uuid4(),
-        email=normalized,
-        password_hash=hash_password(password),
-        is_active=True,
-        email_verified=not settings.require_email_verification,
-    )
-    db.add(user)
-    await db.flush()
-    db.add(Profile(user_id=user.id, display_name=display_name.strip()))
-    await db.flush()
-    return user
+        normalized = normalize_email(email)
+        existing = await db.scalar(select(User).where(User.email == normalized))
+        if existing is not None:
+            # Deliberately the SAME exception (and, in the router, the same
+            # HTTP response) as any other registration failure would be
+            # vague about — see auth/router.py's comment on not disclosing
+            # account existence any more than the frontend's own UX already
+            # requires. Signup is the one place Supabase's own behavior
+            # (and this app's existing auth-errors.js message
+            # "このメールアドレスは既に登録されています") does disclose it, so
+            # this mirrors that rather than inventing stricter behavior the
+            # frontend does not expect.
+            raise EmailAlreadyRegistered()
+        if len(password) < settings.min_password_length:
+            raise AuthError(f"password must be at least {settings.min_password_length} characters")
+
+        user = User(
+            id=uuid.uuid4(),
+            email=normalized,
+            password_hash=hash_password(password),
+            is_active=True,
+            email_verified=not settings.require_email_verification,
+        )
+        db.add(user)
+        await db.flush()
+        db.add(Profile(user_id=user.id, display_name=display_name.strip()))
+        await db.flush()
+        return user
 
 
 async def authenticate(db: AsyncSession, *, email: str, password: str) -> User:

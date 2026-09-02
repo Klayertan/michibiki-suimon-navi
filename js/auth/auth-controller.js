@@ -60,7 +60,8 @@ const ELEMENT_IDS = [
   // Login / onboarding screen.
   "authScreen", "authForm", "authTitle", "authSubtitle", "authEmailInput", "authPasswordInput",
   "authDisplayNameRow", "authDisplayNameInput", "authSubmitButton", "authSwitchRow",
-  "authSwitchPrompt", "authSwitchButton", "authGuestButton", "authMessage", "authCloseButton",
+  "authSwitchPrompt", "authSwitchButton", "authGuestButton", "authGuestNote", "authLimitedAccessNote",
+  "authMessage", "authCloseButton",
   // Header account control.
   "accountControl", "accountMenuButton", "accountMenuLabel", "accountMenu",
   "accountMenuIdentity", "accountMenuStatus", "accountMenuSync",
@@ -100,6 +101,7 @@ export class AuthController extends EventTarget {
     this.globalScope = options.globalScope || (typeof window !== "undefined" ? window : {});
 
     this.config = { configured: false, reason: "missing" };
+    this.requireAuth = false;
     this.authClient = null;
     this.store = null;
     this.syncService = null;
@@ -125,6 +127,11 @@ export class AuthController extends EventTarget {
 
     this.config = readCloudConfig(this.globalScope);
     this.config.redirectTo = resolveRedirectUrl(this.globalScope.location, this.config.redirectTo);
+    // The production login gate (docs/AUTH_ARCHITECTURE.md — "Production
+    // login gate"): once true, shouldShowLoginScreen() never returns false
+    // for an unauthenticated visitor, and continueAsGuest() below refuses to
+    // do anything — see both call sites for the full reasoning.
+    this.requireAuth = Boolean(this.config.requireAuth);
 
     if (!this.config.configured) {
       // The shipped state: no credentials committed, so there is no account
@@ -313,6 +320,13 @@ export class AuthController extends EventTarget {
   }
 
   continueAsGuest({ remember = true } = {}) {
+    if (this.requireAuth) {
+      // No bypass at all in production login-gate mode — the guest
+      // button/note are hidden and the close button stays hidden (see
+      // renderAuthScreen()), but this refuses even a stray/console call.
+      // See docs/AUTH_ARCHITECTURE.md — "Production login gate".
+      return;
+    }
     if (remember) {
       this.rememberGuestChoice(true);
     }
@@ -781,7 +795,8 @@ export class AuthController extends EventTarget {
     const visible = shouldShowLoginScreen({
       state: this.state,
       guestChosen: this.guestChosen(),
-      requested: this.loginRequested
+      requested: this.loginRequested,
+      requireAuth: this.requireAuth
     });
     el.authScreen.hidden = !visible;
     // The login screen is a full-page surface; leaving the app behind it
@@ -802,7 +817,17 @@ export class AuthController extends EventTarget {
     }
     // Only offer "close" when the farmer opened this themselves; on the very
     // first launch the two real choices are login and ログインせずに使う.
-    if (el.authCloseButton) el.authCloseButton.hidden = !this.loginRequested;
+    // Never offered at all in requireAuth mode — there is no way back to an
+    // app a signed-out visitor is not allowed to use.
+    if (el.authCloseButton) el.authCloseButton.hidden = this.requireAuth || !this.loginRequested;
+    // No guest path in requireAuth mode: hide the button and its
+    // reassurance note rather than leave a dead control that no-ops when
+    // pressed (continueAsGuest() refuses to act, but a visible, clickable
+    // button that silently does nothing reads as broken, not as "not
+    // available"). See docs/AUTH_ARCHITECTURE.md — "Production login gate".
+    if (el.authGuestButton) el.authGuestButton.hidden = this.requireAuth;
+    if (el.authGuestNote) el.authGuestNote.hidden = this.requireAuth;
+    if (el.authLimitedAccessNote) el.authLimitedAccessNote.hidden = !(this.requireAuth && signup);
   }
 
   renderAccountControl() {

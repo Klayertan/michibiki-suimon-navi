@@ -310,3 +310,181 @@ is only detected on the next explicit action (login, logout) or the next
 page load's `init()` call — there is no polling. This was a deliberate
 scope decision (Phase 9 did not ask for realtime revocation detection) and
 is not a regression from a capability the app relied on before.
+
+## 11. Registration cap
+
+For a presentation to judges: at most `Settings.max_registered_users`
+total accounts, and registration can be closed with one config flag
+afterward — see [SAKURA_CLOUD_DEPLOYMENT.md](SAKURA_CLOUD_DEPLOYMENT.md)
+"Presentation workflow" for the exact before/after commands. No invitation
+codes, no separate admin/service-account class — every row in `users`
+counts toward the cap, including whichever account the presenter registers
+for themself.
+
+**Two independent settings** (`app/config.py`):
+- `registration_open` (bool, default `true`) — an on/off switch, independent of the cap.
+- `max_registered_users` (int or unset, default unset = no cap) — evaluated only when set.
+
+Registration is rejected (before the duplicate-email check, before hashing
+anything) if `registration_open` is `false`, **or** the current row count in
+`users` is already `>= max_registered_users`. Both cases return the
+identical response — `403 {"detail": "現在、新しいアカウントの登録を受け付けていません。"}`
+— a visitor is never told which reason applies, and the remaining slot
+count is never disclosed anywhere in the API response. **Existing users can
+always still log in** — neither setting is consulted anywhere in the login
+path (`authenticate()`/`POST /api/auth/login` is entirely separate code from
+`register_user()`).
+
+**Fail closed on missing production config.** `app/main.py`'s startup check
+(the same pattern already used for `session_secret`) refuses to boot in
+production if `max_registered_users` is unset — an operator must set it
+explicitly; there is no code path where "forgot to configure this" silently
+becomes "unlimited registration in production." `registration_open` does
+not need the same treatment — its Pydantic type is a plain `bool`, so a
+genuinely malformed value (anything that isn't parseable as true/false)
+already fails to boot at all via normal Settings validation, and its
+sensible default (`true`) is the same value used before this feature
+existed (registration was always open).
+
+### Atomic enforcement — the concurrency problem and its fix
+
+The naive approach —
+
+```python
+count = await db.scalar(select(func.count()).select_from(User))
+if count < settings.max_registered_users:
+    ...create the user...
+```
+
+— races: two concurrent requests can both read `count = 9` before either
+has committed its insert, and both proceed, producing 11 rows for a cap of
+10. `app/auth/service.py`'s `register_user()` wraps the entire
+check-then-insert sequence (`_serialize_registration()`) in a critical
+section instead:
+
+```
+acquire registration lock
+  → check registration_open
+  → SELECT COUNT(*) FROM users
+  → reject if count >= max_registered_users
+  → check duplicate email
+  → hash password (Argon2id)
+  → INSERT user, INSERT profile
+  → commit (releases the lock)
+```
+
+**PostgreSQL (production): `pg_advisory_xact_lock`.** A transaction-scoped
+advisory lock, keyed by a fixed application-chosen constant
+(`_REGISTRATION_LOCK_KEY`). A second concurrent registration blocks *inside
+the database* at the lock-acquisition call until the first transaction
+commits or rolls back, at which point PostgreSQL releases the lock
+automatically — so the second request's own `SELECT COUNT(*)`, issued only
+after it acquires the lock, is guaranteed (under PostgreSQL's default READ
+COMMITTED isolation) to see the first request's already-committed row.
+Chosen over the alternatives considered:
+- a dedicated lock row + `SELECT ... FOR UPDATE` — works, but needs a new
+  table for exactly one lock, which an advisory lock doesn't.
+- a unique constraint — can express "at most one row with this value," not
+  "at most N rows total."
+
+**No schema change was needed.** The cap is enforced entirely in
+`app/auth/service.py`; `users` gained no new column, and no new table was
+added.
+
+**SQLite (this test suite's default, local dev without Docker):**
+`pg_advisory_xact_lock` does not exist, so `_serialize_registration()`
+falls back to a plain in-process `asyncio.Lock` — the same single-process
+tradeoff `app/security.py`'s `RateLimiter` already accepts, for the same
+underlying reason (no distributed/shared-database coordination primitive
+available without adding infrastructure this deployment doesn't have). It
+is enough to make the SQLite-backed tests meaningful for the *application-level
+orchestration* (the ordering above), but it is **not** what protects a real
+multi-connection PostgreSQL deployment.
+
+**Verification tiers — read before trusting this on faith:**
+`tests/test_registration_limit_concurrency.py` has two tests. The SQLite
+one runs always and was observed passing repeatedly against real concurrent
+`asyncio.gather()`'d requests (exactly one of two requests at the 9→10
+boundary succeeds; final count is always exactly 10, never 11). The
+PostgreSQL one is gated on `SUISUI_CLOUD_TEST_DATABASE_URL` and is
+**skipped** in this repository's local development environment (no
+PostgreSQL available) — it has not been observed passing anywhere yet; it
+runs for real only in CI's `integration` job. See
+[SAKURA_CLOUD_BACKEND.md](SAKURA_CLOUD_BACKEND.md) §10 for this project's
+verification-tier convention.
+
+## 12. Production login gate
+
+Separate from the registration cap: whether an **unauthenticated visitor**
+can use the app at all. Controlled entirely on the frontend by
+`config/cloud-config.js`'s `requireAuth` flag (parsed by
+`normalizeCloudConfig()` in `js/cloud/cloud-config.js`, `raw.requireAuth
+=== true` only — a stray truthy value like the string `"true"` does not
+count, and any misconfigured/unconfigured cloud result forces it back to
+`false` regardless of what was requested, so a broken config can never
+accidentally lock a farmer out of an app that isn't even cloud-configured).
+
+**This is a UX-layer gate, not the real security boundary.** The real
+boundary is unchanged: every `cloud_backend/` API route independently
+requires a valid session (`get_current_user`/`require_csrf` — see §2/§3),
+regardless of what the frontend does or does not render. `requireAuth`
+exists so a signed-out visitor never even sees the app's controls, not
+because the API would otherwise be reachable without a session — it never
+is.
+
+**How the gate works** (`js/auth/auth-state.js`'s `shouldShowLoginScreen()`,
+`js/auth/auth-controller.js`): when `requireAuth` is true, the full-screen
+login overlay (`#authScreen` — `position: fixed`, viewport-covering,
+`z-index: 3000`, already the one thing a signed-out-with-cloud-configured
+visitor could interact with even before this feature) is shown
+unconditionally for any non-authenticated state, checked **before** the
+existing `guestChosen`/`requested` logic — so a `ログインせずに使う` choice
+already stored in `localStorage` from **before** `requireAuth` was turned on
+cannot bypass it. The guest button, its reassurance note, and the screen's
+close button are all hidden (`renderAuthScreen()`), and
+`continueAsGuest()` itself refuses to act (returns immediately) as a second
+layer, in case anything still calls it (a stray event handler, a console
+call). A new `#authLimitedAccessNote` (「現在、このサービスは限定公開中です。」)
+shows only on the sign-up form when `requireAuth` is true — no invitation
+code, no displayed slot count, just a one-line explanation.
+
+**Verified against a real browser** (Playwright,
+`tests/browser/production-login-gate.spec.js`, mock provider, no real
+backend needed): an unauthenticated visitor sees only the auth screen with
+no guest path; the element under the pointer at the center of the viewport
+is confirmed to be the overlay itself, not the map or any Basic-mode
+control, behind it; Escape does not fall through to guest access; neither a
+hash-route navigation (`/#drone`) nor a full page reload bypasses the gate;
+a stored guest choice from before `requireAuth` was enabled is ignored;
+signing up shows the limited-access note and reaches the app; logging out
+returns to the gate (not to a guest-usable state); and — the negative case
+— with `requireAuth: false` (development mode) the guest path is confirmed
+completely unaffected. 8/8 passing.
+
+**Development vs. production is just this one flag**, not a separate code
+path: `config/cloud-config.js` ships `requireAuth: false` (alongside
+`provider: null`) so the currently-live site at
+<https://suisuinavi.sakura.ne.jp/> is completely unaffected by this
+feature's existence — turning the gate on requires deliberately editing
+that file, and doing so only makes sense once `apiBaseUrl` also points at a
+real, live Sakura Cloud API (a `requireAuth: true` with no working backend
+behind it would lock out every visitor, including the presenter). See
+[SAKURA_CLOUD_DEPLOYMENT.md](SAKURA_CLOUD_DEPLOYMENT.md) — "Presentation
+workflow."
+
+**Offline behavior is unchanged for an already-authenticated farmer** — see
+§10's offline identity cache. `requireAuth` only affects a visitor who has
+never signed in on this device at all; someone who signed in previously and
+later loses signal still gets `AUTH_OFFLINE_AUTHENTICATED`, their cached
+local field data, and no re-login prompt, exactly as before. The one
+explicit security-relevant limitation, stated plainly: the cached identity
+this falls back to is **not** equivalent to a fresh, server-verified
+session — it is a non-secret, non-authenticating label (id/email/display
+name only) that exists purely to pick the correct local storage namespace
+and render "who is this" while offline; it grants no access to any cloud
+API endpoint on its own, since every endpoint re-checks the real session
+cookie independently (§2). A device that has never held a valid session
+cookie cannot manufacture this cache from nothing (it is written only
+inside `init()`/`signIn()`/`signUp()`'s success paths — see §10) — so an
+attacker with only local `localStorage` access to a shared device, but
+never a valid session, gains nothing from this cache.

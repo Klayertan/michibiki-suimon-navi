@@ -48,6 +48,11 @@ const EMPTY_CONFIG = Object.freeze({
   apiBaseUrl: "",
   redirectTo: null,
   sdkUrl: DEFAULT_SUPABASE_SDK_URL,
+  // false — never true on an unconfigured/misconfigured result. There is
+  // nothing to require authentication for if there is no cloud at all; a
+  // misconfigured value here must never accidentally lock a farmer out of
+  // the offline app. See requireAuth's own comment below.
+  requireAuth: false,
   configured: false,
   reason: "missing"
 });
@@ -80,6 +85,14 @@ export function normalizeCloudConfig(raw) {
   const apiBaseUrl = text(raw.apiBaseUrl).replace(/\/+$/, "");
   const redirectTo = text(raw.redirectTo) || null;
   const sdkUrl = text(raw.sdkUrl) || DEFAULT_SUPABASE_SDK_URL;
+  // Strict `=== true` on purpose, not a truthy coercion: this flag's failure
+  // direction matters. Anything unconfigured/misconfigured below always
+  // returns EMPTY_CONFIG's requireAuth: false (never locks a farmer out of
+  // an app that isn't even cloud-configured), and only an exact `true`
+  // literal — never a stray string/number — turns the production login gate
+  // on. See js/auth/auth-state.js's shouldShowLoginScreen() and
+  // docs/AUTH_ARCHITECTURE.md — "Production login gate".
+  const requireAuth = raw.requireAuth === true;
 
   if (!provider || !KNOWN_PROVIDERS.includes(provider)) {
     return { ...EMPTY_CONFIG, provider, url, anonKey, apiBaseUrl, redirectTo, sdkUrl, reason: "provider" };
@@ -88,8 +101,10 @@ export function normalizeCloudConfig(raw) {
     // The in-memory provider used by the browser tests. It needs no
     // credentials and is only ever reachable when a caller has explicitly
     // written `provider: "mock"` into the config, which the shipped file
-    // does not do.
-    return { provider, url: "", anonKey: "", apiBaseUrl: "", redirectTo, sdkUrl, configured: true, reason: null };
+    // does not do. requireAuth IS honored here (unlike every other mock
+    // field) specifically so the production login gate can be exercised in
+    // browser tests without a real backend.
+    return { provider, url: "", anonKey: "", apiBaseUrl: "", redirectTo, sdkUrl, requireAuth, configured: true, reason: null };
   }
   if (provider === PROVIDER_SAKURA) {
     // No anonKey/service_role concept at all: cloud_backend authenticates
@@ -99,7 +114,7 @@ export function normalizeCloudConfig(raw) {
     if (!apiBaseUrl) {
       return { ...EMPTY_CONFIG, provider, url, anonKey, apiBaseUrl, redirectTo, sdkUrl, reason: "api_base_url" };
     }
-    return { provider, url: "", anonKey: "", apiBaseUrl, redirectTo, sdkUrl, configured: true, reason: null };
+    return { provider, url: "", anonKey: "", apiBaseUrl, redirectTo, sdkUrl, requireAuth, configured: true, reason: null };
   }
   if (!url || !anonKey) {
     return { ...EMPTY_CONFIG, provider, url, anonKey, apiBaseUrl, redirectTo, sdkUrl, reason: "credentials" };
@@ -109,7 +124,7 @@ export function normalizeCloudConfig(raw) {
     // browser bundle bypasses every RLS policy in docs/SUPABASE_SETUP.md.
     return { ...EMPTY_CONFIG, provider, url, anonKey: "", apiBaseUrl, redirectTo, sdkUrl, reason: "service_role_key" };
   }
-  return { provider, url, anonKey, apiBaseUrl: "", redirectTo, sdkUrl, configured: true, reason: null };
+  return { provider, url, anonKey, apiBaseUrl: "", redirectTo, sdkUrl, requireAuth, configured: true, reason: null };
 }
 
 /**

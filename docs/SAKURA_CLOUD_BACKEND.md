@@ -308,22 +308,36 @@ model (Phase 5) genuinely end-to-end. It does **not** verify PostgreSQL-specific
 SQL (the `ON CONFLICT ON CONSTRAINT` upserts in `app/api/fields.py` etc.) —
 that gap is covered by:
 
-### 10.4 pytest suite — verified (97/97 passing), two backends
+### 10.4 pytest suite — verified (107 passed, 1 skipped), two backends
 
 `cloud_backend/tests/` runs by default against in-memory SQLite (fast, no
 external dependency). The same suite can also run against a real PostgreSQL
 by setting `SUISUI_CLOUD_TEST_DATABASE_URL` — this is exactly what CI's
 `integration` job does (§9), the only place the PostgreSQL-specific named
-`ON CONFLICT ON CONSTRAINT` path is exercised for real. Locally, only the
-SQLite tier was actually run and observed passing (97/97) — the PostgreSQL
-tier has not been executed anywhere yet, since it requires either Docker
-(unavailable) or the CI run this task was told not to trigger by pushing.
+`ON CONFLICT ON CONSTRAINT` path (and the registration cap's
+`pg_advisory_xact_lock` — see [AUTH_ARCHITECTURE.md](AUTH_ARCHITECTURE.md)
+§11) is exercised for real. Locally, only the SQLite tier was actually run
+and observed passing (107 passed, 1 skipped — the one skip is
+`test_registration_limit_concurrency.py`'s PostgreSQL-only test, skipping
+itself cleanly with an explicit reason) — the PostgreSQL tier has not been
+executed anywhere yet, since it requires either Docker (unavailable) or the
+CI run this task was told not to trigger by pushing.
 
 ### 10.5 Frontend unit tests — verified
 
-`npm test` (Node's built-in test runner, `tests/unit/*.test.js`): 483/483
-passing, including 4 new tests for the `sakura` provider branch added to
-`js/cloud/cloud-config.js`. Zero regressions in the pre-existing 479.
+`npm test` (Node's built-in test runner, `tests/unit/*.test.js`): all
+passing, including the `sakura` provider branch and `requireAuth` parsing
+tests added to `js/cloud/cloud-config.js`, and the `requireAuth`/production-
+login-gate tests added to `js/auth/auth-state.js`'s suite. Zero regressions
+anywhere else.
+
+### 10.6 Production login gate — verified against a real browser
+
+`npx playwright test tests/browser/production-login-gate.spec.js`: 8/8
+passing (mock provider, no real backend needed) — see
+[AUTH_ARCHITECTURE.md](AUTH_ARCHITECTURE.md) §12 for exactly what each test
+proves. The pre-existing `tests/browser/auth-cloud-fields.spec.js` (35
+tests) was re-run in full afterward and is unaffected — zero regressions.
 
 ## 11. Supabase provider status
 
@@ -343,7 +357,21 @@ Supabase adapter entirely is a separate decision for later, once the Sakura
 provider has real production hours behind it — there was no reason to
 delete tested, working fallback code as part of this task.
 
-## 12. What is NOT built yet
+## 12. Registration cap and production login gate
+
+At most `SUISUI_CLOUD_MAX_REGISTERED_USERS` total accounts, atomically
+enforced (a PostgreSQL advisory lock — no schema change), plus a frontend
+`requireAuth` flag that blocks all unauthenticated access once a real
+deployment is live. Built for presenting SuiSuiNavi to judges with a
+capped, no-invitation-code account limit. Full design, the exact
+concurrency strategy, and the presentation before/after workflow:
+[AUTH_ARCHITECTURE.md](AUTH_ARCHITECTURE.md) §11–12 and
+[SAKURA_CLOUD_DEPLOYMENT.md](SAKURA_CLOUD_DEPLOYMENT.md) — "Presentation
+workflow." **Ships inert**: `config/cloud-config.js` still ships
+`provider: null` / `requireAuth: false`, so none of this affects the
+currently-live site.
+
+## 13. What is NOT built yet
 
 - Email verification / password-reset UI and the actual sending of
   verification/reset emails — `app/email/sender.py` exists as an

@@ -168,10 +168,14 @@ except where noted:
 | `SUISUI_CLOUD_ALLOWED_ORIGINS` | `https://suisuinavi.sakura.ne.jp` |
 | `SUISUI_CLOUD_REQUIRE_EMAIL_VERIFICATION` | `false`, until SMTP (below) is actually configured — see [AUTH_ARCHITECTURE.md](AUTH_ARCHITECTURE.md) §7 |
 | `SUISUI_CLOUD_SMTP_*` | Unset until an SMTP provider is chosen — optional, not required for first deployment |
+| `SUISUI_CLOUD_REGISTRATION_OPEN` | `true` before a presentation, `false` after — see §11 below |
+| `SUISUI_CLOUD_MAX_REGISTERED_USERS` | `10` for a presentation — **required**, not optional, once `SUISUI_CLOUD_ENVIRONMENT=production` (see below) |
 
 `SUISUI_CLOUD_ENVIRONMENT=production` matters beyond labeling: `app/main.py`
-refuses to boot if `SUISUI_CLOUD_SESSION_SECRET` is empty while in this
-mode, cookies get `Secure` set, and `/docs`/`/openapi.json` are disabled.
+refuses to boot if `SUISUI_CLOUD_SESSION_SECRET` **or**
+`SUISUI_CLOUD_MAX_REGISTERED_USERS` is unset while in this mode (fail
+closed — see [AUTH_ARCHITECTURE.md](AUTH_ARCHITECTURE.md) §11), cookies get
+`Secure` set, and `/docs`/`/openapi.json` are disabled.
 
 ## 7. Migrations
 
@@ -252,3 +256,77 @@ re-run the deploy job, or manually `docker compose up -d --build` a known
 prior commit's checkout on the VM. A schema migration is the one piece that
 doesn't automatically "revert" alongside a code rollback — see §8's note on
 preferring forward-fixing migrations over `downgrade()` in production.
+
+## 11. Presentation workflow
+
+For showing SuiSuiNavi to judges with a capped, no-invitation-code account
+limit — see [AUTH_ARCHITECTURE.md](AUTH_ARCHITECTURE.md) §11–12 for the
+full design (atomic 10-user cap, production login gate). **None of this is
+live yet** — it requires the real Sakura Cloud VM (§2) and the frontend's
+`config/cloud-config.js` to actually be switched on (§below), neither of
+which has happened.
+
+### Before the presentation
+
+On the VM's `.env` (or wherever `docker-compose.yml` reads its environment
+— §6):
+
+```bash
+SUISUI_CLOUD_REGISTRATION_OPEN=true
+SUISUI_CLOUD_MAX_REGISTERED_USERS=10
+```
+
+And in the frontend's `config/cloud-config.js` (only once the real API is
+actually live at a real `apiBaseUrl` — never before):
+
+```js
+window.SUISUI_CLOUD_CONFIG ??= {
+  provider: "sakura",
+  apiBaseUrl: "https://REAL-API-HOST",
+  requireAuth: true
+};
+```
+
+With this in place: a judge opens the site, sees only the login/sign-up
+screen (no 「ログインせずに使う」), creates an account (表示名 /
+メールアドレス / パスワード, no invitation code, a
+「現在、このサービスは限定公開中です。」 note shown, no slot count
+displayed), and uses the app. Maximum 10 total accounts, ever, including
+the presenter's own demo account — the 11th attempt gets
+`403 現在、新しいアカウントの登録を受け付けていません。` with no indication
+of why.
+
+### After the presentation — closing registration
+
+SSH to the VM and, in the `cloud_backend/` directory holding `docker-compose.yml`:
+
+```bash
+# Edit .env: change
+#   SUISUI_CLOUD_REGISTRATION_OPEN=true
+# to
+#   SUISUI_CLOUD_REGISTRATION_OPEN=false
+# (leave SUISUI_CLOUD_MAX_REGISTERED_USERS as-is — it no longer matters
+# once registration_open is false, but there is no reason to unset it)
+
+docker compose up -d --no-deps --build api
+```
+
+`--no-deps` restarts only the `api` service (picking up the new `.env`
+value), leaving the `db` (PostgreSQL) container — and every existing
+session/account — completely untouched. Existing users keep working
+(`POST /api/auth/login` never consults `registration_open`); only
+`POST /api/auth/register` starts returning 403.
+
+**This exact command has not been run against any real server** — no
+Sakura Cloud VM exists yet (§2). It is documented here so it is ready the
+moment one does; do not treat this as evidence the command has been
+exercised.
+
+### Reopening registration later, if ever needed
+
+Reverse the `.env` edit (`SUISUI_CLOUD_REGISTRATION_OPEN=true`) and repeat
+the same `docker compose up -d --no-deps --build api`. The 10-account cap
+still applies — reopening does not raise it; edit
+`SUISUI_CLOUD_MAX_REGISTERED_USERS` too if a higher cap is actually wanted,
+understanding that raising it changes what "at most 10" meant for anyone
+who was told that number.

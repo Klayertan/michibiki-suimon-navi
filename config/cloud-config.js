@@ -30,6 +30,17 @@
  * to create and what apiBaseUrl to fill in once it exists. Do not guess at a
  * hostname here.
  *
+ * requireAuth (sakura provider only): when true, an unauthenticated visitor
+ * sees ONLY the login/registration screen — no 「ログインせずに使う」, no way to
+ * close it — until they sign in. This is the presentation/limited-access
+ * mode (see docs/AUTH_ARCHITECTURE.md — "Production login gate"), meant to
+ * be turned on ONLY once a real Sakura Cloud API is actually live at
+ * apiBaseUrl; turning it on with no working apiBaseUrl would lock every
+ * visitor out of an app that has nothing behind it. Ships false here for
+ * exactly that reason — flip it only alongside filling in apiBaseUrl above,
+ * never before. Never a secret: this is frontend UX behavior only, the real
+ * access control is the cloud API's own session check on every request.
+ *
  * ---------------------------------------------------------------------------
  * provider: "supabase" — the earlier Supabase-backed implementation. Kept
  *                         working and tested as a documented alternative;
@@ -72,6 +83,11 @@ window.SUISUI_CLOUD_CONFIG ??= {
   // -- sakura provider ---------------------------------------------------
   // e.g. "https://api.suisuinavi.sakura.ne.jp" — see docs/SAKURA_CLOUD_DEPLOYMENT.md.
   apiBaseUrl: "",
+
+  // Presentation/limited-access login gate — see the module comment above.
+  // Stays false until a real apiBaseUrl is filled in above; do not flip
+  // this on its own.
+  requireAuth: false,
 
   // -- supabase provider ---------------------------------------------------
   // e.g. "https://abcdefghijklmnop.supabase.co"
