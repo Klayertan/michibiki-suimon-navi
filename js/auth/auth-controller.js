@@ -20,6 +20,7 @@
 
 import {
   PROVIDER_MOCK,
+  PROVIDER_SAKURA,
   readCloudConfig,
   resolveRedirectUrl,
   unconfiguredReasonText
@@ -183,6 +184,17 @@ export class AuthController extends EventTarget {
         },
         store: this.store
       };
+    } else if (this.config.provider === PROVIDER_SAKURA) {
+      const [{ SakuraAuthClient }, { SakuraCloudStore }] = await Promise.all([
+        import("./sakura-auth-client.js"),
+        import("../cloud/sakura-cloud-store.js")
+      ]);
+      this.authClient = new SakuraAuthClient(this.config);
+      await this.authClient.init();
+      this.store = new SakuraCloudStore({
+        apiBaseUrl: this.config.apiBaseUrl,
+        getCsrfToken: () => this.authClient.getCsrfToken()
+      });
     } else {
       const [{ SupabaseAuthClient }, { SupabaseCloudStore }] = await Promise.all([
         import("./supabase-auth-client.js"),

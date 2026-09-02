@@ -116,7 +116,7 @@ flowchart TD
 | 必要湛水量の算出 | ✅ 実装済み |
 | 出典・確認状況のUI表示 | ✅ 実装済み |
 | 降雨にもとづく水門アドバイス | ✅ 実装済み |
-| アカウント・クラウド同期（Supabase） | ✅ 実装済み |
+| アカウント・クラウド同期（自前バックエンド／Sakura Cloud、または Supabase） | ✅ 実装済み（`config/cloud-config.js`未設定のため既定は無効。[詳細](docs/SAKURA_CLOUD_BACKEND.md)） |
 | ドローンMAVLinkテレメトリ表示 | ✅ 実装済み（既定はモック、**飛行操作は非実装**） |
 | RealSenseによる雑草・害虫検出（Jetson） | 🧪 実験的（Webアプリ未接続） |
 | RealSenseによる水位自動計測 | 🗓 将来構想（**未実装**） |
@@ -142,6 +142,9 @@ flowchart TD
 | [`docs/SATELLITE_ASSURANCE.md`](./docs/SATELLITE_ASSURANCE.md) | Satellite Assuranceの計算根拠・データモデル |
 | [`docs/LEAFLET_TECHNIQUES.md`](./docs/LEAFLET_TECHNIQUES.md) | 地図実装の技術メモ |
 | [`docs/MAVLINK_OPERATOR_GUIDE.md`](./docs/MAVLINK_OPERATOR_GUIDE.md) | ドローン連携の運用手順・安全制限 |
+| [`docs/SAKURA_CLOUD_BACKEND.md`](./docs/SAKURA_CLOUD_BACKEND.md) | `cloud_backend/`（自前アカウント/圃場API）の構成・DBスキーマ・検証状況 |
+| [`docs/AUTH_ARCHITECTURE.md`](./docs/AUTH_ARCHITECTURE.md) | 認証・セッション・CSRF・複数ユーザー分離の設計 |
+| [`docs/SAKURA_CLOUD_DEPLOYMENT.md`](./docs/SAKURA_CLOUD_DEPLOYMENT.md) | Sakura Cloud VMへの手動セットアップ手順（未実施） |
 
 **根拠の追跡可能性：** 画面に出る数値 → `js/water/water-management-sources.js` の登録 → `docs/RESEARCH_REFERENCES.md` の書誌情報、の順にたどれます。出典を確認できない数値はコードに入れていません。
 
@@ -156,7 +159,7 @@ flowchart TD
 - **気象データ：** [Open-Meteo](https://open-meteo.com/)（無料・APIキー不要）から水門座標で自動取得。失敗時は `data/weather.json` にフォールバック
 - **水管理モデル：** `js/water/` — DOM非依存の純粋モジュール群、ユニットテスト済み
 - **アプリ：** プレーンなHTML/CSS/JS。本番は [suisuinavi.sakura.ne.jp](https://suisuinavi.sakura.ne.jp/)（さくらインターネット、`main`push時にGitHub Actionsで自動デプロイ）。GitHub Pagesは副系として稼働中
-- **クラウド：** Supabase（アカウント＋圃場同期）。ローカルストレージが正、同期は追加的
+- **クラウド：** 自前の `cloud_backend/`（FastAPI + PostgreSQL、Sakura Cloud VMへセルフホスト予定）が本番の想定。Supabaseアダプターも実装・テスト済みのまま選択可能。いずれもローカルストレージが正、同期は追加的（[詳細](docs/SAKURA_CLOUD_BACKEND.md)）
 
 ## 使い方 (How to use)
 

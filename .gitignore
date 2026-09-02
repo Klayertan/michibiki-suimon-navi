@@ -162,6 +162,9 @@ training/
 # depend on globally installed packages) but is never committed.
 .venv/
 venv/
+# cloud_backend/'s own venv (see cloud_backend/requirements.txt) — same
+# never-committed rule as backend/'s .venv above.
+.venv-cloud/
 __pycache__/
 *.py[cod]
 *.egg-info/

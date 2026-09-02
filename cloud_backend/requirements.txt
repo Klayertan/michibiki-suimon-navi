@@ -1,0 +1,25 @@
+# SuisuiNavi cloud (accounts/fields) API — runtime dependencies.
+#
+# Install into its own repository-local virtual environment, separate from
+# backend/'s (the local MAVLink service) — the two are different deployment
+# targets and must not share a dependency set:
+#   py -3 -m venv .venv-cloud
+#   .venv-cloud\Scripts\python.exe -m pip install -r cloud_backend/requirements.txt
+#
+# Versions are pinned with a compatible-release bound, same convention as
+# backend/requirements.txt.
+
+fastapi~=0.115.0
+uvicorn[standard]~=0.32.0
+pydantic~=2.9.0
+pydantic-settings~=2.5.0
+# Required for pydantic's EmailStr (used by the register/login schemas).
+email-validator~=2.2.0
+
+sqlalchemy~=2.0.35
+asyncpg~=0.29.0
+alembic~=1.13.2
+psycopg2-binary~=2.9.9
+
+# Argon2id password hashing (PHC-recommended default) — no homemade crypto.
+argon2-cffi~=23.1.0

@@ -1,26 +1,36 @@
 // Cloud/auth configuration resolution.
 //
-// This app is a static site served from GitHub Pages: there is no build step
-// and no server to inject environment variables, so configuration arrives as
-// a plain committed file (`config/cloud-config.js`) that assigns
-// `window.SUISUI_CLOUD_CONFIG`. See docs/SUPABASE_SETUP.md.
+// This app is a static site: there is no build step and no server to inject
+// environment variables, so configuration arrives as a plain committed file
+// (`config/cloud-config.js`) that assigns `window.SUISUI_CLOUD_CONFIG`. See
+// docs/SAKURA_CLOUD_BACKEND.md (the "sakura" provider, the primary/production
+// choice — see docs/AUTH_ARCHITECTURE.md) and docs/SUPABASE_SETUP.md (the
+// earlier "supabase" provider, kept as a tested, documented alternative —
+// see docs/SAKURA_CLOUD_BACKEND.md's "Supabase provider status" section for
+// why it was not deleted).
 //
-// WHAT MAY GO IN THAT FILE: the Supabase project URL and the *anon /
-// publishable* key only. Those two values are designed to be shipped to
-// browsers — every request they authorize is still evaluated by Row Level
-// Security against auth.uid(). The `service_role` key, database passwords and
-// any admin credential must NEVER appear here or anywhere else in this repo;
-// they bypass RLS entirely.
+// WHAT MAY GO IN THAT FILE:
+//   - provider: "sakura"   -> apiBaseUrl only (e.g. "https://api.suisuinavi.sakura.ne.jp").
+//     No credential of any kind belongs here — cloud_backend authenticates
+//     entirely via an HttpOnly session cookie the browser already holds
+//     after login; there is nothing secret for this file to carry.
+//   - provider: "supabase" -> url and the *anon / publishable* key only.
+//     Those two values are designed to be shipped to browsers — every
+//     request they authorize is still evaluated by Row Level Security
+//     against auth.uid(). The `service_role` key, database passwords and any
+//     admin credential must NEVER appear here or anywhere else in this repo;
+//     they bypass RLS entirely.
 //
 // Pure module: no DOM, no network, no side effects. Everything here is a
 // function of the object it is handed, so it is unit-testable and cannot
 // depend on load order.
 
 export const PROVIDER_SUPABASE = "supabase";
+export const PROVIDER_SAKURA = "sakura";
 export const PROVIDER_MOCK = "mock";
 
 /** Providers the app knows how to build a client for. */
-export const KNOWN_PROVIDERS = [PROVIDER_SUPABASE, PROVIDER_MOCK];
+export const KNOWN_PROVIDERS = [PROVIDER_SUPABASE, PROVIDER_SAKURA, PROVIDER_MOCK];
 
 /**
  * Where the Supabase JS SDK is fetched from when a Supabase project is
@@ -35,6 +45,7 @@ const EMPTY_CONFIG = Object.freeze({
   provider: null,
   url: "",
   anonKey: "",
+  apiBaseUrl: "",
   redirectTo: null,
   sdkUrl: DEFAULT_SUPABASE_SDK_URL,
   configured: false,
@@ -56,6 +67,7 @@ function text(value) {
  *   - "missing"          no config object at all
  *   - "provider"         provider unset or not one we can build
  *   - "credentials"      supabase provider without url/anonKey
+ *   - "api_base_url"     sakura provider without apiBaseUrl
  *   - "service_role_key" a service_role key was pasted in by mistake
  */
 export function normalizeCloudConfig(raw) {
@@ -65,28 +77,39 @@ export function normalizeCloudConfig(raw) {
   const provider = text(raw.provider).toLowerCase() || null;
   const url = text(raw.url).replace(/\/+$/, "");
   const anonKey = text(raw.anonKey);
+  const apiBaseUrl = text(raw.apiBaseUrl).replace(/\/+$/, "");
   const redirectTo = text(raw.redirectTo) || null;
   const sdkUrl = text(raw.sdkUrl) || DEFAULT_SUPABASE_SDK_URL;
 
   if (!provider || !KNOWN_PROVIDERS.includes(provider)) {
-    return { ...EMPTY_CONFIG, provider, url, anonKey, redirectTo, sdkUrl, reason: "provider" };
+    return { ...EMPTY_CONFIG, provider, url, anonKey, apiBaseUrl, redirectTo, sdkUrl, reason: "provider" };
   }
   if (provider === PROVIDER_MOCK) {
     // The in-memory provider used by the browser tests. It needs no
     // credentials and is only ever reachable when a caller has explicitly
     // written `provider: "mock"` into the config, which the shipped file
     // does not do.
-    return { provider, url: "", anonKey: "", redirectTo, sdkUrl, configured: true, reason: null };
+    return { provider, url: "", anonKey: "", apiBaseUrl: "", redirectTo, sdkUrl, configured: true, reason: null };
+  }
+  if (provider === PROVIDER_SAKURA) {
+    // No anonKey/service_role concept at all: cloud_backend authenticates
+    // via an HttpOnly session cookie the browser already holds after
+    // login, never a key shipped in this file. apiBaseUrl is the only
+    // required value.
+    if (!apiBaseUrl) {
+      return { ...EMPTY_CONFIG, provider, url, anonKey, apiBaseUrl, redirectTo, sdkUrl, reason: "api_base_url" };
+    }
+    return { provider, url: "", anonKey: "", apiBaseUrl, redirectTo, sdkUrl, configured: true, reason: null };
   }
   if (!url || !anonKey) {
-    return { ...EMPTY_CONFIG, provider, url, anonKey, redirectTo, sdkUrl, reason: "credentials" };
+    return { ...EMPTY_CONFIG, provider, url, anonKey, apiBaseUrl, redirectTo, sdkUrl, reason: "credentials" };
   }
   if (looksLikeServiceRoleKey(anonKey)) {
     // Refusing to start is the right failure here: a service_role key in a
     // browser bundle bypasses every RLS policy in docs/SUPABASE_SETUP.md.
-    return { ...EMPTY_CONFIG, provider, url, anonKey: "", redirectTo, sdkUrl, reason: "service_role_key" };
+    return { ...EMPTY_CONFIG, provider, url, anonKey: "", apiBaseUrl, redirectTo, sdkUrl, reason: "service_role_key" };
   }
-  return { provider, url, anonKey, redirectTo, sdkUrl, configured: true, reason: null };
+  return { provider, url, anonKey, apiBaseUrl: "", redirectTo, sdkUrl, configured: true, reason: null };
 }
 
 /**
@@ -159,6 +182,8 @@ export function unconfiguredReasonText(reason) {
       return "クラウド接続先が設定されていません。";
     case "credentials":
       return "クラウドのURLまたは公開キーが設定されていません。";
+    case "api_base_url":
+      return "クラウドAPIの接続先（apiBaseUrl）が設定されていません。";
     case "service_role_key":
       return "設定されたキーは公開してはいけない種類のキーです。公開用（anon / publishable）キーを設定してください。";
     default:

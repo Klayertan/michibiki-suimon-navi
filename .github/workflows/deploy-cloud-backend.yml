@@ -1,0 +1,98 @@
+name: Cloud backend (accounts/fields API)
+
+# Tests-only for now — there is deliberately no deploy job below yet. This
+# repository does not yet have a real Sakura Cloud VM, and this workflow
+# must not pretend a deployment happened when no server exists. Once a VM
+# is provisioned and its GitHub Actions secrets are configured (see
+# docs/SAKURA_CLOUD_DEPLOYMENT.md's manual setup checklist), a `deploy` job
+# should be added here, gated on `needs: [test, integration]` — following
+# the same SSH/rsync-or-Docker-Compose pattern as
+# deploy-sakura.yml, but as a SEPARATE job/workflow from it. This workflow
+# must never touch the Sakura Rental Server or /home/suisuinavi/www/ — that
+# remains deploy-sakura.yml's job alone.
+#
+# Two independent verification tiers run below (see
+# docs/SAKURA_CLOUD_BACKEND.md — "Verification tiers"):
+#   - `test`: the full pytest suite against in-memory SQLite. Fast, and
+#     what a contributor's own machine runs (see cloud_backend/README.md).
+#   - `integration`: the SAME pytest suite, and a real `alembic upgrade
+#     head`, against a real ephemeral PostgreSQL service container — the
+#     closest this CI gets to production without an actual Sakura Cloud
+#     VM. This is what actually exercises the PostgreSQL-only ON CONFLICT
+#     constraint syntax the SQLite-backed `test` job cannot fully verify.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "cloud_backend/**"
+      - ".github/workflows/deploy-cloud-backend.yml"
+  pull_request:
+    paths:
+      - "cloud_backend/**"
+  workflow_dispatch: {}
+
+jobs:
+  test:
+    name: Unit tests (SQLite)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: cloud_backend/requirements*.txt
+
+      - name: Install dependencies
+        working-directory: cloud_backend
+        run: pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Run pytest
+        working-directory: cloud_backend
+        env:
+          SUISUI_CLOUD_SESSION_SECRET: ci-unit-test-secret-not-for-production
+        run: python -m pytest -q
+
+  integration:
+    name: Integration tests (real PostgreSQL)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: suisuinavi_ci
+          POSTGRES_PASSWORD: suisuinavi_ci
+          POSTGRES_DB: suisuinavi_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U suisuinavi_ci -d suisuinavi_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      SUISUI_CLOUD_SESSION_SECRET: ci-integration-test-secret-not-for-production
+      SUISUI_CLOUD_DATABASE_URL: postgresql+asyncpg://suisuinavi_ci:suisuinavi_ci@localhost:5432/suisuinavi_ci
+      SUISUI_CLOUD_TEST_DATABASE_URL: postgresql+asyncpg://suisuinavi_ci:suisuinavi_ci@localhost:5432/suisuinavi_ci
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: cloud_backend/requirements*.txt
+
+      - name: Install dependencies
+        working-directory: cloud_backend
+        run: pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Run Alembic migrations against real PostgreSQL
+        working-directory: cloud_backend
+        run: python -m alembic upgrade head
+
+      - name: Run pytest against real PostgreSQL
+        working-directory: cloud_backend
+        run: python -m pytest -q

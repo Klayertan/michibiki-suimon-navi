@@ -1,5 +1,14 @@
 # Supabase setup — スイスイナビ accounts
 
+> **This is the alternative cloud provider.** Production is intended to run
+> on the self-hosted `provider: "sakura"` backend instead — see
+> [SAKURA_CLOUD_BACKEND.md](SAKURA_CLOUD_BACKEND.md),
+> [AUTH_ARCHITECTURE.md](AUTH_ARCHITECTURE.md), and
+> [SAKURA_CLOUD_DEPLOYMENT.md](SAKURA_CLOUD_DEPLOYMENT.md). Supabase remains
+> fully implemented, tested, and selectable (`config/cloud-config.js`'s
+> `provider: "supabase"`) and this document is kept accurate for anyone who
+> chooses it — it just isn't the primary path going forward.
+
 Everything in this document is **external configuration**. No Supabase project
 was created for you, nothing was provisioned, and no credentials exist in this
 repository. Until you complete these steps the app runs exactly as it always

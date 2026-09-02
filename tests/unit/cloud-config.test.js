@@ -9,6 +9,45 @@ import {
   unconfiguredReasonText
 } from "../../js/cloud/cloud-config.js";
 
+test("sakura needs an apiBaseUrl", () => {
+  const config = normalizeCloudConfig({ provider: "sakura" });
+  assert.equal(config.configured, false);
+  assert.equal(config.reason, "api_base_url");
+  assert.match(unconfiguredReasonText("api_base_url"), /apiBaseUrl/);
+});
+
+test("a sakura config with only apiBaseUrl is configured, with a trailing slash trimmed, and needs no key", () => {
+  const config = normalizeCloudConfig({ provider: "sakura", apiBaseUrl: "https://api.suisuinavi.sakura.ne.jp/" });
+  assert.equal(config.configured, true);
+  assert.equal(config.reason, null);
+  assert.equal(config.apiBaseUrl, "https://api.suisuinavi.sakura.ne.jp");
+  assert.equal(config.url, "");
+  assert.equal(config.anonKey, "");
+});
+
+test("sakura ignores a stray url/anonKey rather than requiring or rejecting them", () => {
+  const config = normalizeCloudConfig({
+    provider: "sakura",
+    apiBaseUrl: "https://api.suisuinavi.sakura.ne.jp",
+    url: "https://leftover.supabase.co",
+    anonKey: "leftover-key"
+  });
+  assert.equal(config.configured, true);
+  assert.equal(config.url, "");
+  assert.equal(config.anonKey, "");
+});
+
+test("a supabase config never carries a stray apiBaseUrl", () => {
+  const config = normalizeCloudConfig({
+    provider: "supabase",
+    url: "https://abc.supabase.co",
+    anonKey: jwtWithRole("anon"),
+    apiBaseUrl: "https://leftover.example.com"
+  });
+  assert.equal(config.configured, true);
+  assert.equal(config.apiBaseUrl, "");
+});
+
 /** A JWT-shaped key with the given role claim, built the way Supabase does. */
 function jwtWithRole(role) {
   const payload = Buffer.from(JSON.stringify({ iss: "supabase", role })).toString("base64url");

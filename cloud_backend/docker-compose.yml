@@ -1,0 +1,63 @@
+# Local integration environment (Phase 15): `docker compose up` starts a
+# real PostgreSQL alongside the real cloud API, so the actual frontend can
+# be pointed at it for a genuine (not SQLite-substituted) end-to-end check
+# before anything touches a real Sakura Cloud VM. This is NOT the
+# production topology — production puts a reverse proxy (Caddy/Nginx) in
+# front of the API and never publishes Postgres's port at all; see
+# docs/SAKURA_CLOUD_DEPLOYMENT.md for that. Here, port 8000 is published
+# directly so a browser/frontend running on the same machine can reach it,
+# and Postgres's port is published too only so a developer can inspect the
+# database with a local client — neither is how the real deployment looks.
+#
+# Usage:
+#   cp .env.example .env      # then edit .env — see that file's comments
+#   docker compose up --build
+#   curl http://localhost:8000/api/health
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-suisuinavi}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-suisuinavi}
+    volumes:
+      - suisui_cloud_pgdata:/var/lib/postgresql/data
+    ports:
+      # Host-only convenience for local inspection (psql, a GUI client).
+      # Not part of the production topology — see the module comment above.
+      - "127.0.0.1:${POSTGRES_HOST_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-suisuinavi} -d ${POSTGRES_DB:-suisuinavi}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      SUISUI_CLOUD_ENVIRONMENT: development
+      SUISUI_CLOUD_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-suisuinavi}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db:5432/${POSTGRES_DB:-suisuinavi}
+      SUISUI_CLOUD_SESSION_SECRET: ${SUISUI_CLOUD_SESSION_SECRET:?set SUISUI_CLOUD_SESSION_SECRET in .env}
+      # Empty on purpose for local/dev: see app/config.py's own comment on
+      # session_cookie_domain — a non-empty Domain here would make the
+      # session cookie unusable against a localhost frontend.
+      SUISUI_CLOUD_SESSION_COOKIE_DOMAIN: ${SUISUI_CLOUD_SESSION_COOKIE_DOMAIN:-}
+      SUISUI_CLOUD_ALLOWED_ORIGINS: ${SUISUI_CLOUD_ALLOWED_ORIGINS:-http://127.0.0.1:4173,http://localhost:4173}
+      SUISUI_CLOUD_REQUIRE_EMAIL_VERIFICATION: ${SUISUI_CLOUD_REQUIRE_EMAIL_VERIFICATION:-false}
+    ports:
+      - "127.0.0.1:${API_HOST_PORT:-8000}:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  suisui_cloud_pgdata:
