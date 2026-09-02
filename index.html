@@ -4532,51 +4532,84 @@
           <div id="recRecoveryContainer"></div>
 
           <!-- Device: connecting a receiver is step 1 of the workflow, not a
-               separate feature. "ソース" is a placeholder for future
-               transports (Bluetooth QZ1, drone telemetry, NMEA replay) —
-               only QZ1 via Web Serial (USB or Bluetooth SPP virtual port) is
-               wired up today, so the other options stay disabled. -->
+               separate feature. Three real transports today: QZ1 via Web
+               Serial (USB or Bluetooth Classic SPP virtual port), QZ1LE via
+               Web Bluetooth (gated on config/qz1le-ble-profile.js -- see
+               js/recording/qz1le-bluetooth.js and
+               js/recording/qz1-acquisition-methods.js for why), and NMEA
+               file import (always available -- the "NMEA" upload button in
+               the header works regardless of anything on this card).
+               Drone telemetry / NMEA replay stay disabled placeholders. -->
           <section class="rec-section">
             <h3 class="rec-section-title">デバイス<span class="en">Device</span></h3>
-            <div class="input-row">
-              <label for="deviceSourceSelect">ソース</label>
-              <select id="deviceSourceSelect">
-                <option value="qz1-serial" selected>QZ1（USB / Bluetooth SPP）</option>
-                <option value="qz1-bluetooth">QZ1LE（Bluetooth LE・試験的）</option>
-                <option value="drone" disabled>ドローン — 準備中</option>
-                <option value="replay" disabled>NMEAファイル再生 — 準備中</option>
-              </select>
+
+            <details class="rec-diagnostics-details">
+              <summary>端末別の接続方法<span class="en"> / By device</span></summary>
+              <dl class="rec-compat-list">
+                <div><dt>Windows PC</dt><dd>QZ1LE → Chrome / Edge → Bluetooth → SuiSuiNavi</dd></div>
+                <div><dt>Android</dt><dd>QZ1LE → Chrome → Bluetooth → SuiSuiNavi</dd></div>
+                <div><dt>iPhone / iPad</dt><dd>QZ1LE → GNSS Analyzer → NMEAログ → SuiSuiNavi</dd></div>
+                <div><dt>USB対応PC</dt><dd>QZ1 / QZ1LE → USB → Web Serial → SuiSuiNavi</dd></div>
+              </dl>
+            </details>
+
+            <!-- iPhone/iPad cannot reach QZ1LE via Web Bluetooth at all --
+                 Safari has no Web Bluetooth, and Chrome on iOS is still
+                 WebKit underneath (not a workaround for this). Shown INSTEAD
+                 of #qz1DeviceControls; see syncQz1AcquisitionUi() in the
+                 script and js/recording/qz1-acquisition-methods.js. -->
+            <div id="qz1leIosFallback" class="rec-connection-note" hidden>
+              <p>iPhone / iPadではSafariからQZ1LEへ直接Bluetooth接続できません。</p>
+              <ol class="fallback-steps">
+                <li>GNSS AnalyzerでQZ1LEへ接続</li>
+                <li>NMEAログを記録</li>
+                <li>ログを保存 / 共有</li>
+                <li>SuiSuiNaviでNMEAファイルを読み込む（画面上部の「NMEA」ボタン）</li>
+              </ol>
             </div>
-            <!-- QZ1LE over Web Bluetooth is scaffolding, not a verified
-                 integration: the app has no confirmed GATT service/
-                 characteristic UUIDs or data format for QZ1LE. See the
-                 large comment above bluetoothConnectQz1Le() in the script.
-                 This note is the honest, always-visible flag for that --
-                 do not remove it once real hardware is confirmed working;
-                 replace it with real verification notes instead. -->
-            <p id="bluetoothUnverifiedNote" class="meta rec-secondary" hidden>
-              QZ1LE（Bluetooth LE）接続は試験的な実装です。実機QZ1LEでの動作は確認されていません。
-              動作しない場合はQZ1（USB / Bluetooth SPP）をお使いください。
-            </p>
-            <div id="baudRow" class="input-row rec-secondary">
-              <label for="baudSelect">ボーレート（USB接続時のみ有効）</label>
-              <select id="baudSelect" class="baud-select">
-                <option value="4800">4800</option>
-                <option value="9600">9600</option>
-                <option value="38400">38400</option>
-                <option value="115200" selected>115200</option>
-              </select>
+
+            <div id="qz1DeviceControls">
+              <div class="input-row">
+                <label for="deviceSourceSelect">ソース</label>
+                <select id="deviceSourceSelect">
+                  <option value="qz1-serial" selected>QZ1（USB / Bluetooth SPP）</option>
+                  <option value="qz1-bluetooth">QZ1LE（Bluetooth LE）</option>
+                  <option value="drone" disabled>ドローン — 準備中</option>
+                  <option value="replay" disabled>NMEAファイル再生 — 準備中</option>
+                </select>
+              </div>
+              <!-- Text/visibility set at runtime by syncQz1AcquisitionUi()
+                   from the real BLE profile + browser capability state:
+                   "not configured" (real QZ1LE UUIDs not identified yet --
+                   see config/qz1le-ble-profile.js), "configured but
+                   unverified" (real UUIDs set, but never confirmed against
+                   hardware), or "this browser has no Web Bluetooth". Never
+                   silently blank, and never a claim that BLE recording
+                   currently works. -->
+              <!-- Not rec-secondary on purpose: whether the QZ1LE BLE
+                   profile is configured/verified is actionable status, not
+                   compact-field-mode trivia like the baud rate below. -->
+              <p id="bluetoothStatusNote" class="meta" hidden></p>
+              <div id="baudRow" class="input-row rec-secondary">
+                <label for="baudSelect">ボーレート（USB接続時のみ有効）</label>
+                <select id="baudSelect" class="baud-select">
+                  <option value="4800">4800</option>
+                  <option value="9600">9600</option>
+                  <option value="38400">38400</option>
+                  <option value="115200" selected>115200</option>
+                </select>
+              </div>
+              <div class="kv"><span>接続状態</span><strong><span id="serialStatus" class="serial-status">未接続</span></strong></div>
+              <button id="serialConnectButton" class="panel-button primary" type="button">QZ1に接続</button>
+              <p id="serialMessage" class="meta"></p>
+              <ol id="serialFallbackSteps" class="meta fallback-steps" hidden>
+                <li>Playストアで「Serial Bluetooth Terminal」（Kai Morich製）をインストール</li>
+                <li>Android設定 → Bluetooth でQZ1をペアリング</li>
+                <li>アプリのメニュー → Devices → <strong>Bluetooth Classic</strong> → QZ1を選んで接続（NMEA文が流れ始めます）</li>
+                <li>メニュー → <strong>Log</strong> で記録開始 → 測量 → 記録停止</li>
+                <li>ログファイルを共有/保存し、このアプリの「NMEAをアップロード」で読み込み（行頭にタイムスタンプが付いていても自動で除去します）</li>
+              </ol>
             </div>
-            <div class="kv"><span>接続状態</span><strong><span id="serialStatus" class="serial-status">未接続</span></strong></div>
-            <button id="serialConnectButton" class="panel-button primary" type="button">QZ1に接続</button>
-            <p id="serialMessage" class="meta"></p>
-            <ol id="serialFallbackSteps" class="meta fallback-steps" hidden>
-              <li>Playストアで「Serial Bluetooth Terminal」（Kai Morich製）をインストール</li>
-              <li>Android設定 → Bluetooth でQZ1をペアリング</li>
-              <li>アプリのメニュー → Devices → <strong>Bluetooth Classic</strong> → QZ1を選んで接続（NMEA文が流れ始めます）</li>
-              <li>メニュー → <strong>Log</strong> で記録開始 → 測量 → 記録停止</li>
-              <li>ログファイルを共有/保存し、このアプリの「NMEAをアップロード」で読み込み（行頭にタイムスタンプが付いていても自動で除去します）</li>
-            </ol>
           </section>
 
           <!-- Recording: a session is independent of the connection above —
@@ -4990,6 +5023,12 @@
        to ship to a browser, because RLS is what protects the rows. See
        config/cloud-config.js and docs/SUPABASE_SETUP.md. -->
   <script src="config/cloud-config.js"></script>
+  <!-- QZ1LE (Bluetooth Low Energy) GATT profile. Committed and, in the
+       shipped state, unset: the real service/notify-characteristic UUIDs
+       have not been confirmed against hardware, so this ships null rather
+       than a guess. See config/qz1le-ble-profile.js and
+       docs/QZ1LE_CONNECTIVITY.md. -->
+  <script src="config/qz1le-ble-profile.js"></script>
   <script src="js/paddy-intelligence.js"></script>
   <script>
     const FEATURE_OPTIONS = ["gate", "ridge", "channel", "corner", "other", "unknown"];
@@ -5774,7 +5813,7 @@
     let serialReconnectAttempts = 0;
     let serialTransportLabel = "";
     // Which transport currently owns the live connection -- disconnectSerial()
-    // and disconnectBluetoothQz1Le() each only touch their own transport's
+    // and qz1leTransport.disconnect() each only touch their own transport's
     // state, so this decides which one a disconnect click actually means.
     let activeGnssTransport = "serial";
 
@@ -10158,135 +10197,134 @@
     }
 
     // -------------------------------------------------------------------
-    // QZ1LE over Web Bluetooth -- SCAFFOLDING ONLY, requested without a
-    // confirmed protocol (see the /grillme conversation this came from).
-    // This is deliberately NOT presented as a working integration:
+    // QZ1LE over Web Bluetooth.
     //
-    //   - The service/characteristic UUIDs below are the Nordic UART
-    //     Service (NUS) shape, a common pattern for BLE-to-serial bridge
-    //     modules -- NOT a confirmed fact about QZ1LE specifically. If
-    //     QZ1LE uses a different service, connecting will fail at
-    //     getPrimaryService()/getCharacteristic() with a clear error,
-    //     which is the correct, honest failure mode until the real UUIDs
-    //     are known (from a datasheet, or a capture of a working
-    //     connection) and substituted in here.
-    //   - Incoming bytes are decoded as UTF-8 text and split on line
-    //     breaks on the assumption QZ1LE streams NMEA sentences like the
-    //     existing serial/SPP path (unconfirmed).
-    //   - #bluetoothUnverifiedNote in the markup is the user-facing half
-    //     of this same honesty requirement -- do not remove either side
-    //     without the other, and do not remove this note just because a
-    //     connection attempt happens to succeed against SOME device;
-    //     remove it only once verified against real QZ1LE hardware.
+    // The real GATT service/notify-characteristic UUIDs for QZ1LE have not
+    // been confirmed against hardware -- see config/qz1le-ble-profile.js
+    // for the full story and how to obtain them from a physical receiver.
+    // This transport therefore NEVER guesses a UUID:
+    // Qz1LeBluetoothTransport.connect() (js/recording/qz1le-bluetooth.js)
+    // refuses outright, before ever opening the device picker, whenever the
+    // configured profile is missing. Even once a real profile IS
+    // configured, the connection is still reported to the farmer as
+    // unverified until it has actually been confirmed against a physical
+    // QZ1LE -- see docs/QZ1LE_CONNECTIVITY.md's hardware-validation
+    // checklist.
     //
-    // Once real hardware data confirms the real UUIDs/framing, this can
-    // become a first-class transport (its own baud-less connect flow is
-    // already wired below) with no changes needed downstream:
-    // handleSerialLine() -- the exact same parse/record/render pipeline
-    // the existing serial transport uses -- is reused unmodified.
-    const QZ1LE_SERVICE_UUID_PLACEHOLDER = "6e400001-b5a3-f393-e9a0-e50e24dcca9e";
-    const QZ1LE_NOTIFY_CHARACTERISTIC_UUID_PLACEHOLDER = "6e400003-b5a3-f393-e9a0-e50e24dcca9e";
-    const bluetoothSupported = "bluetooth" in navigator;
-    let bluetoothDevice = null;
-    let bluetoothCharacteristic = null;
-    let bluetoothLineBuffer = "";
-    const bluetoothTextDecoder = new TextDecoder("utf-8");
+    // Every complete line this transport decodes reaches handleSerialLine()
+    // -- the exact same parse/record/render pipeline the existing QZ1
+    // (USB / Bluetooth Classic SPP) transport uses -- so there is no second
+    // NMEA parser anywhere in this file.
+    let qz1leTransport = null;
+    let qz1leBleProfile = null;
+    let qz1AcquisitionUx = null;
+    let Qz1LeBluetoothErrorClass = null;
 
-    function handleBluetoothValueChanged(event) {
-      bluetoothLineBuffer += bluetoothTextDecoder.decode(event.target.value);
-      const lines = bluetoothLineBuffer.split(/\r?\n/);
-      bluetoothLineBuffer = lines.pop() || "";
-      lines.forEach((line) => { if (line) handleSerialLine(line); });
+    async function initQz1leBluetooth() {
+      const [bluetoothApi, configApi, acquisitionApi] = await Promise.all([
+        import("./js/recording/qz1le-bluetooth.js"),
+        import("./js/recording/qz1le-ble-config.js"),
+        import("./js/recording/qz1-acquisition-methods.js")
+      ]);
+      Qz1LeBluetoothErrorClass = bluetoothApi.Qz1LeBluetoothError;
+      qz1leBleProfile = configApi.readQz1LeBleProfile(window);
+      const platformKind = acquisitionApi.detectPlatformKind({
+        userAgent: navigator.userAgent,
+        platform: navigator.platform,
+        maxTouchPoints: navigator.maxTouchPoints
+      });
+      qz1AcquisitionUx = acquisitionApi.decideQz1AcquisitionUx({
+        isSecureContext: window.isSecureContext,
+        hasSerial: serialSupported,
+        hasBluetooth: "bluetooth" in navigator,
+        platformKind,
+        bleProfile: qz1leBleProfile
+      });
+
+      qz1leTransport = new bluetoothApi.Qz1LeBluetoothTransport({
+        profile: qz1leBleProfile,
+        onLine: (line) => { if (line) handleSerialLine(line); },
+        onStateChange: handleQz1leStateChange,
+        onError: handleQz1leError
+      });
+
+      syncQz1AcquisitionUi();
     }
 
-    function handleBluetoothGattDisconnected() {
-      if (activeGnssTransport !== "bluetooth") {
-        return; // a stale listener from an already-cleaned-up device
+    function handleQz1leStateChange(state) {
+      switch (state) {
+        case "requesting":
+          setConnectionState("requesting", "選択中…", "");
+          break;
+        case "connecting":
+          setConnectionState("opening", "接続中…", "");
+          break;
+        case "connected":
+          activeGnssTransport = "bluetooth";
+          serialConnected = true;
+          serialTransportLabel = "QZ1LE (Bluetooth LE)";
+          serialConnectButton.textContent = "切断";
+          serialConnectButton.className = "panel-button danger";
+          deviceSourceSelect.disabled = true;
+          setConnectionState("connected", "接続中（未検証）", "success");
+          setSerialMessage("QZ1LEに接続しました。この接続は実機での動作が確認されていません。測位点が表示されない場合はQZ1（USB / Bluetooth SPP）またはNMEAファイルの読み込みをお試しください。");
+          break;
+        case "disconnecting":
+          setConnectionState("disconnecting", "切断中", "");
+          break;
+        case "disconnected":
+          activeGnssTransport = "serial";
+          serialConnected = false;
+          serialConnectButton.className = "panel-button primary";
+          deviceSourceSelect.disabled = false;
+          setConnectionState("disconnected", "未接続", "");
+          syncDeviceSourceUi();
+          break;
+        case "unsupported":
+        case "not-configured":
+          activeGnssTransport = "serial";
+          serialConnected = false;
+          serialConnectButton.className = "panel-button primary";
+          deviceSourceSelect.disabled = false;
+          setConnectionState("unsupported", state === "not-configured" ? "未設定" : "非対応", "error");
+          syncDeviceSourceUi();
+          break;
+        case "error":
+          activeGnssTransport = "serial";
+          serialConnected = false;
+          serialConnectButton.className = "panel-button primary";
+          deviceSourceSelect.disabled = false;
+          setConnectionState("error", "未接続", "");
+          syncDeviceSourceUi();
+          break;
       }
-      disconnectBluetoothQz1Le({ unexpected: true });
     }
 
-    async function connectBluetoothQz1Le(device) {
-      setConnectionState("opening", "接続中…", "");
-      bluetoothDevice = device;
-      bluetoothDevice.addEventListener("gattserverdisconnected", handleBluetoothGattDisconnected);
-      try {
-        const server = await device.gatt.connect();
-        const service = await server.getPrimaryService(QZ1LE_SERVICE_UUID_PLACEHOLDER);
-        const characteristic = await service.getCharacteristic(QZ1LE_NOTIFY_CHARACTERISTIC_UUID_PLACEHOLDER);
-        await characteristic.startNotifications();
-        characteristic.addEventListener("characteristicvaluechanged", handleBluetoothValueChanged);
-        bluetoothCharacteristic = characteristic;
-        bluetoothLineBuffer = "";
-        activeGnssTransport = "bluetooth";
-        serialConnected = true;
-        serialTransportLabel = "QZ1LE (Bluetooth LE・試験的)";
-        serialConnectButton.textContent = "切断";
-        serialConnectButton.className = "panel-button danger";
-        deviceSourceSelect.disabled = true;
-        setConnectionState("connected", "接続中（試験的・未検証）", "success");
-        setSerialMessage("QZ1LEに接続しました。この接続は実機での動作が未確認です。測位点が表示されない場合はQZ1（USB / Bluetooth SPP）をお試しください。");
-      } catch (error) {
-        setConnectionState("error", "未接続", "");
-        setSerialMessage(`QZ1LEへの接続に失敗しました（プロトコル未確認のため想定内です）: ${error.message}`);
-        try { device.gatt?.disconnect(); } catch {}
-        bluetoothDevice = null;
+    function handleQz1leError(error) {
+      if (Qz1LeBluetoothErrorClass && error instanceof Qz1LeBluetoothErrorClass) {
+        setSerialMessage(error.message);
+        return;
       }
+      setSerialMessage(`QZ1LEへの接続でエラーが発生しました: ${error?.message || error}`);
     }
 
     async function toggleBluetoothConnection() {
       if (serialConnected && activeGnssTransport === "bluetooth") {
-        await disconnectBluetoothQz1Le();
+        await qz1leTransport.disconnect();
         return;
       }
-      if (!bluetoothSupported) {
-        setConnectionState("unsupported", "非対応", "error");
-        setSerialMessage("このブラウザは Web Bluetooth 非対応です。デスクトップ版の Chrome / Edge をご利用ください。");
+      if (!qz1AcquisitionUx?.bluetoothConnectEnabled) {
+        setSerialMessage(qz1AcquisitionUx?.bluetoothMessage || "QZ1LEのBluetooth接続は現在利用できません。");
         return;
       }
       serialConnectButton.disabled = true;
       try {
-        setConnectionState("requesting", "選択中…", "");
-        let device;
-        try {
-          device = await navigator.bluetooth.requestDevice({
-            filters: [{ services: [QZ1LE_SERVICE_UUID_PLACEHOLDER] }],
-            optionalServices: [QZ1LE_SERVICE_UUID_PLACEHOLDER]
-          });
-        } catch (error) {
-          setConnectionState("error", "未接続", "");
-          setSerialMessage(error.name === "NotFoundError"
-            ? "デバイスが選択されませんでした（プロトコル未確認のため一覧に出ない場合があります）。"
-            : `接続できませんでした: ${error.message}`);
-          return;
-        }
-        await connectBluetoothQz1Le(device);
+        await qz1leTransport.connect();
+      } catch {
+        // handleQz1leStateChange/handleQz1leError already reported this.
       } finally {
         serialConnectButton.disabled = false;
       }
-    }
-
-    async function disconnectBluetoothQz1Le({ unexpected = false } = {}) {
-      if (activeGnssTransport !== "bluetooth" || (!serialConnected && !bluetoothDevice)) {
-        return;
-      }
-      serialConnected = false;
-      setConnectionState("disconnecting", "切断中", "");
-      try {
-        bluetoothCharacteristic?.removeEventListener("characteristicvaluechanged", handleBluetoothValueChanged);
-        await bluetoothCharacteristic?.stopNotifications();
-      } catch {}
-      try {
-        bluetoothDevice?.removeEventListener("gattserverdisconnected", handleBluetoothGattDisconnected);
-        if (bluetoothDevice?.gatt?.connected) bluetoothDevice.gatt.disconnect();
-      } catch {}
-      bluetoothCharacteristic = null;
-      bluetoothDevice = null;
-      activeGnssTransport = "serial";
-      serialConnectButton.className = "panel-button primary";
-      serialConnectButton.textContent = "QZ1LEに接続";
-      deviceSourceSelect.disabled = false;
-      setConnectionState("disconnected", unexpected ? "切断されました" : "未接続", "");
     }
 
     function selectedDeviceSource() {
@@ -10301,11 +10339,56 @@
       }
     }
 
+    // Applies the platform/capability decision (qz1AcquisitionUx, computed
+    // once in initQz1leBluetooth()) to the device UI: iOS gets the GNSS
+    // Analyzer fallback instead of any connect controls at all; everyone
+    // else gets the usual select + connect button, with the QZ1LE option
+    // disabled outright when this browser has no Web Bluetooth.
+    function syncQz1AcquisitionUi() {
+      const ux = qz1AcquisitionUx;
+      const iosFallback = document.getElementById("qz1leIosFallback");
+      const controls = document.getElementById("qz1DeviceControls");
+      const showIos = Boolean(ux?.showIosFallback);
+      iosFallback.hidden = !showIos;
+      controls.hidden = showIos;
+      if (showIos) {
+        return;
+      }
+
+      const bluetoothOption = deviceSourceSelect.querySelector('option[value="qz1-bluetooth"]');
+      if (bluetoothOption) {
+        bluetoothOption.disabled = !ux?.showBluetoothOption;
+      }
+      if (bluetoothOption?.disabled && selectedDeviceSource() === "qz1-bluetooth") {
+        deviceSourceSelect.value = "qz1-serial";
+      }
+      syncDeviceSourceUi();
+    }
+
+    function updateBluetoothStatusNote() {
+      const note = document.getElementById("bluetoothStatusNote");
+      const isBluetooth = selectedDeviceSource() === "qz1-bluetooth";
+      const message = qz1AcquisitionUx?.bluetoothMessage || "";
+      note.textContent = message;
+      note.hidden = !isBluetooth || !message;
+    }
+
     function syncDeviceSourceUi() {
       const isBluetooth = selectedDeviceSource() === "qz1-bluetooth";
-      document.getElementById("bluetoothUnverifiedNote").hidden = !isBluetooth;
       document.getElementById("baudRow").hidden = isBluetooth;
       serialConnectButton.textContent = isBluetooth ? "QZ1LEに接続" : "QZ1に接続";
+      if (serialConnected) {
+        // Already connected via either transport -- always enabled so the
+        // "切断" action stays reachable.
+        serialConnectButton.disabled = false;
+      } else if (isBluetooth) {
+        serialConnectButton.disabled = !qz1AcquisitionUx?.bluetoothConnectEnabled;
+      } else {
+        // Serial source: respect initSerialCard()'s own unsupported-browser
+        // disabling instead of unconditionally re-enabling it here.
+        serialConnectButton.disabled = !serialSupported;
+      }
+      updateBluetoothStatusNote();
     }
 
     function downloadSerialLog() {
@@ -10865,6 +10948,7 @@
 
     (async function init() {
       initSerialCard();
+      initQz1leBluetooth();
       try {
         // 水管理 card. Imported as namespaces (not destructured) so a new
         // export -- a future stage derivation, another source -- is reachable

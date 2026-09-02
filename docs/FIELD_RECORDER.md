@@ -5,6 +5,9 @@ pipeline. Connection state (is QZ1's serial link open?) and recording state
 (is a session actively capturing to IndexedDB?) are independent state
 machines — connecting to QZ1 never implicitly starts a recording session.
 
+QZ1LE (Bluetooth Low Energy) is a separate transport that feeds the exact
+same pipeline described here — see [QZ1LE_CONNECTIVITY.md](QZ1LE_CONNECTIVITY.md).
+
 ## Architecture
 
 | File | Role |

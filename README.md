@@ -106,7 +106,9 @@ flowchart TD
 | 機能 | 状況 |
 |---|---|
 | NMEAアップロード・GGA解析（fix品質/HDOP/QZSS） | ✅ 実装済み |
-| ライブ記録（Web Serial・PC） | ✅ 実装済み |
+| ライブ記録（Web Serial・PC、QZ1） | ✅ 実装済み |
+| ライブ記録（Web Bluetooth・QZ1LE） | 🚧 実装済み・実機未検証（[詳細](docs/QZ1LE_CONNECTIVITY.md)） |
+| iPhone/iPad向けQZ1LE接続（GNSS Analyzer経由） | ✅ 実装済み（案内表示のみ、直接接続は不可） |
 | GNSS観測からの圃場境界作成 | ✅ 実装済み |
 | 圃場面積の算出 | ✅ 実装済み |
 | 水位の手入力記録（出典・時刻つき） | ✅ 実装済み |
@@ -149,6 +151,7 @@ flowchart TD
 
 - **フィールド機器：** 青いQZ1 GNSS受信機（L1S/SLAS、Bluetooth SPP）＋ Android Pixel 6a
 - **ライブ記録（PC）：** Web Serial API — Chrome/Edgeで仮想シリアルポートとしてNMEAをリアルタイム受信・地図表示・保存
+- **ライブ記録（QZ1LE）：** Web Bluetooth API（Chrome/Edge・Android Chrome）。実機QZ1LEのGATTプロファイル（サービス/通知キャラクタリスティックUUID）は未確認のため、設定するまで接続は無効。iPhone/iPadはWeb Bluetooth非対応につきGNSS Analyzer経由のNMEAログ読み込みを案内。詳細は [docs/QZ1LE_CONNECTIVITY.md](docs/QZ1LE_CONNECTIVITY.md)
 - **地図表示：** Leaflet ＋ Leaflet.markercluster ＋ Turf.js（境界ポリゴンから面積算出）
 - **気象データ：** [Open-Meteo](https://open-meteo.com/)（無料・APIキー不要）から水門座標で自動取得。失敗時は `data/weather.json` にフォールバック
 - **水管理モデル：** `js/water/` — DOM非依存の純粋モジュール群、ユニットテスト済み
