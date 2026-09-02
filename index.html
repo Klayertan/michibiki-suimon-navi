@@ -3048,17 +3048,22 @@
           <!-- aria-label is required, not decorative: the 使い方 label is
                dropped below 480px and the "?" glyph is aria-hidden, so without
                it the button would have no accessible name on a phone. -->
-          <!-- Decorative for now, deliberately not wired to #accountControl
-               below: that control is real, JS-managed (auth-controller.js
+          <!-- Deliberately still not wired straight to #accountControl above:
+               that control is real, JS-managed (auth-controller.js
                renderAccountControl() force-hides it whenever no cloud is
-               configured, which is every shipped build today) and enabling
-               it changes default app behavior for ~150 existing tests that
-               assume no login screen. This is a separate, inert placeholder
-               -- a simple "profile" affordance to fill the header slot the
-               real control will occupy once accounts are actually turned
-               on, with none of that risk. -->
+               configured, which is every shipped build today), and making IT
+               visible changes default app behavior for ~150 existing tests
+               that assume no login screen on load. This button instead jumps
+               to 設定 → アカウント (#settingsAccountPanel), which already
+               handles both states correctly and is already covered by tests
+               ("設定 → アカウント explains that no cloud is configured
+               instead of offering a dead login") -- so it's a real, working
+               entry point today (an honest "not configured yet" message) and
+               will start offering real ログイン/アカウント作成 the moment a
+               provider is configured in config/cloud-config.js, with no
+               further change needed here. -->
           <button id="profileIconButton" class="basic-help-button profile-icon-button" type="button"
-                  aria-label="アカウント" title="アカウント機能は準備中です">
+                  aria-label="アカウント">
             <span aria-hidden="true">👤</span>
           </button>
           <button id="basicHelpButton" class="basic-help-button" type="button"
@@ -10901,6 +10906,14 @@
         if (reportPanel) reportPanel.open = true;
         scrollElementWithinPanel(reportPanel, { block: "start" });
         document.getElementById("reportGenerateButton")?.click();
+      }, 100);
+    });
+    document.getElementById("profileIconButton")?.addEventListener("click", () => {
+      switchMode("settings", { workspace: "fields" });
+      window.setTimeout(() => {
+        const accountPanel = document.getElementById("settingsAccountPanel");
+        if (accountPanel) accountPanel.open = true;
+        scrollElementWithinPanel(accountPanel, { block: "start" });
       }, 100);
     });
     // The header twin owns no <input>; it opens the single #basicNmeaInput.
