@@ -388,9 +388,19 @@
   background: #eef1e9;
   border: 1px solid var(--line, #d8d8ca);
   border-radius: 10px;
+  cursor: pointer;
   height: 130px;
   overflow: hidden;
   width: 100%;
+}
+
+.basic-field-thumbnail:hover {
+  border-color: var(--green, #2f6b3c);
+}
+
+.basic-field-thumbnail:focus-visible {
+  outline: 2px solid var(--green, #2f6b3c);
+  outline-offset: 2px;
 }
 
 /* Leaflet's own CSS otherwise leaves attribution/zoom chrome that this

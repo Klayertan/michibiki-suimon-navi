@@ -3267,7 +3267,7 @@
               <select id="basicActiveFieldSelect"></select>
             </div>
             <div id="basicFieldSummary" class="basic-field-current" hidden>
-              <div id="basicFieldThumbnail" class="basic-field-thumbnail" role="img" aria-label="選択中の圃場の航空写真"></div>
+              <div id="basicFieldThumbnail" class="basic-field-thumbnail" role="button" tabindex="0" aria-label="選択中の圃場の航空写真。クリックすると地図でこの位置に移動します。"></div>
               <div class="decision-field-summary">
                 <div class="kv"><span>面積</span><strong id="basicFieldArea">—</strong></div>
                 <div class="kv"><span>登録日</span><strong id="basicFieldRegisteredDate">—</strong></div>
@@ -6776,6 +6776,18 @@
           fieldThumbnailMap.fitBounds(fieldThumbnailPolygon.getBounds(), { padding: [8, 8] });
         }
       });
+    }
+
+    // Clicking #basicFieldThumbnail jumps the main map to the same field the
+    // thumbnail is already showing, rather than requiring a farmer to hunt
+    // for it on the (possibly zoomed/panned-elsewhere) main map themselves.
+    function panMainMapToActiveField() {
+      const select = document.getElementById("basicActiveFieldSelect");
+      const field = (fieldAnnotationController?.fields || []).find((candidate) => candidate.id === select?.value);
+      if (!field || !Array.isArray(field.coordinates) || field.coordinates.length < 3) {
+        return;
+      }
+      map.fitBounds(L.latLngBounds(field.coordinates), { padding: [48, 48], maxZoom: 17 });
     }
 
     // ---------------------------------------------------------------------
@@ -10677,6 +10689,13 @@
         wcpSelect.dispatchEvent(new Event("change", { bubbles: true }));
       }
       document.querySelector('#waterQuickToolbar button[data-water-quick-type="gate"]')?.focus();
+    });
+    document.getElementById("basicFieldThumbnail")?.addEventListener("click", panMainMapToActiveField);
+    document.getElementById("basicFieldThumbnail")?.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        panMainMapToActiveField();
+      }
     });
     document.getElementById("basicRecordWaterButton")?.addEventListener("click", () => {
       if (isDesktopBasicMode()) {
