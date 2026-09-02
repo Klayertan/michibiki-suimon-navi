@@ -1,7 +1,8 @@
 import { test, expect } from "@playwright/test";
 
 // Desktop-only Basic-Mode layout polish: the main map's Leaflet zoom
-// control moves to bottom-right, the freed upper-left corner gets a
+// control sits top-right, directly under the 地図/航空写真 toggle it
+// shares that corner with, and the freed upper-left corner gets a
 // compact 今日の水門判断 read (sharing the SAME active-field state and
 // computeWaterNeed() calculation as the full hero -- see
 // renderMapWaterSummary() in index.html), and the right panel/mini-card
@@ -109,11 +110,11 @@ const MOBILE_VIEWPORTS = [
 ];
 
 // ---------------------------------------------------------------------------
-// 1-2. Zoom control: bottom-right on desktop, exactly one, no duplicate
+// 1-2. Zoom control: top-right on desktop, exactly one, no duplicate
 // ---------------------------------------------------------------------------
 
 for (const viewport of DESKTOP_VIEWPORTS) {
-  test(`zoom control is bottom-right and singular at ${viewport.width}x${viewport.height}`, async ({ page }) => {
+  test(`zoom control is top-right and singular at ${viewport.width}x${viewport.height}`, async ({ page }) => {
     await page.setViewportSize(viewport);
     await openBasic(page);
 
@@ -124,7 +125,7 @@ for (const viewport of DESKTOP_VIEWPORTS) {
       const parent = el.closest(".leaflet-top, .leaflet-bottom");
       return parent.className;
     });
-    expect(corner).toContain("leaflet-bottom");
+    expect(corner).toContain("leaflet-top");
     expect(corner).toContain("leaflet-right");
 
     // The thumbnail map (once a field exists) must not grow its own zoom control.

@@ -179,6 +179,20 @@ test("marking current position requires a fresh valid fix and refuses when stale
   await connect(page);
   await page.locator("#recStartButton").click();
 
+  // #recObsNoteInput/#recRecordPositionButton live inside
+  // #basicWaterRecordCard, which is Basic-mode-only now -- the recording
+  // session itself (recordingController) is shared state, unaffected by
+  // which mode is currently visible. At this (desktop) viewport the card
+  // is also display:none by default until its own slide-down panel opens
+  // (see openAttachedWaterRecordCard() in index.html) -- switching mode
+  // alone is not enough there. Calling it directly rather than clicking
+  // #basicRecordWaterButton: that button requires a registered field,
+  // which this test (connect + start recording only) never creates, but
+  // the open function itself has no such gate.
+  await page.evaluate(() => {
+    switchMode("basic");
+    openAttachedWaterRecordCard();
+  });
   await expect.poll(async () => await page.locator("#recRecordPositionButton").isEnabled()).toBe(true);
   await page.locator("#recObsNoteInput").fill("畦際に雑草密集");
   await page.locator("#recRecordPositionButton").click();
@@ -285,13 +299,18 @@ test("mobile field mode gives a single column with large touch targets", async (
   await openFieldRecordingCard(page);
 
   await expect(page.locator("#recPanel")).toHaveClass(/field-mode/);
-  const box = await page.locator("#recRecordPositionButton").boundingBox();
-  expect(box?.height).toBeGreaterThanOrEqual(44);
   const startBox = await page.locator("#recStartButton").boundingBox();
   expect(startBox?.height).toBeGreaterThanOrEqual(44);
 
   const columns = await page.locator(".rec-buttons").evaluate((el) => getComputedStyle(el).gridTemplateColumns.split(" ").length);
   expect(columns).toBe(1);
+
+  // #recRecordPositionButton lives in #basicWaterRecordCard (Basic-mode-
+  // only now), a separate card from #recPanel -- checked in its own mode
+  // since the two can no longer be visible at once.
+  await page.evaluate(() => switchMode("basic"));
+  const box = await page.locator("#recRecordPositionButton").boundingBox();
+  expect(box?.height).toBeGreaterThanOrEqual(44);
 });
 
 test("diagnostics show neutral states before connection and only stall after prior data reception", async ({ page }) => {

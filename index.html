@@ -3751,12 +3751,16 @@
              exactly as before — 現在地を記録 still requires an active
              recording session, and the 水位/目標水位 comparison still works
              without one, which is the Basic-mode use. -->
-        <!-- Stays in QZ1測量 with the rest of the recording surface: its
-             #recObs* controls are driven by recordingController and only mean
-             anything during an open session, so splitting them from
-             #recStartButton would break one flow across two workspaces.
-             基本モード still gets the card through data-mode. -->
-        <details id="basicWaterRecordCard" class="card paddy-collapsible" data-workspace="survey" data-mode="basic settings" open hidden>
+        <!-- Basic-mode only now, on request: this used to also render in
+             設定 (QZ1測量), collapsed by default, alongside フィールド記録's
+             own connect/session controls -- see git history if that pairing
+             needs restoring. Its #recObs* controls are driven by
+             recordingController and only mean anything during an open
+             session; a session started from フィールド記録 in 設定 currently
+             has no way to mark an observation against it from that view.
+             recordingController/#recStartButton state itself is unaffected
+             by this -- only this card's visibility changed. -->
+        <details id="basicWaterRecordCard" class="card paddy-collapsible" data-workspace="survey" data-mode="basic" open hidden>
           <summary><span class="details-title">水位・観察を記録<span class="en">Mark observation</span></span></summary>
           <!-- Desktop 基本モード only (see .basic-attached-close's own
                CSS comment): closes the slide-down panel when this card is
@@ -9369,26 +9373,6 @@
         writeRoute(route, { replace });
       }
       renderDroneModeGate();
-      syncBasicWaterRecordCollapse(mode);
-    }
-
-    /**
-     * 水位・観察を記録 (#basicWaterRecordCard) stays open by default in 基本
-     * モード (its whole reason to exist there) but starts collapsed in 設定
-     * -- QZ1測量 already shows it open next to フィールド記録's own connect/
-     * recording controls, which made it look like a second, competing water
-     * form rather than the same card. Still fully reachable (just closed);
-     * still the only place to mark an observation against a session started
-     * from フィールド記録. Skipped while desktop 基本モード's own class-based
-     * slide-down mechanism (openAttachedWaterRecordCard/
-     * toggleAttachedWaterRecordCard) owns this element's [open] state.
-     */
-    function syncBasicWaterRecordCollapse(mode) {
-      const card = document.getElementById("basicWaterRecordCard");
-      if (!card || card.classList.contains("basic-water-record-attached")) {
-        return;
-      }
-      card.open = mode !== "settings";
     }
 
     function switchWorkspace(workspace, { updateHash = true, replace = false } = {}) {
