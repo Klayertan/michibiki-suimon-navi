@@ -235,6 +235,14 @@
       width: 100%;
     }
 
+    /* Icon-only variant of .basic-help-button -- same chrome, no text label,
+       fixed width so the circle stays a circle regardless of the glyph. */
+    .profile-icon-button {
+      font-size: 1.1rem;
+      padding: 0;
+      width: 44px;
+    }
+
     .basemap-toggle {
       background: rgba(255, 255, 255, 0.96);
       border: 1px solid rgba(24, 49, 40, 0.22);
@@ -3015,6 +3023,19 @@
           <!-- aria-label is required, not decorative: the 使い方 label is
                dropped below 480px and the "?" glyph is aria-hidden, so without
                it the button would have no accessible name on a phone. -->
+          <!-- Decorative for now, deliberately not wired to #accountControl
+               below: that control is real, JS-managed (auth-controller.js
+               renderAccountControl() force-hides it whenever no cloud is
+               configured, which is every shipped build today) and enabling
+               it changes default app behavior for ~150 existing tests that
+               assume no login screen. This is a separate, inert placeholder
+               -- a simple "profile" affordance to fill the header slot the
+               real control will occupy once accounts are actually turned
+               on, with none of that risk. -->
+          <button id="profileIconButton" class="basic-help-button profile-icon-button" type="button"
+                  aria-label="アカウント" title="アカウント機能は準備中です">
+            <span aria-hidden="true">👤</span>
+          </button>
           <button id="basicHelpButton" class="basic-help-button" type="button"
                   aria-label="使い方"
                   aria-haspopup="dialog" aria-controls="basicHelpDialog" aria-expanded="false">
