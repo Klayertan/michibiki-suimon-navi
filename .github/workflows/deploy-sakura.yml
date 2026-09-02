@@ -1,0 +1,153 @@
+name: Deploy to Sakura
+
+# Ships the static SuiSuiNavi frontend (index.html, css/, js/, config/, data/)
+# to the Sakura Rental Server over SSH/rsync after unit tests pass.
+#
+# Never touches /home/suisuinavi/www/michibiki/ (the WordPress ambassador
+# blog) — every destructive rsync below is scoped to a single SuiSuiNavi
+# runtime subdirectory, never to the www/ root.
+#
+# See docs/SAKURA_DEPLOYMENT.md for required secrets and setup.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+env:
+  REMOTE_BASE: /home/suisuinavi/www
+
+concurrency:
+  group: sakura-deploy
+  cancel-in-progress: false
+
+jobs:
+  test:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run fast unit tests
+        run: npm test
+
+  deploy:
+    name: Deploy frontend to Sakura
+    needs: test
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Load deploy SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SAKURA_SSH_PRIVATE_KEY }}
+
+      - name: Configure known_hosts
+        env:
+          SAKURA_KNOWN_HOSTS: ${{ secrets.SAKURA_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          if [ -z "$SAKURA_KNOWN_HOSTS" ]; then
+            echo "SAKURA_KNOWN_HOSTS secret is empty. Refusing to deploy without host-key verification." >&2
+            exit 1
+          fi
+          printf '%s\n' "$SAKURA_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Guard against wrong/missing remote path
+        env:
+          SAKURA_HOST: ${{ secrets.SAKURA_HOST }}
+          SAKURA_USER: ${{ secrets.SAKURA_USER }}
+          SAKURA_PORT: ${{ secrets.SAKURA_PORT || '22' }}
+        run: |
+          set -euo pipefail
+          ssh -p "$SAKURA_PORT" -o StrictHostKeyChecking=yes "$SAKURA_USER@$SAKURA_HOST" bash -s <<EOF
+          set -euo pipefail
+          if [ ! -d "$REMOTE_BASE" ]; then
+            echo "Remote base $REMOTE_BASE does not exist on the server. Aborting." >&2
+            exit 1
+          fi
+          if [ ! -d "$REMOTE_BASE/michibiki" ]; then
+            echo "$REMOTE_BASE/michibiki not found. This looks like the wrong path or host -- refusing to deploy to avoid an unsafe rsync." >&2
+            exit 1
+          fi
+          EOF
+
+      - name: Sync data/
+        env:
+          SAKURA_HOST: ${{ secrets.SAKURA_HOST }}
+          SAKURA_USER: ${{ secrets.SAKURA_USER }}
+          SAKURA_PORT: ${{ secrets.SAKURA_PORT || '22' }}
+        run: |
+          rsync -avz --delete \
+            -e "ssh -p $SAKURA_PORT -o StrictHostKeyChecking=yes" \
+            data/ "$SAKURA_USER@$SAKURA_HOST:$REMOTE_BASE/data/"
+
+      - name: Sync config/
+        env:
+          SAKURA_HOST: ${{ secrets.SAKURA_HOST }}
+          SAKURA_USER: ${{ secrets.SAKURA_USER }}
+          SAKURA_PORT: ${{ secrets.SAKURA_PORT || '22' }}
+        run: |
+          rsync -avz --delete \
+            -e "ssh -p $SAKURA_PORT -o StrictHostKeyChecking=yes" \
+            config/ "$SAKURA_USER@$SAKURA_HOST:$REMOTE_BASE/config/"
+
+      - name: Sync css/
+        env:
+          SAKURA_HOST: ${{ secrets.SAKURA_HOST }}
+          SAKURA_USER: ${{ secrets.SAKURA_USER }}
+          SAKURA_PORT: ${{ secrets.SAKURA_PORT || '22' }}
+        run: |
+          rsync -avz --delete \
+            -e "ssh -p $SAKURA_PORT -o StrictHostKeyChecking=yes" \
+            css/ "$SAKURA_USER@$SAKURA_HOST:$REMOTE_BASE/css/"
+
+      - name: Sync js/
+        env:
+          SAKURA_HOST: ${{ secrets.SAKURA_HOST }}
+          SAKURA_USER: ${{ secrets.SAKURA_USER }}
+          SAKURA_PORT: ${{ secrets.SAKURA_PORT || '22' }}
+        run: |
+          rsync -avz --delete \
+            -e "ssh -p $SAKURA_PORT -o StrictHostKeyChecking=yes" \
+            js/ "$SAKURA_USER@$SAKURA_HOST:$REMOTE_BASE/js/"
+
+      # index.html is copied last, once every asset it references is already
+      # in place, so there is no window where the live page points at
+      # missing/renamed JS or CSS.
+      - name: Sync index.html
+        env:
+          SAKURA_HOST: ${{ secrets.SAKURA_HOST }}
+          SAKURA_USER: ${{ secrets.SAKURA_USER }}
+          SAKURA_PORT: ${{ secrets.SAKURA_PORT || '22' }}
+        run: |
+          rsync -avz \
+            -e "ssh -p $SAKURA_PORT -o StrictHostKeyChecking=yes" \
+            index.html "$SAKURA_USER@$SAKURA_HOST:$REMOTE_BASE/index.html"
+
+      - name: Verify michibiki/ was left untouched
+        env:
+          SAKURA_HOST: ${{ secrets.SAKURA_HOST }}
+          SAKURA_USER: ${{ secrets.SAKURA_USER }}
+          SAKURA_PORT: ${{ secrets.SAKURA_PORT || '22' }}
+        run: |
+          set -euo pipefail
+          ssh -p "$SAKURA_PORT" -o StrictHostKeyChecking=yes "$SAKURA_USER@$SAKURA_HOST" bash -s <<EOF
+          if [ ! -d "$REMOTE_BASE/michibiki" ]; then
+            echo "CRITICAL: $REMOTE_BASE/michibiki is missing after deployment!" >&2
+            exit 1
+          fi
+          EOF
