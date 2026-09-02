@@ -95,8 +95,9 @@ test("Basic mode offers a small ? help control instead of the 現地調査ワー
   await expect(page.locator("#workflowStepsContainer")).toBeHidden();
   await expect(page.locator("text=現地調査ワークフロー")).toBeHidden();
 
-  // ...but is still built and available under Settings (圃場データ).
-  await page.goto("/#settings/fields");
+  // ...but is still built and available under Settings (開発ツール, moved
+  // there from 圃場データ alongside #fileInput -- see 開発者モード).
+  await page.goto("/#settings/devtools");
   await expect(page.locator("#workflowGuidePanel")).toBeVisible();
   await expect(page.locator("#workflowStepsContainer")).toContainText("NMEAログをアップロード");
 });
@@ -120,7 +121,7 @@ test("help opens, teaches the Stage-1 flow, and closes three ways without touchi
   await expect(dialog).toContainText("圃場として使う開始点と終了点を選びます。");
   await expect(dialog).toContainText("圃場を登録する");
   await expect(dialog).toContainText("水位を記録する");
-  await expect(dialog).toContainText("詳しい機能は「設定 → その他の機能」から利用できます。");
+  await expect(dialog).toContainText("詳しい機能は「開発者モード」から利用できます。");
 
   // No developer vocabulary anywhere in the help.
   const helpText = await dialog.innerText();

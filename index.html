@@ -249,6 +249,17 @@
       z-index: 450;
     }
 
+    /* Clears the zoom control (moved to Leaflet's native topright corner,
+       see the zoomControl JS above map creation) below .basemap-toggle's own
+       50px height (44px button + 2x3px padding) + 12px top + 8px gap,
+       instead of the two overlapping. Desktop only -- mobile keeps the zoom
+       control in topleft, untouched. */
+    @media (min-width: 981px) {
+      .leaflet-top.leaflet-right {
+        top: 70px;
+      }
+    }
+
     .basemap-toggle button {
       background: transparent;
       border: 0;
@@ -2079,7 +2090,7 @@
           420px,
           calc(100% - var(--basic-rail-left-clear) - var(--basic-rail-right-clear) - 16px)
         );
-        top: 84px;
+        top: 16px;
       }
 
       /* Leaflet's bottom-right corner holds BOTH the +/- zoom control and the
@@ -4479,12 +4490,23 @@
               <label for="deviceSourceSelect">ソース</label>
               <select id="deviceSourceSelect">
                 <option value="qz1-serial" selected>QZ1（USB / Bluetooth SPP）</option>
-                <option value="qz1-bluetooth" disabled>QZ1（Bluetooth）— 準備中</option>
+                <option value="qz1-bluetooth">QZ1LE（Bluetooth LE・試験的）</option>
                 <option value="drone" disabled>ドローン — 準備中</option>
                 <option value="replay" disabled>NMEAファイル再生 — 準備中</option>
               </select>
             </div>
-            <div class="input-row rec-secondary">
+            <!-- QZ1LE over Web Bluetooth is scaffolding, not a verified
+                 integration: the app has no confirmed GATT service/
+                 characteristic UUIDs or data format for QZ1LE. See the
+                 large comment above bluetoothConnectQz1Le() in the script.
+                 This note is the honest, always-visible flag for that --
+                 do not remove it once real hardware is confirmed working;
+                 replace it with real verification notes instead. -->
+            <p id="bluetoothUnverifiedNote" class="meta rec-secondary" hidden>
+              QZ1LE（Bluetooth LE）接続は試験的な実装です。実機QZ1LEでの動作は確認されていません。
+              動作しない場合はQZ1（USB / Bluetooth SPP）をお使いください。
+            </p>
+            <div id="baudRow" class="input-row rec-secondary">
               <label for="baudSelect">ボーレート（USB接続時のみ有効）</label>
               <select id="baudSelect" class="baud-select">
                 <option value="4800">4800</option>
@@ -5156,18 +5178,20 @@
 
     const map = L.map("map", { zoomControl: false }).setView([34.65, 135.83], 14);
     window.map = map;
-    // Desktop wants the +/- zoom control bottom-right, out of the way of the
-    // new map-corner water summary (upper-left) and the 地図/航空写真 toggle
-    // (upper-right). Mobile keeps Leaflet's default top-left, unchanged from
-    // before this existed. One control, repositioned via Leaflet's own API
-    // (control.setPosition) rather than relocated with absolute CSS, and
-    // kept in sync if the window is resized across the breakpoint.
+    // Desktop wants the +/- zoom control directly under the 地図/航空写真
+    // toggle (both upper-right), out of the way of the map-corner water
+    // summary (upper-left). Mobile keeps Leaflet's default top-left,
+    // unchanged from before this existed. One control, repositioned via
+    // Leaflet's own API (control.setPosition) rather than relocated with
+    // absolute CSS, and kept in sync if the window is resized across the
+    // breakpoint. The .leaflet-top.leaflet-right offset that actually clears
+    // it below the toggle lives in the CSS, next to .basemap-toggle.
     const desktopViewportQuery = window.matchMedia("(min-width: 981px)");
     const zoomControl = L.control.zoom({
-      position: desktopViewportQuery.matches ? "bottomright" : "topleft"
+      position: desktopViewportQuery.matches ? "topright" : "topleft"
     }).addTo(map);
     desktopViewportQuery.addEventListener("change", (event) => {
-      zoomControl.setPosition(event.matches ? "bottomright" : "topleft");
+      zoomControl.setPosition(event.matches ? "topright" : "topleft");
     });
 
     /** Human-readable reason, for the one manual control and for diagnosing
@@ -5549,6 +5573,7 @@
     const exportAnalysisButton = document.getElementById("exportAnalysisButton");
     const serialStatusEl = document.getElementById("serialStatus");
     const serialLineCountEl = document.getElementById("serialLineCount");
+    const deviceSourceSelect = document.getElementById("deviceSourceSelect");
     const baudSelect = document.getElementById("baudSelect");
     const serialConnectButton = document.getElementById("serialConnectButton");
     const serialDownloadButton = document.getElementById("serialDownloadButton");
@@ -5678,6 +5703,10 @@
     let serialStalled = false;
     let serialReconnectAttempts = 0;
     let serialTransportLabel = "";
+    // Which transport currently owns the live connection -- disconnectSerial()
+    // and disconnectBluetoothQz1Le() each only touch their own transport's
+    // state, so this decides which one a disconnect click actually means.
+    let activeGnssTransport = "serial";
 
     function parseNmea(text) {
       const result = {
@@ -9319,6 +9348,26 @@
         writeRoute(route, { replace });
       }
       renderDroneModeGate();
+      syncBasicWaterRecordCollapse(mode);
+    }
+
+    /**
+     * 水位・観察を記録 (#basicWaterRecordCard) stays open by default in 基本
+     * モード (its whole reason to exist there) but starts collapsed in 設定
+     * -- QZ1測量 already shows it open next to フィールド記録's own connect/
+     * recording controls, which made it look like a second, competing water
+     * form rather than the same card. Still fully reachable (just closed);
+     * still the only place to mark an observation against a session started
+     * from フィールド記録. Skipped while desktop 基本モード's own class-based
+     * slide-down mechanism (openAttachedWaterRecordCard/
+     * toggleAttachedWaterRecordCard) owns this element's [open] state.
+     */
+    function syncBasicWaterRecordCollapse(mode) {
+      const card = document.getElementById("basicWaterRecordCard");
+      if (!card || card.classList.contains("basic-water-record-attached")) {
+        return;
+      }
+      card.open = mode !== "settings";
     }
 
     function switchWorkspace(workspace, { updateHash = true, replace = false } = {}) {
@@ -9725,10 +9774,12 @@
 
       serialPort = port;
       serialConnected = true;
+      activeGnssTransport = "serial";
       serialReconnectAttempts = 0;
       serialTransportLabel = describeSerialPort(port);
       serialConnectButton.textContent = "切断";
       serialConnectButton.className = "panel-button danger";
+      deviceSourceSelect.disabled = true;
       setConnectionState("connected", "接続中", "connected");
       setSerialMessage(`${serialTransportLabel} に接続しました。GGA文を解析して地図に追加します。画面はスリープしません。`);
       requestWakeLock();
@@ -9949,6 +10000,7 @@
       releaseWakeLock();
       serialConnectButton.className = "panel-button primary";
       serialConnectButton.disabled = false;
+      deviceSourceSelect.disabled = false;
       setConnectionState("disconnected", "未接続", "");
       await updateSerialConnectLabel();
       if (assuranceController && serialRawLines.length > serialAssuranceImportedLines) {
@@ -9970,6 +10022,157 @@
           ? "切断しました。「ログを保存 (.nmea)」で受信データを残せます。"
           : "切断しました。");
       }
+    }
+
+    // -------------------------------------------------------------------
+    // QZ1LE over Web Bluetooth -- SCAFFOLDING ONLY, requested without a
+    // confirmed protocol (see the /grillme conversation this came from).
+    // This is deliberately NOT presented as a working integration:
+    //
+    //   - The service/characteristic UUIDs below are the Nordic UART
+    //     Service (NUS) shape, a common pattern for BLE-to-serial bridge
+    //     modules -- NOT a confirmed fact about QZ1LE specifically. If
+    //     QZ1LE uses a different service, connecting will fail at
+    //     getPrimaryService()/getCharacteristic() with a clear error,
+    //     which is the correct, honest failure mode until the real UUIDs
+    //     are known (from a datasheet, or a capture of a working
+    //     connection) and substituted in here.
+    //   - Incoming bytes are decoded as UTF-8 text and split on line
+    //     breaks on the assumption QZ1LE streams NMEA sentences like the
+    //     existing serial/SPP path (unconfirmed).
+    //   - #bluetoothUnverifiedNote in the markup is the user-facing half
+    //     of this same honesty requirement -- do not remove either side
+    //     without the other, and do not remove this note just because a
+    //     connection attempt happens to succeed against SOME device;
+    //     remove it only once verified against real QZ1LE hardware.
+    //
+    // Once real hardware data confirms the real UUIDs/framing, this can
+    // become a first-class transport (its own baud-less connect flow is
+    // already wired below) with no changes needed downstream:
+    // handleSerialLine() -- the exact same parse/record/render pipeline
+    // the existing serial transport uses -- is reused unmodified.
+    const QZ1LE_SERVICE_UUID_PLACEHOLDER = "6e400001-b5a3-f393-e9a0-e50e24dcca9e";
+    const QZ1LE_NOTIFY_CHARACTERISTIC_UUID_PLACEHOLDER = "6e400003-b5a3-f393-e9a0-e50e24dcca9e";
+    const bluetoothSupported = "bluetooth" in navigator;
+    let bluetoothDevice = null;
+    let bluetoothCharacteristic = null;
+    let bluetoothLineBuffer = "";
+    const bluetoothTextDecoder = new TextDecoder("utf-8");
+
+    function handleBluetoothValueChanged(event) {
+      bluetoothLineBuffer += bluetoothTextDecoder.decode(event.target.value);
+      const lines = bluetoothLineBuffer.split(/\r?\n/);
+      bluetoothLineBuffer = lines.pop() || "";
+      lines.forEach((line) => { if (line) handleSerialLine(line); });
+    }
+
+    function handleBluetoothGattDisconnected() {
+      if (activeGnssTransport !== "bluetooth") {
+        return; // a stale listener from an already-cleaned-up device
+      }
+      disconnectBluetoothQz1Le({ unexpected: true });
+    }
+
+    async function connectBluetoothQz1Le(device) {
+      setConnectionState("opening", "接続中…", "");
+      bluetoothDevice = device;
+      bluetoothDevice.addEventListener("gattserverdisconnected", handleBluetoothGattDisconnected);
+      try {
+        const server = await device.gatt.connect();
+        const service = await server.getPrimaryService(QZ1LE_SERVICE_UUID_PLACEHOLDER);
+        const characteristic = await service.getCharacteristic(QZ1LE_NOTIFY_CHARACTERISTIC_UUID_PLACEHOLDER);
+        await characteristic.startNotifications();
+        characteristic.addEventListener("characteristicvaluechanged", handleBluetoothValueChanged);
+        bluetoothCharacteristic = characteristic;
+        bluetoothLineBuffer = "";
+        activeGnssTransport = "bluetooth";
+        serialConnected = true;
+        serialTransportLabel = "QZ1LE (Bluetooth LE・試験的)";
+        serialConnectButton.textContent = "切断";
+        serialConnectButton.className = "panel-button danger";
+        deviceSourceSelect.disabled = true;
+        setConnectionState("connected", "接続中（試験的・未検証）", "success");
+        setSerialMessage("QZ1LEに接続しました。この接続は実機での動作が未確認です。測位点が表示されない場合はQZ1（USB / Bluetooth SPP）をお試しください。");
+      } catch (error) {
+        setConnectionState("error", "未接続", "");
+        setSerialMessage(`QZ1LEへの接続に失敗しました（プロトコル未確認のため想定内です）: ${error.message}`);
+        try { device.gatt?.disconnect(); } catch {}
+        bluetoothDevice = null;
+      }
+    }
+
+    async function toggleBluetoothConnection() {
+      if (serialConnected && activeGnssTransport === "bluetooth") {
+        await disconnectBluetoothQz1Le();
+        return;
+      }
+      if (!bluetoothSupported) {
+        setConnectionState("unsupported", "非対応", "error");
+        setSerialMessage("このブラウザは Web Bluetooth 非対応です。デスクトップ版の Chrome / Edge をご利用ください。");
+        return;
+      }
+      serialConnectButton.disabled = true;
+      try {
+        setConnectionState("requesting", "選択中…", "");
+        let device;
+        try {
+          device = await navigator.bluetooth.requestDevice({
+            filters: [{ services: [QZ1LE_SERVICE_UUID_PLACEHOLDER] }],
+            optionalServices: [QZ1LE_SERVICE_UUID_PLACEHOLDER]
+          });
+        } catch (error) {
+          setConnectionState("error", "未接続", "");
+          setSerialMessage(error.name === "NotFoundError"
+            ? "デバイスが選択されませんでした（プロトコル未確認のため一覧に出ない場合があります）。"
+            : `接続できませんでした: ${error.message}`);
+          return;
+        }
+        await connectBluetoothQz1Le(device);
+      } finally {
+        serialConnectButton.disabled = false;
+      }
+    }
+
+    async function disconnectBluetoothQz1Le({ unexpected = false } = {}) {
+      if (activeGnssTransport !== "bluetooth" || (!serialConnected && !bluetoothDevice)) {
+        return;
+      }
+      serialConnected = false;
+      setConnectionState("disconnecting", "切断中", "");
+      try {
+        bluetoothCharacteristic?.removeEventListener("characteristicvaluechanged", handleBluetoothValueChanged);
+        await bluetoothCharacteristic?.stopNotifications();
+      } catch {}
+      try {
+        bluetoothDevice?.removeEventListener("gattserverdisconnected", handleBluetoothGattDisconnected);
+        if (bluetoothDevice?.gatt?.connected) bluetoothDevice.gatt.disconnect();
+      } catch {}
+      bluetoothCharacteristic = null;
+      bluetoothDevice = null;
+      activeGnssTransport = "serial";
+      serialConnectButton.className = "panel-button primary";
+      serialConnectButton.textContent = "QZ1LEに接続";
+      deviceSourceSelect.disabled = false;
+      setConnectionState("disconnected", unexpected ? "切断されました" : "未接続", "");
+    }
+
+    function selectedDeviceSource() {
+      return deviceSourceSelect?.value || "qz1-serial";
+    }
+
+    async function handleDeviceConnectClick() {
+      if (selectedDeviceSource() === "qz1-bluetooth") {
+        await toggleBluetoothConnection();
+      } else {
+        await toggleSerialConnection();
+      }
+    }
+
+    function syncDeviceSourceUi() {
+      const isBluetooth = selectedDeviceSource() === "qz1-bluetooth";
+      document.getElementById("bluetoothUnverifiedNote").hidden = !isBluetooth;
+      document.getElementById("baudRow").hidden = isBluetooth;
+      serialConnectButton.textContent = isBluetooth ? "QZ1LEに接続" : "QZ1に接続";
     }
 
     function downloadSerialLog() {
@@ -10149,7 +10352,9 @@
       clearSurveyedGate();
       refreshFieldOverlay();
     });
-    serialConnectButton.addEventListener("click", toggleSerialConnection);
+    serialConnectButton.addEventListener("click", handleDeviceConnectClick);
+    deviceSourceSelect.addEventListener("change", syncDeviceSourceUi);
+    syncDeviceSourceUi();
     serialDownloadButton.addEventListener("click", downloadSerialLog);
 
     if (serialSupported) {
