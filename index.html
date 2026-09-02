@@ -10847,6 +10847,8 @@
     workspacePrimaryAction.addEventListener("click", () => {
       if (activeWorkspace === "assurance") {
         assuranceController?.recalculate();
+      } else if (activeWorkspace === "devtools") {
+        droneController?.refreshHealthAndConfig();
       } else {
         document.getElementById("loadPaddyDemoButton").click();
       }

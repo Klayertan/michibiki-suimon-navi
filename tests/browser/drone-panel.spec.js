@@ -349,3 +349,33 @@ test("the existing survey workflow still works with the drone panel present", as
   await expect(page.locator("#recStartButton")).toBeAttached();
   await expect(page.locator("#deviceSourceSelect")).toBeAttached();
 });
+
+// Regression coverage: 開発ツール's header button ("バックエンド状態を確認")
+// used to have no case of its own, so it fell into the generic else branch
+// and clicked 詳細解析's demo-data loader instead -- a card that isn't even
+// part of 開発ツール. It must re-check the drone/MAVLink backend instead.
+test("開発ツール's 「バックエンド状態を確認」 header button re-checks the drone backend, not the demo loader", async ({ page }) => {
+  await stubBackend(page, status());
+  await page.goto("/#settings/devtools");
+  await expect(page.locator("#dronePanel")).toBeVisible();
+  await expect(page.locator("#workspacePrimaryAction")).toHaveText("バックエンド状態を確認");
+
+  await page.waitForFunction(() => window.droneController);
+  await page.evaluate(() => {
+    window.__healthCalls = 0;
+    const original = window.droneController.refreshHealthAndConfig.bind(window.droneController);
+    window.droneController.refreshHealthAndConfig = (...args) => {
+      window.__healthCalls += 1;
+      return original(...args);
+    };
+    window.__demoClicked = false;
+    document.getElementById("loadPaddyDemoButton").addEventListener("click", () => {
+      window.__demoClicked = true;
+    });
+  });
+
+  await page.locator("#workspacePrimaryAction").click();
+
+  await expect.poll(() => page.evaluate(() => window.__healthCalls)).toBeGreaterThan(0);
+  expect(await page.evaluate(() => window.__demoClicked)).toBe(false);
+});
