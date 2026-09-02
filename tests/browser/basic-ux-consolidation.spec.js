@@ -113,9 +113,12 @@ test("switching away from 開発ツール and back stays stable, and a refresh r
   const devtoolsMapHeight = () => page.evaluate(() => document.querySelector(".map-wrap").getBoundingClientRect().height);
   const first = await devtoolsMapHeight();
 
-  await page.locator('[data-workspace-target="fields"]').click();
+  // ドローンモード's own 巡回/接続 tabs reuse data-workspace-target="analysis"/
+  // "devtools" too (see .drone-engineering-nav in index.html), so these need
+  // to name the Settings tabs specifically by their own text.
+  await page.getByRole("button", { name: "圃場データ" }).click();
   await expect(page.locator("body")).toHaveAttribute("data-workspace", "fields");
-  await page.locator('[data-workspace-target="devtools"]').click();
+  await page.getByRole("button", { name: "開発ツール" }).click();
   await expect(page.locator("body")).toHaveAttribute("data-workspace", "devtools");
   expect(await devtoolsMapHeight()).toBeCloseTo(first, 0);
 
@@ -430,7 +433,11 @@ test("the three top-level modes and the Settings workspaces are unchanged", asyn
   expect(modes[2]).toContain("開発者モード");
 
   await page.goto("/#settings");
-  const workspaces = await page.locator("[data-workspace-target]").allTextContents();
+  // Scoped to .engineering-nav specifically: ドローンモード now has its own
+  // 巡回/接続 tabs (.drone-engineering-nav) reusing the same
+  // data-workspace-target values, which a bare [data-workspace-target]
+  // locator would also pick up.
+  const workspaces = await page.locator(".engineering-nav [data-workspace-target]").allTextContents();
   expect(workspaces).toEqual(["判断デモ", "QZ1測量", "圃場データ", "詳細解析", "開発ツール"]);
 });
 

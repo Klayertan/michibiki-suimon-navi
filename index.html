@@ -1492,7 +1492,8 @@
       margin-top: 10px;
     }
 
-    .engineering-nav {
+    .engineering-nav,
+    .drone-engineering-nav {
       margin-top: 8px;
     }
 
@@ -2833,7 +2834,8 @@
         padding-inline: 3px;
       }
 
-      .engineering-nav {
+      .engineering-nav,
+      .drone-engineering-nav {
         margin-top: 2px;
         padding-bottom: 3px;
       }
@@ -3108,6 +3110,25 @@
           <button class="workspace-tab" type="button" data-workspace-target="fields" aria-selected="false">圃場データ</button>
           <button class="workspace-tab" type="button" data-workspace-target="analysis" aria-selected="false">詳細解析</button>
           <button class="workspace-tab" type="button" data-workspace-target="devtools" aria-selected="false">開発ツール</button>
+        </nav>
+      </div>
+      <!-- ドローンモード's own 2-tab nav, on request -- structurally
+           .engineering-nav's twin (own wrapper, own .workspace-nav; kept a
+           distinct wrapper class, .drone-engineering-nav, purely so
+           page.locator(".engineering-nav") in existing tests still resolves
+           to exactly one element). Reuses the same data-workspace-target
+           values as the Settings tabs above, so the existing
+           `[data-workspace-target]` click-wiring loop picks these buttons up
+           for free -- scoped to data-mode="drone" and to just the two
+           workspaces that now render there: 巡回 (=analysis, 圃場解析デモ +
+           ドローン飛行計画) and 接続 (=devtools, #dronePanel). Hidden until a
+           field exists -- toggled by renderDroneModeGate() alongside
+           #dronePanel/#droneFlightPlanPanel, since there's nothing to show
+           under either tab before then. -->
+      <div class="drone-engineering-nav" data-mode="drone">
+        <nav id="droneWorkspaceNav" class="workspace-nav" aria-label="ドローンモード画面" hidden>
+          <button class="workspace-tab" type="button" data-workspace-target="analysis" aria-selected="false">巡回</button>
+          <button class="workspace-tab" type="button" data-workspace-target="devtools" aria-selected="false">接続</button>
         </nav>
       </div>
     </header>
@@ -4135,7 +4156,18 @@
           </div>
         </details>
 
-        <details class="card paddy-collapsible" data-workspace="analysis" data-mode="settings" open hidden>
+        <!-- 詳細解析 moved into ドローンモード too, on request: every card
+             data-workspace="analysis" below (圃場解析デモ, the vegetation
+             cards, layer toggles) is now dual-tagged data-mode="drone
+             settings" -- same pattern already used for #dronePanel /
+             #droneFlightPlanPanel above. Still reachable from 設定 →
+             詳細解析 unchanged (data-workspace untouched). In ドローンモード
+             these render under the new 巡回 tab (see .drone-workspace-nav
+             and the workspaceGated change in switchWorkspace()), the same
+             way #dronePanel renders under 接続 -- planning a flight and
+             reading the field's own analysis belong together, next to the
+             drone that flies it. -->
+        <details class="card paddy-collapsible" data-workspace="analysis" data-mode="drone settings" open hidden>
           <summary><span class="details-title">圃場解析デモ<span class="en">Paddy intelligence</span></span></summary>
           <div class="details-content">
           <p class="meta">ドローン・GNSS測量・水管理・AI検出結果を重ねて、圃場内の水面、稲株、問題ゾーン、障害物を確認します。</p>
@@ -4172,7 +4204,7 @@
           </div>
         </details>
 
-        <details class="card paddy-collapsible" data-workspace="analysis" data-mode="settings" hidden>
+        <details class="card paddy-collapsible" data-workspace="analysis" data-mode="drone settings" hidden>
           <summary><span class="details-title">手動注釈<span class="en">Draw / mark</span></span></summary>
           <div class="details-content">
           <div class="paddy-drawing-status">
@@ -4210,7 +4242,7 @@
           </div>
         </details>
 
-        <details class="card paddy-collapsible" data-workspace="analysis" data-mode="settings" hidden>
+        <details class="card paddy-collapsible" data-workspace="analysis" data-mode="drone settings" hidden>
           <summary><span class="details-title">選択地物<span class="en">Inspect / notes</span></span></summary>
           <div class="details-content">
           <div id="selectedFeatureSummary" class="paddy-selected-panel">地図上の解析地物をクリックすると詳細を表示します。</div>
@@ -4222,7 +4254,7 @@
           </div>
         </details>
 
-        <details class="card paddy-collapsible" data-workspace="analysis" data-mode="settings" open hidden>
+        <details class="card paddy-collapsible" data-workspace="analysis" data-mode="drone settings" open hidden>
           <summary><span class="details-title">必要水量<span class="en">Irrigation estimate</span></span></summary>
           <div class="details-content">
           <div class="input-row">
@@ -4234,7 +4266,7 @@
           </div>
         </details>
 
-        <details class="card paddy-collapsible" data-workspace="analysis" data-mode="settings" hidden>
+        <details class="card paddy-collapsible" data-workspace="analysis" data-mode="drone settings" hidden>
           <summary><span class="details-title">カテゴリ別面積<span class="en">Plants / problems</span></span></summary>
           <div class="details-content">
           <p class="meta">各ポリゴン面積を合算しています。重なりがある場合は重複分も合計されます。</p>
@@ -4253,7 +4285,7 @@
           </div>
         </details>
 
-        <details class="card paddy-collapsible" data-workspace="analysis" data-mode="settings" hidden>
+        <details class="card paddy-collapsible" data-workspace="analysis" data-mode="drone settings" hidden>
           <summary><span class="details-title">管理グリッド<span class="en">Management zones</span></span></summary>
           <div class="details-content">
           <div class="input-row">
@@ -4317,7 +4349,7 @@
           </div>
         </details>
 
-        <details class="card paddy-collapsible" data-workspace="analysis" data-mode="settings" hidden>
+        <details class="card paddy-collapsible" data-workspace="analysis" data-mode="drone settings" hidden>
           <summary><span class="details-title">QZ1点と圃場の対応<span class="en">Field relation</span></span></summary>
           <div class="details-content">
             <p class="meta">読み込んだQZ1/GNSS測位点が圃場境界・管理グリッドとどう対応するかを確認します。</p>
@@ -4337,7 +4369,7 @@
           </div>
         </details>
 
-        <details class="card paddy-collapsible" data-workspace="analysis" data-mode="settings" open hidden>
+        <details class="card paddy-collapsible" data-workspace="analysis" data-mode="drone settings" open hidden>
           <summary><span class="details-title">植生インテリジェンス<span class="en">Vegetation intelligence</span></span></summary>
           <div class="details-content">
             <p class="meta">カメラ・AIが検出した雑草や生育異常の「候補」を、QZ1 / SLASの位置で圃場・管理グリッドに関連付けて記録します。病害虫の確定診断ではありません。現地確認を前提とした一次スクリーニングです。</p>
@@ -4373,7 +4405,7 @@
           </div>
         </details>
 
-        <details class="card paddy-collapsible" data-workspace="analysis" data-mode="settings" hidden>
+        <details class="card paddy-collapsible" data-workspace="analysis" data-mode="drone settings" hidden>
           <summary><span class="details-title">植生観測の記録<span class="en">Record observation</span></span></summary>
           <div class="details-content">
             <div class="kv"><span>選択中の圃場</span><strong id="vegSelectedField">—</strong></div>
@@ -4439,7 +4471,7 @@
           </div>
         </details>
 
-        <details class="card paddy-collapsible" data-workspace="analysis" data-mode="settings" hidden>
+        <details class="card paddy-collapsible" data-workspace="analysis" data-mode="drone settings" hidden>
           <summary><span class="details-title">セル植生履歴と比較<span class="en">Cell history</span></span></summary>
           <div class="details-content">
             <div id="vegCellSummary" class="paddy-selected-panel" aria-live="polite"></div>
@@ -4469,7 +4501,7 @@
           </div>
         </details>
 
-        <details class="card paddy-collapsible" data-workspace="analysis" data-mode="settings" hidden>
+        <details class="card paddy-collapsible" data-workspace="analysis" data-mode="drone settings" hidden>
           <summary><span class="details-title">位置関連付けレビュー<span class="en">Association review</span></span></summary>
           <div class="details-content">
             <p class="meta">境界付近・圃場外・グリッド未整備などで自動関連付けが確定できない観測の一覧です。元の緯度経度は変更せず、割当先だけを確認・変更します。</p>
@@ -4490,14 +4522,14 @@
           </div>
         </details>
 
-        <details class="card paddy-collapsible" data-workspace="analysis" data-mode="settings" hidden>
+        <details class="card paddy-collapsible" data-workspace="analysis" data-mode="drone settings" hidden>
           <summary><span class="details-title">レイヤー凡例<span class="en">Styles</span></span></summary>
           <div class="details-content">
           <div id="paddyLegend" class="paddy-legend"></div>
           </div>
         </details>
 
-        <details class="card paddy-collapsible" data-workspace="analysis" data-mode="settings" hidden>
+        <details class="card paddy-collapsible" data-workspace="analysis" data-mode="drone settings" hidden>
           <summary><span class="details-title">圃場ポリゴン作成（詳細設定）<span class="en">Create field polygon — advanced</span></span></summary>
           <div class="details-content">
             <p class="meta">通常は圃場データタブでNMEAをアップロードすると自動的に登録を確認されます。この詳細設定は、既に読み込んだ点列から特定の範囲だけを選んで圃場ポリゴンを作りたい場合の高度なツールです。</p>
@@ -7400,10 +7432,26 @@
         droneSelectRow.hidden = fields.length <= 1;
       }
       if (document.body.dataset.mode === "drone") {
-        dronePanel.hidden = !field;
+        // #dronePanel / #droneFlightPlanPanel are now ALSO workspace-gated
+        // (see switchWorkspace()'s workspaceGated change) -- 接続/巡回 only
+        // show the one matching the active tab. Recomputed from both gates
+        // together, rather than just setting hidden = !field, so this holds
+        // regardless of whether switchWorkspace() or this function ran last:
+        // unconditionally forcing hidden = false whenever a field exists
+        // would reveal the OTHER tab's panel too.
+        const onActiveWorkspace = (el) => el.dataset.workspace === document.body.dataset.workspace;
+        dronePanel.hidden = !field || !onActiveWorkspace(dronePanel);
         const flightPlanPanel = document.getElementById("droneFlightPlanPanel");
         if (flightPlanPanel) {
-          flightPlanPanel.hidden = !field;
+          flightPlanPanel.hidden = !field || !onActiveWorkspace(flightPlanPanel);
+        }
+        const droneWorkspaceNav = document.getElementById("droneWorkspaceNav");
+        if (droneWorkspaceNav) {
+          // The 巡回/接続 tab bar itself: like #droneModeGateCard's own
+          // message, there is nothing to switch between before a field
+          // exists, so it stays hidden alongside the panels rather than
+          // showing two tabs that both lead nowhere.
+          droneWorkspaceNav.hidden = !field;
         }
       }
     }
@@ -9545,7 +9593,14 @@
       // actual field/point counts before anything paints.
       resetEmptyState();
       updateEmptyStateVisibility();
-      const defaultWorkspace = workspace ?? (mode === "settings" ? "decision" : "survey");
+      // 基本モード has no workspace tabs of its own (data-mode alone gates
+      // its cards), so "survey" here is really just "not decision/analysis" --
+      // harmless as long as nothing in Basic mode is workspace-gated, which
+      // holds today. ドローンモード now DOES have its own tabs (巡回/接続,
+      // see #droneWorkspaceNav above), so it needs its own real default:
+      // 巡回 (=analysis) is the more useful first screen, and matters once
+      // workspaceGated in switchWorkspace() below applies to drone mode too.
+      const defaultWorkspace = workspace ?? (mode === "settings" ? "decision" : mode === "drone" ? "analysis" : "survey");
       switchWorkspace(defaultWorkspace, { updateHash: false });
       if (updateHash) {
         const route = mode === "settings" && defaultWorkspace !== "decision"
@@ -9563,13 +9618,22 @@
       activeWorkspace = workspace;
       proofPointsRequested = false;
       document.body.dataset.workspace = workspace;
-      // Workspaces are a Settings-only concept (they are the nested
-      // settings/* routes). In 基本 / ドローン the workspace tabs are not even
+      // Workspaces are primarily a Settings concept (they are the nested
+      // settings/* routes). In 基本モード the workspace tabs are not even
       // reachable, so applying their gate there would arbitrarily suppress
       // cards purely because of which legacy workspace they happen to sit in
       // -- that is what kept 今日の水門判断 (data-workspace="decision") out of
-      // 基本モード. Outside Settings, data-mode is the single source of truth.
-      const workspaceGated = document.body.dataset.mode === "settings";
+      // 基本モード. data-mode is the single source of truth there.
+      //
+      // ドローンモード is the one exception, on request: #droneWorkspaceNav
+      // gives it its own 巡回/接続 tabs, reusing this exact mechanism against
+      // the "analysis"/"devtools" workspaces (data-workspace unchanged on
+      // #droneFlightPlanPanel / the 詳細解析 cards / #dronePanel -- only their
+      // data-mode gained "drone"). This is safe to turn on for drone mode
+      // specifically because the ONLY other data-mode="drone" element,
+      // #droneModeGateCard, deliberately carries no data-workspace at all
+      // (see its own comment) and so is untouched by the loop below.
+      const workspaceGated = document.body.dataset.mode === "settings" || document.body.dataset.mode === "drone";
       document.querySelectorAll("[data-workspace]").forEach((section) => {
         section.hidden = workspaceGated && section.dataset.workspace !== workspace;
       });

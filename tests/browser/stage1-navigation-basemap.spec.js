@@ -48,7 +48,10 @@ test("legacy workspaces remain compatible inside Settings and canonicalize after
   await expect(page.locator(".engineering-nav")).toBeVisible();
   await expect(page.locator('[data-workspace-target="survey"]')).toHaveAttribute("aria-selected", "true");
 
-  await page.locator('[data-workspace-target="analysis"]').click();
+  // ドローンモード's own 巡回 tab reuses data-workspace-target="analysis"
+  // too (see .drone-engineering-nav in index.html), so this needs to name
+  // the Settings tab specifically by its own text.
+  await page.getByRole("button", { name: "詳細解析" }).click();
   await expect(page).toHaveURL(/#settings\/analysis$/);
   await expect(page.locator("body")).toHaveAttribute("data-workspace", "analysis");
 
@@ -68,7 +71,7 @@ test("aerial basemap keeps center and every existing overlay while enforcing fie
   await expect(page.locator(".leaflet-control-attribution")).not.toContainText("国土地理院");
 
   // Register through Basic mode's own Stage-1 flow: the old shared
-  // The old shared uploader was removed (see index.html); #fieldRegDialog is reachable
+  // uploader was removed (see index.html); #fieldRegDialog is reachable
   // only via #typedSurveyUploadInput now, for the narrower 測量タイプ case.
   await page.locator("#basicNmeaInput").setInputFiles({
     name: "walk.txt",
