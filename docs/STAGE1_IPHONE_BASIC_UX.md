@@ -57,7 +57,8 @@ they were never affected.
 
 New module: [`js/gnss/nmea-file-intake.js`](../js/gnss/nmea-file-intake.js) —
 pure, no DOM, no File API. One shared path, used by
-`#basicNmeaInput`, `#fileInput` (via `handleNmeaFileSelected()` in `index.html`)
+`#basicNmeaInput`, `#typedSurveyUploadInput` (the explicit advanced
+measurement-type uploader in `index.html`)
 and by the two assurance inputs (via `readNmeaFile()` in
 `satellite-assurance-controller.js`).
 

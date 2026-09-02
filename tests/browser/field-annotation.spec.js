@@ -40,16 +40,15 @@ async function openSurveyWorkspace(page) {
 }
 
 async function uploadNmea(page, nmeaText, fileName = "walk.txt") {
-  // #fileInput lives under 開発ツール now, not 圃場データ -- #fieldRegDialog's
-  // own visibility is upload-triggered, not workspace-gated, so hopping over
-  // to 開発ツール for the upload and straight back doesn't disturb it.
-  await page.evaluate(() => switchWorkspace("devtools"));
-  await page.locator("#fileInput").setInputFiles({
+  // The explicit advanced uploader is the only Settings entry point for
+  // boundary tracks and water-point surveys. It switches to 圃場データ before
+  // it opens #fieldRegDialog.
+  await page.evaluate(() => switchMode("settings", { workspace: "devtools" }));
+  await page.locator("#typedSurveyUploadInput").setInputFiles({
     name: fileName,
     mimeType: "text/plain",
     buffer: Buffer.from(nmeaText)
   });
-  await page.evaluate(() => switchWorkspace("fields"));
 }
 
 test("uploading an NMEA file opens the registration dialog with sequential defaults", async ({ page }) => {
@@ -708,9 +707,14 @@ function workflowStep(page, id) {
   return page.locator(`.workflow-step:has(button[data-workflow-step="${id}"])`);
 }
 
-test("現地調査ワークフロー panel appears in 圃場データ with 0/5 progress and step 1 as the next task on a fresh load", async ({ page }) => {
-  await openSurveyWorkspace(page);
+async function openWorkflowGuide(page) {
+  await page.evaluate(() => switchMode("settings", { workspace: "devtools" }));
   await expect(page.locator("#workflowGuidePanel")).toBeVisible();
+}
+
+test("現地調査ワークフロー panel appears in 開発ツール with 0/5 progress and step 1 as the next task on a fresh load", async ({ page }) => {
+  await openSurveyWorkspace(page);
+  await openWorkflowGuide(page);
   await expect(page.locator("#workflowGuidePanel h2")).toHaveText("現地調査ワークフロー");
   await expect(page.locator("#workflowProgressLabel")).toHaveText("進捗: 0 / 5 完了");
   await expect(page.locator("#workflowNextTask")).toHaveText("次の作業: NMEAログをアップロードしてください。");
@@ -722,6 +726,7 @@ test("現地調査ワークフロー panel appears in 圃場データ with 0/5 p
 
 test("step 3 and step 4 buttons are disabled with 先に圃場を登録してください until a field exists", async ({ page }) => {
   await openSurveyWorkspace(page);
+  await openWorkflowGuide(page);
   await expect(workflowStep(page, 3).locator("button")).toBeDisabled();
   await expect(workflowStep(page, 3)).toContainText("先に圃場を登録してください。");
   await expect(workflowStep(page, 4).locator("button")).toBeDisabled();
@@ -733,8 +738,8 @@ test("step 3 button focuses the 水管理ポイント quick toolbar once a field
   await uploadNmea(page, TIGHT_LOOP_NMEA);
   await page.locator("#fieldRegConfirmButton").click();
 
+  await openWorkflowGuide(page);
   await expect(workflowStep(page, 3).locator("button")).toBeEnabled();
-  await page.evaluate(() => switchWorkspace("devtools"));
   await workflowStep(page, 3).locator("button").click();
   // Destination is the always-visible on-map toolbar now, not a scrolled
   // side panel -- see the #waterControlPanel comment in index.html.
@@ -746,7 +751,7 @@ test("step 4 button opens and scrolls to 現地観察メモ once a field exists"
   await uploadNmea(page, TIGHT_LOOP_NMEA);
   await page.locator("#fieldRegConfirmButton").click();
 
-  await page.evaluate(() => switchWorkspace("devtools"));
+  await openWorkflowGuide(page);
   await workflowStep(page, 4).locator("button").click();
   await expect(page.locator("#fieldObservationsPanel")).toHaveJSProperty("open", true);
   await expect(page.locator("#fieldObservationsPanel")).toBeInViewport();
@@ -757,6 +762,7 @@ test("uploading and registering a field marks steps 1-2 done, and the next task 
   await uploadNmea(page, TIGHT_LOOP_NMEA);
   await page.locator("#fieldRegConfirmButton").click();
 
+  await openWorkflowGuide(page);
   await expect(page.locator("#workflowProgressLabel")).toHaveText("進捗: 2 / 5 完了");
   await expect(page.locator("#workflowNextTask")).toHaveText("次の作業: 水門・給水口・排水口を登録してください。");
   await expect(workflowStep(page, 1)).toContainText("✅");
@@ -771,14 +777,17 @@ test("adding a water-control point marks step 3 done, and adding an observation 
 
   await page.locator('#waterQuickToolbar button[data-water-quick-type="gate"]').click();
   await page.locator("#map").click({ position: { x: 300, y: 200 } });
+  await openWorkflowGuide(page);
   await expect(page.locator("#workflowProgressLabel")).toHaveText("進捗: 3 / 5 完了");
   await expect(workflowStep(page, 3)).toContainText("✅");
   await expect(page.locator("#workflowNextTask")).toHaveText("次の作業: 雑草・害虫・病気などの観察メモを記録してください。");
 
+  await page.evaluate(() => switchWorkspace("fields"));
   await page.locator("#obsTargetFieldSelect").selectOption("paddy-001");
   await page.locator("#obsAddWeedButton").click();
   await page.locator("#obsPositionQz1Button").click();
   await page.locator("#selFeatureSaveButton").click();
+  await openWorkflowGuide(page);
   await expect(page.locator("#workflowProgressLabel")).toHaveText("進捗: 4 / 5 完了");
   await expect(workflowStep(page, 4)).toContainText("✅");
   await expect(page.locator("#workflowNextTask")).toHaveText("次の作業: 測量JSONを書き出してください。");
@@ -823,6 +832,7 @@ test("exporting marks step 5 done, shows the completion message, persists lastEx
 // touches document/window scroll.
 test("workflow step cards are compact — consecutive steps sit close together with no excessive gap", async ({ page }) => {
   await openSurveyWorkspace(page);
+  await openWorkflowGuide(page);
   const gaps = await page.evaluate(() => {
     const steps = [...document.querySelectorAll("#workflowStepsContainer .workflow-step")];
     return steps.slice(1).map((step, index) => step.getBoundingClientRect().top - steps[index].getBoundingClientRect().bottom);

@@ -22,24 +22,35 @@ async function openAssuranceWorkspace(page) {
   });
 }
 
-/** Registers a field in 圃場データ (the primary workflow) without ever touching 測量チェック. */
+/**
+ * Registers a field without ever touching 測量チェック (measurement.query
+ * assertions below need the field to already exist independent of it).
+ * Goes through 基本モード's own flow (#basicNmeaInput -> #basicCreateFieldButton
+ * -> #basicFieldRegConfirmButton) now: the shared devtools uploader
+ * was removed, since it shared global parser/map state with Basic mode's
+ * own upload without sharing a lifecycle. Leaves the page in 基本モード --
+ * callers switch to 設定 themselves afterward. Note Basic mode's own
+ * default field name is 田圃N, not 設定's 圃場N.
+ */
 async function registerFieldInFieldsTab(page) {
-  await page.goto("/#settings/fields");
-  await expect(page.locator("#fieldRegDialog")).toBeAttached({ timeout: 15_000 });
-  // #fileInput lives under 開発ツール now, not 圃場データ -- #fieldRegDialog's
-  // own visibility is upload-triggered (fieldAnnotationController.
-  // syncDialogVisibility()), not workspace-gated, so hopping over to
-  // 開発ツール for the upload and straight back doesn't disturb it.
-  await page.evaluate(() => switchWorkspace("devtools"));
-  await page.locator("#fileInput").setInputFiles({ name: "walk.txt", mimeType: "text/plain", buffer: Buffer.from(TIGHT_LOOP_NMEA) });
-  await page.evaluate(() => switchWorkspace("fields"));
-  await page.locator("#fieldRegConfirmButton").click();
+  await page.goto("/");
+  await expect(page.locator("#basicNmeaInput")).toBeAttached({ timeout: 15_000 });
+  await page.evaluate(() => switchMode("basic"));
+  await page.locator("#basicNmeaInput").setInputFiles({ name: "walk.txt", mimeType: "text/plain", buffer: Buffer.from(TIGHT_LOOP_NMEA) });
+  await page.locator("#basicCreateFieldButton").click();
+  await page.locator("#basicFieldRegConfirmButton").click();
 }
 
 test("bundled QZ1 proof flows into the 測量チェック workspace", async ({ page }) => {
   await page.goto("/#decision");
   await page.locator("#decisionFieldSelect").selectOption("__sample__");
-  await page.getByRole("button", { name: "選択中データの測位点を表示" }).first().click();
+  // assuranceController initializes asynchronously after page load; without
+  // this, calling showSelectedDatasetOnMap() directly (skipping the removed
+  // header button, whose own actionability wait used to cover this) can run
+  // before applyNmeaText() has an assuranceController to import into, so
+  // #assuranceQz1Session ends up missing the imported session.
+  await page.waitForFunction(() => window.assuranceController);
+  await page.evaluate(() => showSelectedDatasetOnMap());
   await expect(page.locator("#proofTotal")).toHaveText("206点");
   await page.evaluate(() => switchWorkspace("assurance"));
   await expect(page.locator("#assuranceQz1Session option")).toHaveCount(2);
@@ -105,7 +116,7 @@ test("advanced settings and the SIMULATED dev-tools box are both collapsed by de
 
 test("QZ1-only mode: without a comparison GPS log, the result is never blank and shows the exact Mode A notice", async ({ page }) => {
   await registerFieldInFieldsTab(page);
-  await page.evaluate(() => switchWorkspace("assurance"));
+  await page.evaluate(() => switchMode("settings", { workspace: "assurance" }));
   await page.evaluate(() => {
     document.querySelectorAll("details[data-workspace='assurance']").forEach((card) => { card.open = true; });
   });
@@ -138,18 +149,18 @@ test("QZ1-only mode: without a comparison GPS log, the result is never blank and
 
 test("registered QZ1測量 survey sessions and fields are available in 測量チェック without re-uploading", async ({ page }) => {
   await registerFieldInFieldsTab(page);
-  await page.evaluate(() => switchWorkspace("assurance"));
+  await page.evaluate(() => switchMode("settings", { workspace: "assurance" }));
   await page.evaluate(() => {
     document.querySelectorAll("details[data-workspace='assurance']").forEach((card) => { card.open = true; });
   });
 
-  await expect(page.locator("#assuranceQz1Session")).toContainText("圃場1");
-  await expect(page.locator("#assuranceActiveField")).toContainText("圃場1");
+  await expect(page.locator("#assuranceQz1Session")).toContainText("田圃1");
+  await expect(page.locator("#assuranceActiveField")).toContainText("田圃1");
 });
 
 test("測量チェックを実行 updates the summary cards, and 詳細設定/開発・テスト用 stay out of the way", async ({ page }) => {
   await registerFieldInFieldsTab(page);
-  await page.evaluate(() => switchWorkspace("assurance"));
+  await page.evaluate(() => switchMode("settings", { workspace: "assurance" }));
   await page.evaluate(() => {
     document.querySelectorAll("details[data-workspace='assurance']").forEach((card) => { card.open = true; });
     // Advanced settings/dev-tools were force-opened above only for the
@@ -167,7 +178,13 @@ test("測量チェックを実行 updates the summary cards, and 詳細設定/�
 test("なぜこの判定？ panel shows farmer-friendly 判定/理由/おすすめ text for a selected cell", async ({ page }) => {
   await page.goto("/#decision");
   await page.locator("#decisionFieldSelect").selectOption("__sample__");
-  await page.getByRole("button", { name: "選択中データの測位点を表示" }).first().click();
+  // assuranceController initializes asynchronously after page load; without
+  // this, calling showSelectedDatasetOnMap() directly (skipping the removed
+  // header button, whose own actionability wait used to cover this) can run
+  // before applyNmeaText() has an assuranceController to import into, so
+  // #assuranceQz1Session ends up missing the imported session.
+  await page.waitForFunction(() => window.assuranceController);
+  await page.evaluate(() => showSelectedDatasetOnMap());
   await expect(page.locator("#proofTotal")).toHaveText("206点");
   await page.evaluate(() => switchWorkspace("assurance"));
   await page.evaluate(() => {
@@ -175,8 +192,11 @@ test("なぜこの判定？ panel shows farmer-friendly 判定/理由/おすす�
   });
   await page.locator(".assurance-dev-tools").evaluate((element) => { element.open = true; });
   await page.locator("#assuranceSimulateReference").click();
+  await expect(page.locator("#assuranceReferenceSession")).toContainText("テスト用");
   await page.locator("#assuranceSaveField").click();
+  await expect(page.locator("#assuranceFieldMessage")).toContainText("点");
   await page.locator("#assuranceRecalculate").click();
+  await expect(page.locator("#assuranceOverallStatus")).not.toHaveText("—");
 
   const detail = await page.evaluate(() => {
     const controller = window.assuranceController;
@@ -195,7 +215,7 @@ test("なぜこの判定？ panel shows farmer-friendly 判定/理由/おすす�
 
 test("測量チェックJSONを書き出す still works for both QZ1-only and comparison results", async ({ page }) => {
   await registerFieldInFieldsTab(page);
-  await page.evaluate(() => switchWorkspace("assurance"));
+  await page.evaluate(() => switchMode("settings", { workspace: "assurance" }));
   await page.evaluate(() => {
     document.querySelectorAll("details[data-workspace='assurance']").forEach((card) => { card.open = true; });
   });

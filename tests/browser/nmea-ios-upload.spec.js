@@ -54,7 +54,7 @@ async function openBasic(page) {
 test("no NMEA upload input carries an accept filter, and none uses the */* workaround", async ({ page }) => {
   await page.goto("/");
 
-  for (const id of ["basicNmeaInput", "fileInput", "assuranceQz1Input", "assuranceReferenceInput"]) {
+  for (const id of ["basicNmeaInput", "typedSurveyUploadInput", "assuranceQz1Input", "assuranceReferenceInput"]) {
     const accept = await page.locator(`#${id}`).getAttribute("accept");
     expect(accept, `#${id} must not filter at the picker`).toBeNull();
   }
@@ -114,11 +114,10 @@ test("the Settings uploader shares the same intake path, including the iOS shape
   await page.goto("/#settings/fields");
   await expect(page.locator("#fieldRegDialog")).toBeAttached({ timeout: 15_000 });
 
-  // #fileInput lives under 開発ツール now, not 圃場データ -- #fieldRegDialog's
-  // own visibility is upload-triggered, not workspace-gated, so hopping over
-  // to 開発ツール for the upload and straight back doesn't disturb it.
-  await page.evaluate(() => switchWorkspace("devtools"));
-  await page.locator("#fileInput").setInputFiles({
+  // The advanced Settings uploader changes to 圃場データ before it opens the
+  // registration dialog, so the dialog is always visible.
+  await page.evaluate(() => switchMode("settings", { workspace: "devtools" }));
+  await page.locator("#typedSurveyUploadInput").setInputFiles({
     name: "field01.nmea",
     mimeType: "",
     buffer: Buffer.from(WALK_NMEA)

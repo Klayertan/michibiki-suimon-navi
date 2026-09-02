@@ -96,7 +96,7 @@ test("Basic mode offers a small ? help control instead of the 現地調査ワー
   await expect(page.locator("text=現地調査ワークフロー")).toBeHidden();
 
   // ...but is still built and available under Settings (開発ツール, moved
-  // there from 圃場データ alongside #fileInput -- see 開発者モード).
+  // there from 圃場データ alongside the developer tools -- see 開発者モード).
   await page.goto("/#settings/devtools");
   await expect(page.locator("#workflowGuidePanel")).toBeVisible();
   await expect(page.locator("#workflowStepsContainer")).toContainText("NMEAログをアップロード");
@@ -578,6 +578,22 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 393, height: 852 }
     await page.setViewportSize(viewport);
     await openBasic(page);
     await uploadWalk(page);
+    // While a new boundary is waiting for its start/end picks, that task
+    // takes priority over the existing field's 今日の水門判断 card. Otherwise a
+    // phone user has to scroll past unrelated water advice to finish the
+    // action they just started.
+    const activeRegistrationOrder = await page.evaluate(() => {
+      const boundary = document.getElementById("basicBoundaryControls");
+      const stage = document.getElementById("basicStage1Card");
+      const gate = document.querySelector(".gate-card");
+      return {
+        stageOrder: getComputedStyle(stage).order,
+        boundaryTop: boundary.getBoundingClientRect().top,
+        gateTop: gate.getBoundingClientRect().top
+      };
+    });
+    expect(activeRegistrationOrder.stageOrder).toBe("-2");
+    expect(activeRegistrationOrder.boundaryTop).toBeLessThan(activeRegistrationOrder.gateTop);
     await pickBoundaryPoint(page, "start", START_INDEX);
     await pickBoundaryPoint(page, "end", END_CLOSED_INDEX);
     await page.locator("#basicCreateFieldButton").click();

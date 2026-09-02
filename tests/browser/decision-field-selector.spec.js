@@ -8,26 +8,25 @@ const TIGHT_LOOP_NMEA = [
   "$GNGGA,120040.00,3439.2879,N,13549.7895,E,2,9,0.9,45.0,M,30.0,M,,*74"
 ].join("\r\n");
 
-async function openSurveyWorkspace(page) {
-  await page.goto("/#settings/fields");
-  await expect(page.locator("#fieldRegDialog")).toBeAttached({ timeout: 15_000 });
-  await page.evaluate(() => {
-    document.querySelectorAll("details[data-workspace='fields']").forEach((card) => { card.open = true; });
-  });
-}
-
 async function registerField(page, { fileName = "walk.txt" } = {}) {
-  // #fileInput lives under 開発ツール now, not 圃場データ -- #fieldRegDialog's
-  // own visibility is upload-triggered, not workspace-gated, so hopping over
-  // to 開発ツール for the upload and straight back doesn't disturb it.
-  await page.evaluate(() => switchWorkspace("devtools"));
-  await page.locator("#fileInput").setInputFiles({ name: fileName, mimeType: "text/plain", buffer: Buffer.from(TIGHT_LOOP_NMEA) });
-  await page.evaluate(() => switchWorkspace("fields"));
-  await page.locator("#fieldRegConfirmButton").click();
+  // Registration now goes through 基本モード's own flow (#basicNmeaInput ->
+  // #basicCreateFieldButton -> #basicFieldRegConfirmButton). The devtools
+  // The shared developer uploader was removed: it shared global parser/map state
+  // with Basic mode's own upload without sharing a lifecycle, which left
+  // stale points/dialogs behind when switching modes. Leaves the page in
+  // 基本モード -- callers needing 設定 switch there themselves afterward
+  // (see openDecisionWorkspace below). Note Basic mode's own default field
+  // name is 田圃N, not 設定's 圃場N.
+  await page.goto("/");
+  await expect(page.locator("#basicNmeaInput")).toBeAttached({ timeout: 15_000 });
+  await page.evaluate(() => switchMode("basic"));
+  await page.locator("#basicNmeaInput").setInputFiles({ name: fileName, mimeType: "text/plain", buffer: Buffer.from(TIGHT_LOOP_NMEA) });
+  await page.locator("#basicCreateFieldButton").click();
+  await page.locator("#basicFieldRegConfirmButton").click();
 }
 
 async function openDecisionWorkspace(page) {
-  await page.getByRole("button", { name: "判断デモ" }).click();
+  await page.evaluate(() => switchMode("settings", { workspace: "decision" }));
 }
 
 test("判断デモ shows the 対象圃場/使用データ selector, and the empty-state message when no registered field data exists", async ({ page }) => {
@@ -47,23 +46,21 @@ test("判断デモ shows the 対象圃場/使用データ selector, and the empt
 });
 
 test("registered fields appear in the selector, and a real registered field is the default (over the bundled sample)", async ({ page }) => {
-  await openSurveyWorkspace(page);
   await registerField(page);
   await openDecisionWorkspace(page);
 
   await expect(page.locator("#decisionFieldSelect")).toHaveValue("paddy-001");
   const optionTexts = await page.locator("#decisionFieldSelect option").allTextContents();
-  expect(optionTexts.some((text) => text.includes("圃場1") && text.includes("paddy-001"))).toBe(true);
+  expect(optionTexts.some((text) => text.includes("田圃1") && text.includes("paddy-001"))).toBe(true);
   await expect(page.locator("#decisionFieldSummary")).toBeVisible();
   await expect(page.locator("#decisionFieldEmptyState")).toBeHidden();
 });
 
-test("selecting 圃場1 updates the decision card with real survey data, and empty water-point/observation notices show correctly", async ({ page }) => {
-  await openSurveyWorkspace(page);
+test("selecting 田圃1 updates the decision card with real survey data, and empty water-point/observation notices show correctly", async ({ page }) => {
   await registerField(page);
   await openDecisionWorkspace(page);
 
-  await expect(page.locator("#decisionFieldLabel")).toHaveText("圃場1 / paddy-001");
+  await expect(page.locator("#decisionFieldLabel")).toHaveText("田圃1 / paddy-001");
   await expect(page.locator("#decisionSourceFile")).toHaveText("walk.txt");
   await expect(page.locator("#decisionValidPoints")).toHaveText("5点");
   await expect(page.locator("#decisionGpsBreakdown")).toHaveText("4点 / 1点");
@@ -75,7 +72,6 @@ test("selecting 圃場1 updates the decision card with real survey data, and emp
 });
 
 test("データ種別 and 判断プロファイル are clearly separate fields, and データ種別 reflects the selected data source", async ({ page }) => {
-  await openSurveyWorkspace(page);
   await registerField(page);
   await openDecisionWorkspace(page);
 
@@ -94,11 +90,19 @@ test("データ種別 and 判断プロファイル are clearly separate fields, 
 });
 
 test("水管理ポイント and 現地観察メモ counts are reflected once registered, replacing the empty-state notices", async ({ page }) => {
-  await openSurveyWorkspace(page);
   await registerField(page);
+  // #waterQuickToolbar itself is basic+settings, but 基本モード's desktop
+  // 3-column layout shifts the map so this fixed pixel position lands on
+  // the 圃場の管理 rail instead -- switch to 設定 first, which also covers
+  // #obsTargetFieldSelect / #fieldObservationsPanel below (設定-only).
   // Single field: auto-selected as the target already.
+  await page.evaluate(() => switchMode("settings", { workspace: "fields" }));
   await page.locator('#waterQuickToolbar button[data-water-quick-type="gate"]').click();
   await page.locator("#map").click({ position: { x: 300, y: 200 } });
+  // #fieldObservationsPanel is a <details> that starts collapsed.
+  await page.evaluate(() => {
+    document.querySelectorAll("details[data-workspace='fields']").forEach((card) => { card.open = true; });
+  });
   await page.locator("#obsTargetFieldSelect").selectOption("paddy-001");
   await page.locator("#obsAddWeedButton").click();
   await page.locator("#obsPositionQz1Button").click();
@@ -110,7 +114,6 @@ test("水管理ポイント and 現地観察メモ counts are reflected once reg
 });
 
 test("校内実測サンプル stays selectable and optional — choosing it loads the bundled sample and labels it as サンプル, not forced by default", async ({ page }) => {
-  await openSurveyWorkspace(page);
   await registerField(page);
   await openDecisionWorkspace(page);
 
@@ -134,7 +137,6 @@ test("with no registered fields, the built-in sample can still be selected manua
 });
 
 test("選択している圃場に水管理ポイントが無い場合、追加を促すボタンが表示され、クリックすると圃場データの水管理ポイントパネルに移動する", async ({ page }) => {
-  await openSurveyWorkspace(page);
   await registerField(page);
   await openDecisionWorkspace(page);
 
@@ -173,14 +175,12 @@ test("デモを選ぶと判定カードにデモ警告が表示される", async
 });
 
 test("registered field を選ぶと警告は表示されない", async ({ page }) => {
-  await openSurveyWorkspace(page);
   await registerField(page);
   await openDecisionWorkspace(page);
   await expect(page.locator("#decisionDataWarning")).toBeHidden();
 });
 
 test("QZ1 / DGNSS 測位品質カードは選択した対象圃場/使用データに追従する", async ({ page }) => {
-  await openSurveyWorkspace(page);
   await registerField(page);
   await openDecisionWorkspace(page);
 
@@ -188,7 +188,7 @@ test("QZ1 / DGNSS 測位品質カードは選択した対象圃場/使用デー�
   // that field's own survey stats, not the school sample.
   await expect(page.locator("#proofSourceBadge")).toHaveText("実測QZ1ログ");
   await expect(page.locator("#proofTotal")).toHaveText("5点");
-  await expect(page.locator("#proofMessage")).toContainText("圃場1 / paddy-001");
+  await expect(page.locator("#proofMessage")).toContainText("田圃1 / paddy-001");
   await expect(page.locator("#proofMessage")).not.toContainText("奈良高専");
 
   // Switching to the sample shows the school-sample metrics and its warning
@@ -212,7 +212,6 @@ test("QZ1 / DGNSS 測位品質カードは選択した対象圃場/使用デー�
 });
 
 test("判断プロファイルを変更してもQZ1/DGNSS測位品質カードの数値は変わらない", async ({ page }) => {
-  await openSurveyWorkspace(page);
   await registerField(page);
   await openDecisionWorkspace(page);
 
@@ -222,23 +221,24 @@ test("判断プロファイルを変更してもQZ1/DGNSS測位品質カード�
   await expect(page.locator("#proofSourceBadge")).toHaveText("実測QZ1ログ");
 });
 
-test("選択中データの測位点を表示ボタンは、常に校内実測サンプルではなく選択中のデータセットの点を地図に表示する", async ({ page }) => {
-  await openSurveyWorkspace(page);
+test("選択中の圃場の測位点を表示する操作はドローンモードにだけあり、登録圃場の点を地図に表示する", async ({ page }) => {
   await registerField(page);
   await openDecisionWorkspace(page);
 
-  // The registered field is selected by default; showing its points must
-  // put exactly its 5 points on the map, not the 206-point school sample.
-  await page.getByRole("button", { name: "選択中データの測位点を表示" }).first().click();
-  await expect(page.locator("#totalPoints")).toHaveText("5");
+  // 判断デモ's generic header action is deliberately gone: the operational
+  // action belongs to the drone's selected registered field, not the demo.
+  await expect(page.locator("#workspacePrimaryAction")).toBeHidden();
+  await page.evaluate(() => switchMode("drone"));
+  await expect(page.locator("#droneShowPointsButton")).toBeVisible();
+  await expect(page.locator("#droneShowPointsButton")).toBeEnabled();
+  await page.locator("#droneShowPointsButton").click();
 
-  // Switching to the sample and showing points must load the 206-point log.
-  await page.locator("#decisionFieldSelect").selectOption("__sample__");
-  await page.getByRole("button", { name: "選択中データの測位点を表示" }).first().click();
-  await expect(page.locator("#totalPoints")).toHaveText("206");
+  // The button must show exactly this registered field's own 5 points, not
+  // the 206-point school sample used only by 判断デモ.
+  await expect(page.locator("#totalPoints")).toHaveText("5");
 });
 
-test("デモには測位点が無いため、選択中データの測位点を表示ボタンは無効化される", async ({ page }) => {
+test("デモには測位点が無いため、判断デモの測位点表示は無効化される", async ({ page }) => {
   await page.goto("/#decision");
   await expect(page.locator("#decisionFieldSelect")).toBeAttached({ timeout: 15_000 });
   await page.locator("#decisionFieldSelect").selectOption("__demo__");

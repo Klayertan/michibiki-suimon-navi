@@ -42,14 +42,10 @@ async function openSettingsFields(page) {
   await expect(page.locator("#fieldRegDialog")).toBeAttached({ timeout: 15_000 });
 }
 
-/** Registers one field through the Settings path (fastest route to test data). */
+/** Registers one field through the explicit advanced Settings path (fastest route to test data). */
 async function registerField(page, { nmea, fileName }) {
-  // #fileInput lives under 開発ツール now, not 圃場データ -- #fieldRegDialog's
-  // own visibility is upload-triggered, not workspace-gated, so hopping over
-  // to 開発ツール for the upload and straight back doesn't disturb it.
-  await page.evaluate(() => switchWorkspace("devtools"));
-  await page.locator("#fileInput").setInputFiles({ name: fileName, mimeType: "", buffer: Buffer.from(nmea) });
-  await page.evaluate(() => switchWorkspace("fields"));
+  await page.evaluate(() => switchMode("settings", { workspace: "devtools" }));
+  await page.locator("#typedSurveyUploadInput").setInputFiles({ name: fileName, mimeType: "", buffer: Buffer.from(nmea) });
   await expect(page.locator("#fieldRegDialog")).toBeVisible();
   await page.locator("#fieldRegConfirmButton").click();
 }

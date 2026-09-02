@@ -32,12 +32,8 @@ async function registerFieldWithData(page) {
   await page.evaluate(() => {
     document.querySelectorAll("details[data-workspace='fields']").forEach((card) => { card.open = true; });
   });
-  // #fileInput lives under 開発ツール now, not 圃場データ -- #fieldRegDialog's
-  // own visibility is upload-triggered, not workspace-gated, so hopping over
-  // to 開発ツール for the upload and straight back doesn't disturb it.
-  await page.evaluate(() => switchWorkspace("devtools"));
-  await page.locator("#fileInput").setInputFiles({ name: "walk.txt", mimeType: "text/plain", buffer: Buffer.from(TIGHT_LOOP_NMEA) });
-  await page.evaluate(() => switchWorkspace("fields"));
+  await page.evaluate(() => switchMode("settings", { workspace: "devtools" }));
+  await page.locator("#typedSurveyUploadInput").setInputFiles({ name: "walk.txt", mimeType: "text/plain", buffer: Buffer.from(TIGHT_LOOP_NMEA) });
   await page.locator("#fieldRegConfirmButton").click();
 
   // Single field: auto-selected as the target already.
@@ -123,12 +119,8 @@ test("a boundary-track-only registration is reported as LineString with the exac
   await page.evaluate(() => {
     document.querySelectorAll("details[data-workspace='fields']").forEach((card) => { card.open = true; });
   });
-  // #fileInput lives under 開発ツール now, not 圃場データ -- #fieldRegDialog's
-  // own visibility is upload-triggered, not workspace-gated, so hopping over
-  // to 開発ツール for the upload and straight back doesn't disturb it.
-  await page.evaluate(() => switchWorkspace("devtools"));
-  await page.locator("#fileInput").setInputFiles({ name: "open-walk.txt", mimeType: "text/plain", buffer: Buffer.from(OPEN_L_SHAPE_NMEA) });
-  await page.evaluate(() => switchWorkspace("fields"));
+  await page.evaluate(() => switchMode("settings", { workspace: "devtools" }));
+  await page.locator("#typedSurveyUploadInput").setInputFiles({ name: "open-walk.txt", mimeType: "text/plain", buffer: Buffer.from(OPEN_L_SHAPE_NMEA) });
   await page.locator("#fieldRegTypeTrack").check();
   await page.locator("#fieldRegConfirmButton").click();
 

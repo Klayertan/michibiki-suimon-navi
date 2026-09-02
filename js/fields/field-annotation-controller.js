@@ -92,7 +92,7 @@ const ELEMENT_IDS = [
   "boundaryStraightenResetButton", "boundaryStraightenCancelButton",
   // 現地調査ワークフロー guide panel.
   "workflowGuidePanel", "workflowProgressLabel", "workflowNextTask", "workflowStepsContainer",
-  "fileInput", "exportAnalysisButton", "waterControlPanel", "fieldObservationsPanel",
+  "typedSurveyUploadInput", "exportAnalysisButton", "waterControlPanel", "fieldObservationsPanel",
   // Water-management-point add workflow. The visible panel (and its type/
   // position buttons) was removed in favor of the on-map quick-toolbar
   // below; wcpTargetFieldSelect/wcpAddMessage remain as shared state/
@@ -1670,9 +1670,11 @@ export class FieldAnnotationController {
     // an element hidden by the workspace it's not currently showing.
     switch (button.dataset.workflowStep) {
       case "1":
-        window.switchWorkspace?.("devtools");
-        scrollWithinPanel(el.fileInput, { block: "center" });
-        el.fileInput?.focus();
+        // The ordinary uploader was removed from 開発ツール -- ordinary field
+        // registration, NMEA upload included, is now 基本モード-only. Send the
+        // farmer there instead of scrolling to an advanced-only control.
+        window.switchMode?.("basic");
+        document.getElementById("basicNmeaInput")?.focus();
         break;
       case "2":
         window.switchWorkspace?.("fields");

@@ -25,14 +25,21 @@ async function openSurveyWorkspace(page) {
   });
 }
 
+/**
+ * Registers through 基本モード's own flow now (#basicNmeaInput ->
+ * #basicCreateFieldButton -> #basicFieldRegConfirmButton): the devtools
+ * shared developer uploader was removed, since it shared global parser/map
+ * state with Basic mode's own upload without sharing a lifecycle. Leaves the
+ * page in 基本モード -- every caller below that needs 開発ツール (the guide
+ * card) switches there itself with switchMode(), not just switchWorkspace().
+ */
 async function registerField(page) {
-  // #fileInput lives under 開発ツール now, not 圃場データ -- #fieldRegDialog's
-  // own visibility is upload-triggered, not workspace-gated, so hopping over
-  // to 開発ツール for the upload and straight back doesn't disturb it.
-  await page.evaluate(() => switchWorkspace("devtools"));
-  await page.locator("#fileInput").setInputFiles({ name: "walk.txt", mimeType: "text/plain", buffer: Buffer.from(TIGHT_LOOP_NMEA) });
-  await page.evaluate(() => switchWorkspace("fields"));
-  await page.locator("#fieldRegConfirmButton").click();
+  await page.goto("/");
+  await expect(page.locator("#basicNmeaInput")).toBeAttached({ timeout: 15_000 });
+  await page.evaluate(() => switchMode("basic"));
+  await page.locator("#basicNmeaInput").setInputFiles({ name: "walk.txt", mimeType: "text/plain", buffer: Buffer.from(TIGHT_LOOP_NMEA) });
+  await page.locator("#basicCreateFieldButton").click();
+  await page.locator("#basicFieldRegConfirmButton").click();
 }
 
 function workflowStep(page, id) {
@@ -45,22 +52,24 @@ async function mapClick(page, latlng) {
   }, latlng);
 }
 
-test("Step 4 quick-start enters observation placement mode with a crosshair cursor and instruction, and clicking the button again exits cleanly", async ({ page }) => {
+test("Step 4 quick-start opens the field workspace and enters observation placement mode with a crosshair cursor", async ({ page }) => {
   await openSurveyWorkspace(page);
   await registerField(page);
 
+  await page.evaluate(() => switchMode("settings", { workspace: "devtools" }));
   const step4Button = workflowStep(page, 4).locator("button");
   await expect(step4Button).toHaveText("地図上に観察メモを追加");
   await step4Button.click();
 
+  await expect(page.locator("body")).toHaveAttribute("data-workspace", "fields");
   await expect(page.locator("#fieldObservationsPanel")).toHaveJSProperty("open", true);
   await expect(page.locator("#map")).toHaveClass(/map-click-armed/);
   await expect(page.locator("#obsAddMessage")).toHaveText("地図上の観察位置をクリックしてください");
-  await expect(step4Button).toHaveText("地図クリックをキャンセル");
 
-  await step4Button.click();
+  await page.keyboard.press("Escape");
   await expect(page.locator("#map")).not.toHaveClass(/map-click-armed/);
   await expect(page.locator("#obsAddMessage")).toHaveText("");
+  await page.evaluate(() => switchWorkspace("devtools"));
   await expect(step4Button).toHaveText("地図上に観察メモを追加");
 });
 
@@ -68,7 +77,7 @@ test("pressing Escape exits observation placement mode cleanly", async ({ page }
   await openSurveyWorkspace(page);
   await registerField(page);
 
-  await page.evaluate(() => switchWorkspace("devtools"));
+  await page.evaluate(() => switchMode("settings", { workspace: "devtools" }));
   await workflowStep(page, 4).locator("button").click();
   await expect(page.locator("#map")).toHaveClass(/map-click-armed/);
 
@@ -82,7 +91,7 @@ test("clicking the map while armed saves an observation via the shared editor, a
   await registerField(page);
 
   await expect(page.locator("#workflowProgressLabel")).toHaveText("進捗: 2 / 5 完了");
-  await page.evaluate(() => switchWorkspace("devtools"));
+  await page.evaluate(() => switchMode("settings", { workspace: "devtools" }));
   await workflowStep(page, 4).locator("button").click();
   // Placement mode is now armed but nothing has been clicked yet.
   await expect(workflowStep(page, 4)).toContainText("⬜");
@@ -115,7 +124,7 @@ test("clicking the map while armed saves an observation via the shared editor, a
 test("clicking outside the active field's boundary warns and lets the user continue anyway", async ({ page }) => {
   await openSurveyWorkspace(page);
   await registerField(page);
-  await page.evaluate(() => switchWorkspace("devtools"));
+  await page.evaluate(() => switchMode("settings", { workspace: "devtools" }));
   await workflowStep(page, 4).locator("button").click();
 
   await mapClick(page, OUTSIDE_FIELD_LATLNG);
@@ -137,7 +146,7 @@ test("clicking outside the active field's boundary warns and lets the user conti
 test("cancelling the outside-field warning discards the point and exits placement mode without creating anything", async ({ page }) => {
   await openSurveyWorkspace(page);
   await registerField(page);
-  await page.evaluate(() => switchWorkspace("devtools"));
+  await page.evaluate(() => switchMode("settings", { workspace: "devtools" }));
   await workflowStep(page, 4).locator("button").click();
 
   await mapClick(page, OUTSIDE_FIELD_LATLNG);
@@ -152,7 +161,7 @@ test("cancelling the outside-field warning discards the point and exits placemen
 test("a point inside the field boundary never triggers the outside-field warning", async ({ page }) => {
   await openSurveyWorkspace(page);
   await registerField(page);
-  await page.evaluate(() => switchWorkspace("devtools"));
+  await page.evaluate(() => switchMode("settings", { workspace: "devtools" }));
   await workflowStep(page, 4).locator("button").click();
 
   await mapClick(page, INSIDE_FIELD_LATLNG);
@@ -169,7 +178,7 @@ test("entering observation placement mode cancels an already-active water-manage
   await page.locator('#waterQuickToolbar button[data-water-quick-type="gate"]').click();
   await expect(page.locator('#waterQuickToolbar button[data-water-quick-type="gate"]')).toHaveClass(/active/);
 
-  await page.evaluate(() => switchWorkspace("devtools"));
+  await page.evaluate(() => switchMode("settings", { workspace: "devtools" }));
   await workflowStep(page, 4).locator("button").click();
   await expect(page.locator('#waterQuickToolbar button[data-water-quick-type="gate"]')).not.toHaveClass(/active/);
   const state = await page.evaluate(() => ({
@@ -193,7 +202,7 @@ test("entering observation placement mode cancels an active paddy-intelligence d
     window.paddyIntelligence.drawing = { mode: "noFlyZone", points: [[34.6546, 135.8300]] };
   });
 
-  await page.evaluate(() => switchWorkspace("devtools"));
+  await page.evaluate(() => switchMode("settings", { workspace: "devtools" }));
   await workflowStep(page, 4).locator("button").click();
 
   const drawing = await page.evaluate(() => window.paddyIntelligence.drawing);
@@ -204,12 +213,15 @@ test("no duplicate map click handlers accumulate — toggling placement mode rep
   await openSurveyWorkspace(page);
   await registerField(page);
 
-  const step4Button = workflowStep(page, 4).locator("button");
-  await step4Button.click(); // on
-  await step4Button.click(); // off
-  await step4Button.click(); // on
-  await step4Button.click(); // off
-  await step4Button.click(); // on
+  // Step 4 changes to 圃場データ so the shared observation editor is visible.
+  // Re-enter the guide between toggles, mirroring the real navigation path.
+  for (let i = 0; i < 2; i += 1) {
+    await page.evaluate(() => switchMode("settings", { workspace: "devtools" }));
+    await workflowStep(page, 4).locator("button").click(); // on
+    await page.keyboard.press("Escape"); // off
+  }
+  await page.evaluate(() => switchMode("settings", { workspace: "devtools" }));
+  await workflowStep(page, 4).locator("button").click(); // on
 
   await mapClick(page, INSIDE_FIELD_LATLNG);
   await expect(page.locator("#fieldAnnotationSummaryObservations")).toHaveText("1");
@@ -218,7 +230,7 @@ test("no duplicate map click handlers accumulate — toggling placement mode rep
 test("manually placed observations export with 手動配置 provenance and round-trip through JSON import", async ({ page }) => {
   await openSurveyWorkspace(page);
   await registerField(page);
-  await page.evaluate(() => switchWorkspace("devtools"));
+  await page.evaluate(() => switchMode("settings", { workspace: "devtools" }));
   await workflowStep(page, 4).locator("button").click();
   await mapClick(page, INSIDE_FIELD_LATLNG);
   await page.locator("#selFeatureObsTypeSelect").selectOption("insect");
@@ -253,7 +265,7 @@ test("manually placed observations export with 手動配置 provenance and round
 test("field report shows 手動配置 as the observation's source, agreeing with the map popup", async ({ page }) => {
   await openSurveyWorkspace(page);
   await registerField(page);
-  await page.evaluate(() => switchWorkspace("devtools"));
+  await page.evaluate(() => switchMode("settings", { workspace: "devtools" }));
   await workflowStep(page, 4).locator("button").click();
   await mapClick(page, INSIDE_FIELD_LATLNG);
   await page.locator("#selFeatureSaveButton").click();

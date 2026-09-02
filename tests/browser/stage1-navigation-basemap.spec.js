@@ -67,8 +67,9 @@ test("aerial basemap keeps center and every existing overlay while enforcing fie
   await expect(page.locator(".leaflet-control-attribution")).toContainText("OpenStreetMap");
   await expect(page.locator(".leaflet-control-attribution")).not.toContainText("国土地理院");
 
-  // Register through Basic mode's own Stage-1 flow: the legacy #fileInput /
-  // #fieldRegDialog pair is Settings-only now.
+  // Register through Basic mode's own Stage-1 flow: the old shared
+  // The old shared uploader was removed (see index.html); #fieldRegDialog is reachable
+  // only via #typedSurveyUploadInput now, for the narrower 測量タイプ case.
   await page.locator("#basicNmeaInput").setInputFiles({
     name: "walk.txt",
     mimeType: "text/plain",

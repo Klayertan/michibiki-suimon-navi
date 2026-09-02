@@ -1151,6 +1151,19 @@
       .gate-card {
         order: -1;
       }
+
+      /* Exception, on request: while a farmer is actively picking the new
+         field's 開始点/終了点 (#basicBoundaryControls visible, meaning an
+         upload just succeeded and #basicStage1Card is mid-registration),
+         that picker should be the first thing on screen instead -- ahead of
+         even 今日の水門判断 -- so they are not stuck scrolling past a
+         DIFFERENT, already-registered field's water verdict to finish the
+         one they are mid-walk on. Reverts to the normal order above the
+         moment the picker hides again (before upload, and once registration
+         completes). */
+      body[data-mode="basic"] #basicStage1Card:has(#basicBoundaryControls:not([hidden])) {
+        order: -2;
+      }
     }
 
     @media (max-width: 760px) {
@@ -3560,7 +3573,10 @@
 
           <label class="action-button basic-upload-button">
             NMEAをアップロード
-            <!-- No accept filter -- see #fileInput. This is the picker an
+            <!-- No accept filter, deliberately: iOS Safari hands the list to
+                 the native Files picker, which greys out .nmea (no platform
+                 UTType) and made a farmer's own recording unselectable on an
+                 iPhone while opening fine on a Mac. This is the picker an
                  iPhone farmer actually taps, so it is the one the bug was
                  reported against. -->
             <input id="basicNmeaInput" type="file">
@@ -3945,9 +3961,8 @@
               <input id="assuranceCaptureDate" type="date">
             </div>
             <div class="assurance-upload-grid">
-              <!-- Same NMEA/iOS picker problem as #fileInput and
-                   #basicNmeaInput: these take the same kind of log, so they
-                   drop the same filter. -->
+              <!-- Same NMEA/iOS picker problem as #basicNmeaInput: these take
+                   the same kind of log, so they drop the same filter. -->
               <label class="file-button">QZ1ログを追加<input id="assuranceQz1Input" type="file"></label>
               <label class="file-button">比較用GPSログを追加<input id="assuranceReferenceInput" type="file"></label>
             </div>
@@ -4657,6 +4672,7 @@
             </div>
             <div class="kv"><span>圃場</span><strong id="droneFieldName">—</strong></div>
             <div class="kv"><span>面積</span><strong id="droneFieldArea">—</strong></div>
+            <button id="droneShowPointsButton" class="panel-button secondary" type="button">選択中データの測位点を表示</button>
             <p class="meta">この圃場の境界を、ドローンの巡回範囲の基準として使用します（安全マージンの適用は今後実装予定）。地図上の圃場をクリックしても選び直せます。</p>
           </div>
         </section>
@@ -4835,20 +4851,22 @@
         <section class="card survey-tools" data-workspace="devtools" data-mode="settings" hidden>
           <span class="eyebrow">現地測量ワークフロー</span>
           <h2>QZ1ログを読み込む</h2>
-          <p class="meta">NMEAログを地図に表示し、測位品質の確認や圃場・水門のタグ付けを行います。</p>
+          <!-- The ordinary NMEA upload was removed from here on request:
+               it duplicated Basic mode's own #basicNmeaInput field-
+               registration flow, and the two shared applyNmeaText()'s global
+               parser/map state without sharing a lifecycle -- uploading a
+               first field here, then switching to 基本モード, left that
+               upload's points and field-annotation-controller.js's
+               pendingUploadRegistration sitting behind Basic mode's own
+               boundary-selection flow with no way to clear them, blocking
+               it. 測量チェック (assurance) never used this input -- it has
+               its own, separate #assuranceQz1Input -- so removing it does
+               not affect that workflow. New fields are now registered from
+               基本モード only; this card keeps its own JSON
+               import/export/locate/phone-GPS tools, which never touched
+               that shared state. -->
+          <p class="meta">測量JSON・スマホGPSログを地図に表示し、測位品質の確認や圃場・水門のタグ付けを行います。新しい圃場の登録は基本モードから行ってください。</p>
           <div class="survey-action-grid">
-            <label class="action-button">
-              NMEAをアップロード
-              <!-- No accept filter, deliberately: iOS Safari hands the list to
-                   the native Files picker, which greys out .nmea (no platform
-                   UTType) and made a farmer's own recording unselectable on an
-                   iPhone while opening fine on a Mac. accept="*/*" would go
-                   through the same filtering, so the attribute is absent
-                   entirely and the file is validated after selection by
-                   js/gnss/nmea-file-intake.js + the existing parser. JSON
-                   inputs below keep their filter -- .json has a UTType. -->
-              <input id="fileInput" type="file">
-            </label>
             <label class="action-button secondary">
               測量JSONを読み込み
               <input id="importInput" type="file" accept=".json,application/json">
@@ -4858,6 +4876,22 @@
             <button id="recordPhoneButton" class="action-button phone" type="button">スマホGPSを記録</button>
             <button id="clearPhoneButton" class="action-button secondary" type="button" disabled>スマホGPS点をクリア</button>
           </div>
+          <!-- Deliberately separate from, and named differently than, 基本
+               モード's NMEAをアップロード: this is the one remaining way to
+               reach #fieldRegDialog's 測量タイプ radios (境界トラック /
+               水門・給水口・排水口ポイントとして登録), for the rare case of
+               recording a boundary or water-point survey that is not a full
+               圃場ポリゴン. It reuses handleNmeaFileSelected()'s parsing/
+               validation but always calls handleNmeaUploaded() directly,
+               never armBasicBoundarySelection() -- so it can never leave a
+               half-finished registration for 基本モード to trip over the way
+               the old shared uploader did. switchMode() also now cancels
+               any pending upload registration from either dialog on every
+               mode change, as a second line of defence. -->
+          <label class="action-button secondary">
+            測量タイプを指定して登録（境界トラック・水点データなど）
+            <input id="typedSurveyUploadInput" type="file">
+          </label>
           <div class="layer-grid">
             <label class="filter"><input id="showFieldLayer" type="checkbox" checked>圃場</label>
             <label class="filter"><input id="showQz1Layer" type="checkbox" checked>QZ1</label>
@@ -5445,7 +5479,6 @@
       switchTo: switchBasemap
     };
 
-    const fileInput = document.getElementById("fileInput");
     const importInput = document.getElementById("importInput");
     const exportButton = document.getElementById("exportButton");
     const locateButton = document.getElementById("locateButton");
@@ -6683,9 +6716,7 @@
         fieldThumbnailFieldId = null;
         return;
       }
-      if (String(field.id) === String(fieldThumbnailFieldId)) {
-        return;
-      }
+      const fieldChanged = String(field.id) !== String(fieldThumbnailFieldId);
       fieldThumbnailFieldId = field.id;
 
       if (!fieldThumbnailMap) {
@@ -6705,19 +6736,28 @@
         }).addTo(fieldThumbnailMap);
       }
 
-      if (fieldThumbnailPolygon) {
-        fieldThumbnailPolygon.remove();
+      if (fieldChanged) {
+        if (fieldThumbnailPolygon) {
+          fieldThumbnailPolygon.remove();
+        }
+        fieldThumbnailPolygon = L.polygon(field.coordinates, {
+          color: "#38bdf8",
+          weight: 2,
+          fillColor: "#38bdf8",
+          fillOpacity: 0.18
+        }).addTo(fieldThumbnailMap);
       }
-      fieldThumbnailPolygon = L.polygon(field.coordinates, {
-        color: "#38bdf8",
-        weight: 2,
-        fillColor: "#38bdf8",
-        fillOpacity: 0.18
-      }).addTo(fieldThumbnailMap);
 
-      // The thumbnail sits inside a card that can be hidden/re-shown
-      // (mobile's disclosure toggle) or resized before its layout settles,
-      // so both invalidateSize() and fitBounds() run on the next frame.
+      // Always re-check size, even when the field itself hasn't changed:
+      // the card can be hidden/re-shown across mode switches (basic <->
+      // settings <-> drone) while the same field stays selected, and a
+      // Leaflet map only paints tiles for the container size it knew about
+      // at its last invalidateSize() -- skipping this on the unchanged-field
+      // path left the thumbnail showing tiles sized for whatever the
+      // container measured at the last size check, with the rest of the box
+      // blank ("loading in half"). invalidateSize() is cheap, so run it on
+      // every render rather than trying to detect which mode switches
+      // actually resized the container.
       requestAnimationFrame(() => {
         fieldThumbnailMap?.invalidateSize();
         if (fieldThumbnailPolygon) {
@@ -8827,7 +8867,8 @@
       // whole purpose is to put those points on the map -- so an explicit
       // request wins over the blanket hide until the workspace changes.
       const showLegacySurveyLayers = activeWorkspace !== "assurance" || proofPointsRequested;
-      setLayerVisible(pointLayer, showLegacySurveyLayers && showQz1LayerInput.checked);
+      const showMeasuredPoints = showQz1LayerInput.checked || proofPointsRequested;
+      setLayerVisible(pointLayer, showLegacySurveyLayers && showMeasuredPoints);
       // The Stage-1 candidate boundary is derived from those same QZ1 points,
       // so it follows their gate rather than floating over a hidden track.
       setLayerVisible(basicBoundaryLayer, showLegacySurveyLayers && showQz1LayerInput.checked);
@@ -9215,6 +9256,34 @@
     // syncLayerVisibility().
     let proofPointsRequested = false;
 
+    // Puts one registered field's own raw measured points on the shared map.
+    // Factored out of showSelectedDatasetOnMap() so 基本/ドローンモード (which
+    // have no 判断デモ workspace and no decisionFieldSelect) can trigger the
+    // same "show this field's points" action from their own field id, without
+    // pulling in 測量チェック's demo-sample handling or renderProofCard().
+    async function showFieldPointsOnMap(fieldId) {
+      if (!fieldId) {
+        return false;
+      }
+      const report = fieldReportController?.buildReportFor(fieldId);
+      const rawPoints = report?.surveyLog?.found ? report.surveyLog.rawPoints : [];
+      if (rawPoints.length === 0) {
+        return false;
+      }
+      parsedPoints = rawPoints.slice();
+      activePointSource = `${report.fieldName} 実測ログ`;
+      // Field registration deliberately turns the passive QZ1 layer off to
+      // keep the map calm. This is an explicit "show these points" action,
+      // though, so it must override that passive preference in both
+      // 測量チェック and ドローンモード until the user navigates away.
+      proofPointsRequested = true;
+      lastSkippedCount = 0;
+      lastIgnoredCount = 0;
+      updateSummary();
+      renderPoints();
+      return true;
+    }
+
     async function showSelectedDatasetOnMap() {
       const value = decisionFieldSelect?.value || "";
       proofPointsRequested = true;
@@ -9226,17 +9295,10 @@
       if (value === DECISION_DEMO_VALUE || !value) {
         return;
       }
-      const report = fieldReportController?.buildReportFor(value);
-      const rawPoints = report?.surveyLog?.found ? report.surveyLog.rawPoints : [];
-      if (rawPoints.length === 0) {
+      const shown = await showFieldPointsOnMap(value);
+      if (!shown) {
         return;
       }
-      parsedPoints = rawPoints.slice();
-      activePointSource = `${report.fieldName} 実測ログ`;
-      lastSkippedCount = 0;
-      lastIgnoredCount = 0;
-      updateSummary();
-      renderPoints();
       await renderProofCard();
     }
 
@@ -9350,6 +9412,19 @@
       if (!["basic", "drone", "settings"].includes(mode)) {
         mode = "basic";
       }
+      const previousMode = document.body.dataset.mode;
+      if (previousMode && previousMode !== mode) {
+        // A half-finished upload registration (either #fieldRegDialog or
+        // #basicFieldRegDialog) belongs to the mode it was started in --
+        // carrying it across a mode switch is what let a Settings upload's
+        // pending dialog leave stale points/state for Basic mode's own
+        // upload to trip over. Removing the old shared uploader (see the
+        // comment above #typedSurveyUploadInput) already eliminates the
+        // specific case that was reported; this is a second line of defence
+        // against any future upload path reintroducing it.
+        fieldAnnotationController?.cancelUploadRegistration();
+        fieldAnnotationController?.cancelBasicFieldRegistration();
+      }
       document.body.dataset.mode = mode;
       document.querySelectorAll("[data-mode-target]").forEach((tab) => {
         const selected = tab.dataset.modeTarget === mode;
@@ -9397,14 +9472,21 @@
         tab.classList.toggle("active", selected);
         tab.setAttribute("aria-selected", String(selected));
       });
-      workspacePrimaryAction.textContent = {
-        decision: "選択中データの測位点を表示",
-        survey: "NMEAをアップロード",
+      // "decision" and "survey" have no entry: 選択中データの測位点を表示 moved
+      // to ドローンモード's own field summary (see #droneShowPointsButton), and
+      // the ordinary NMEA uploader was removed from 開発ツール entirely
+      // (see the comment above #basicNmeaInput) -- 判断デモ/QZ1測量 simply have
+      // no primary header action left, so the button hides for both.
+      const primaryActionText = {
         assurance: "測量チェックを実行",
         fields: "圃場・水管理データを表示",
         analysis: "解析デモを読み込む",
         devtools: "バックエンド状態を確認"
       }[workspace];
+      workspacePrimaryAction.hidden = !primaryActionText;
+      if (primaryActionText) {
+        workspacePrimaryAction.textContent = primaryActionText;
+      }
       document.querySelector(".panel").scrollTop = 0;
       if (updateHash) {
         const mode = document.body.dataset.mode;
@@ -10251,12 +10333,15 @@
     }
 
     /**
-     * Shared by the Settings upload control (#fileInput) and Basic mode's own
-     * (#basicNmeaInput). Reading, validation, parsing, map rendering and
-     * assurance import are identical for both; only what happens *after* a
-     * successful parse differs by mode.
+     * Shared by Basic mode's upload (#basicNmeaInput) and the Settings-only
+     * typed upload (#typedSurveyUploadInput). Reading, validation, parsing
+     * and map rendering are identical for both; what happens after a
+     * successful parse is each caller's own job below, so the two can never
+     * again silently interfere with each other's pending-registration state
+     * the way the old, single, mode-branching handler and its shared
+     * shared uploader did.
      */
-    async function handleNmeaFileSelected(file) {
+    async function parseUploadedNmeaFile(file) {
       const { describeNmeaCandidate, NMEA_INTAKE_REJECTED_MESSAGE } = await loadNmeaIntakeApi();
 
       let rawText = null;
@@ -10273,7 +10358,7 @@
       // track the farmer already had loaded.
       if (!describeNmeaCandidate({ name: file.name, text: rawText || "" }).accepted) {
         reportNmeaRejected(NMEA_INTAKE_REJECTED_MESSAGE);
-        return;
+        return { loaded: false };
       }
 
       clearNmeaRejection();
@@ -10288,34 +10373,40 @@
           basicMessage.textContent = NMEA_INTAKE_REJECTED_MESSAGE;
           basicMessage.hidden = false;
         }
-        return;
+        return { loaded: false };
       }
-      if (document.body.dataset.mode === "basic") {
-        // Stage 1 trims the walked track first. The whole-recording
-        // registration dialog would ask the farmer to accept a boundary they
-        // have not chosen yet, so it stays out of the way until they have
-        // picked START and END.
-        armBasicBoundarySelection({ fileName: file.name, rawText });
-        return;
-      }
-      fieldAnnotationController?.handleNmeaUploaded({ points: parsedPoints, fileName: file.name, rawText });
+      return { loaded: true, rawText };
     }
-
-    fileInput.addEventListener("change", async (event) => {
-      const file = event.target.files[0];
-      if (!file) {
-        return;
-      }
-      await handleNmeaFileSelected(file);
-      fileInput.value = "";
-    });
 
     document.getElementById("basicNmeaInput")?.addEventListener("change", async (event) => {
       const file = event.target.files[0];
       if (!file) {
         return;
       }
-      await handleNmeaFileSelected(file);
+      const { loaded, rawText } = await parseUploadedNmeaFile(file);
+      if (loaded) {
+        // Stage 1 trims the walked track first. The whole-recording
+        // registration dialog would ask the farmer to accept a boundary
+        // they have not chosen yet, so it stays out of the way until they
+        // have picked START and END.
+        armBasicBoundarySelection({ fileName: file.name, rawText });
+      }
+      event.target.value = "";
+    });
+
+    document.getElementById("typedSurveyUploadInput")?.addEventListener("change", async (event) => {
+      const file = event.target.files[0];
+      if (!file) {
+        return;
+      }
+      const { loaded, rawText } = await parseUploadedNmeaFile(file);
+      if (loaded) {
+        // This advanced-only path opens #fieldRegDialog, which belongs to
+        // 圃場データ. Move there before opening it so the dialog is never
+        // created behind a hidden 開発ツール card.
+        switchWorkspace("fields");
+        fieldAnnotationController?.handleNmeaUploaded({ points: parsedPoints, fileName: file.name, rawText });
+      }
       event.target.value = "";
     });
 
@@ -10443,6 +10534,10 @@
     // also re-highlights the matching polygon on the map, same as clicking it.
     document.getElementById("droneActiveFieldSelect")?.addEventListener("change", (event) => {
       fieldAnnotationController?.setActiveField(event.target.value);
+    });
+    document.getElementById("droneShowPointsButton")?.addEventListener("click", () => {
+      const fieldId = document.getElementById("droneActiveFieldSelect")?.value;
+      showFieldPointsOnMap(fieldId);
     });
     document.getElementById("recTargetWaterLevelInput")?.addEventListener("input", (event) => {
       const fieldId = document.getElementById("basicActiveFieldSelect")?.value;
@@ -10697,11 +10792,7 @@
     });
     document.getElementById("resetWeatherButton").addEventListener("click", resetWeatherConditions);
     workspacePrimaryAction.addEventListener("click", () => {
-      if (activeWorkspace === "decision") {
-        showSelectedDatasetOnMap();
-      } else if (activeWorkspace === "survey") {
-        fileInput.click();
-      } else if (activeWorkspace === "assurance") {
+      if (activeWorkspace === "assurance") {
         assuranceController?.recalculate();
       } else {
         document.getElementById("loadPaddyDemoButton").click();

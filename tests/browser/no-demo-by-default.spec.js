@@ -75,22 +75,22 @@ test("uploaded NMEA field data renders normally alongside the still-empty demo s
     "$GNGGA,120040.00,3439.2879,N,13549.7895,E,2,9,0.9,45.0,M,30.0,M,,*74"
   ].join("\r\n");
 
-  await page.goto("/#settings/fields");
-  await expect(page.locator("#fieldRegDialog")).toBeAttached({ timeout: 15_000 });
-  await page.evaluate(() => {
-    document.querySelectorAll("details[data-workspace='fields']").forEach((card) => { card.open = true; });
-  });
-  // #fileInput lives under 開発ツール now, not 圃場データ -- #fieldRegDialog's
-  // own visibility is upload-triggered, not workspace-gated, so hopping over
-  // to 開発ツール for the upload and straight back doesn't disturb it.
-  await page.evaluate(() => switchWorkspace("devtools"));
-  await page.locator("#fileInput").setInputFiles({ name: "walk.txt", mimeType: "text/plain", buffer: Buffer.from(nmea) });
-  await page.evaluate(() => switchWorkspace("fields"));
-  await page.locator("#fieldRegConfirmButton").click();
+  // Registration now goes through 基本モード's own flow (#basicNmeaInput ->
+  // #basicCreateFieldButton -> #basicFieldRegConfirmButton): the devtools
+  // The shared developer uploader was removed, since it shared global parser/map
+  // state with this one without sharing a lifecycle. #registeredFieldsPanel
+  // is data-mode="basic settings", so it's visible here without switching
+  // away. Note Basic mode's own default name is 田圃N, not 設定's 圃場N.
+  await page.goto("/");
+  await expect(page.locator("#basicNmeaInput")).toBeAttached({ timeout: 15_000 });
+  await page.evaluate(() => switchMode("basic"));
+  await page.locator("#basicNmeaInput").setInputFiles({ name: "walk.txt", mimeType: "text/plain", buffer: Buffer.from(nmea) });
+  await page.locator("#basicCreateFieldButton").click();
+  await page.locator("#basicFieldRegConfirmButton").click();
 
   await expect(page.locator("#fieldAnnotationSummaryFields")).toHaveText("1");
-  await expect(page.locator("#registeredFieldsContainer")).toContainText("圃場1 / paddy-001");
-  await expect(page.locator(".field-annotation-label").first()).toContainText("圃場1");
+  await expect(page.locator("#registeredFieldsContainer")).toContainText("田圃1 / paddy-001");
+  await expect(page.locator(".field-annotation-label").first()).toContainText("田圃1");
 
   // The unrelated paddy-intelligence demo sample is still untouched/empty —
   // uploading real field-annotation data must not implicitly trigger it.
