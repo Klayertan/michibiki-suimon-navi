@@ -14,6 +14,22 @@ const TIGHT_LOOP_NMEA = [
   "$GNGGA,120040.00,3439.2879,N,13549.7895,E,2,9,0.9,45.0,M,30.0,M,,*74"
 ].join("\r\n");
 
+// An 8-point walk around a roughly octagonal field -- more corners than a
+// typical straighten pass would pick, so re-straightening can be checked
+// against a richer original track than the reduced result.
+// The last point sits ~1-3m from the first (same closing-gap style as
+// TIGHT_LOOP_NMEA above), so it auto-closes into a field polygon.
+const EIGHT_POINT_NMEA = [
+  "$GNGGA,120000.00,3439.2880,N,13549.7892,E,1,8,1.1,45.0,M,30.0,M,,*7A",
+  "$GNGGA,120010.00,3439.2950,N,13549.7950,E,1,8,1.1,45.0,M,30.0,M,,*78",
+  "$GNGGA,120020.00,3439.2950,N,13549.8100,E,1,8,1.1,45.0,M,30.0,M,,*79",
+  "$GNGGA,120030.00,3439.2880,N,13549.8162,E,1,8,1.1,45.0,M,30.0,M,,*70",
+  "$GNGGA,120040.00,3439.2664,N,13549.8162,E,1,8,1.1,45.0,M,30.0,M,,*73",
+  "$GNGGA,120050.00,3439.2600,N,13549.8050,E,1,8,1.1,45.0,M,30.0,M,,*70",
+  "$GNGGA,120060.00,3439.2600,N,13549.7950,E,1,8,1.1,45.0,M,30.0,M,,*75",
+  "$GNGGA,120070.00,3439.2879,N,13549.7895,E,2,8,1.1,45.0,M,30.0,M,,*7F"
+].join("\r\n");
+
 // Same walk, but stopping ~45m short of the start point — the user's real
 // incomplete L-shaped walking track.
 const OPEN_L_SHAPE_NMEA = [
@@ -978,4 +994,49 @@ test("境界を直線化 starts as its own button, then moves inside 編集 once
   await expect(straightenButton).toHaveCount(0);
   await editButton.click();
   await expect(page.locator("#selFeatureStraightenButton")).toBeVisible();
+});
+
+test("re-straightening offers the full original walked track, not just the corners already picked", async ({ page }) => {
+  await openSurveyWorkspace(page);
+  await uploadNmea(page, EIGHT_POINT_NMEA);
+  await page.locator("#fieldRegConfirmButton").click();
+
+  const fieldId = await page.evaluate(() => window.fieldAnnotationController.fields[0].id);
+
+  // First pass: pick 4 of the 8 raw points as corners.
+  await page.evaluate((id) => {
+    const controller = window.fieldAnnotationController;
+    const field = controller.fields.find((candidate) => candidate.id === id);
+    controller.beginBoundaryStraighten("field", field);
+    [0, 2, 4, 6].forEach((index) => controller.toggleCornerIndex(index));
+    controller.confirmBoundaryStraighten();
+  }, fieldId);
+
+  const afterFirstPass = await page.evaluate((id) =>
+    window.fieldAnnotationController.fields.find((f) => f.id === id).coordinates.length,
+  fieldId);
+  expect(afterFirstPass).toBe(4);
+
+  // Re-straighten: the picker must offer all 8 ORIGINAL points again -- not
+  // just the 4 the field's own coordinates were just reduced to, which
+  // would make it impossible to pick a corner that got straightened away.
+  const pickerPointCount = await page.evaluate((id) => {
+    const controller = window.fieldAnnotationController;
+    const field = controller.fields.find((candidate) => candidate.id === id);
+    controller.beginBoundaryStraighten("field", field);
+    return controller.cornerPicker.points.length;
+  }, fieldId);
+  expect(pickerPointCount).toBe(8);
+
+  // And picking a 5th corner this time (not reachable from the 4-point
+  // result alone) must actually take: the field ends up with 5 vertices.
+  await page.evaluate((id) => {
+    const controller = window.fieldAnnotationController;
+    [0, 1, 2, 4, 6].forEach((index) => controller.toggleCornerIndex(index));
+    controller.confirmBoundaryStraighten();
+  }, fieldId);
+  const afterSecondPass = await page.evaluate((id) =>
+    window.fieldAnnotationController.fields.find((f) => f.id === id).coordinates.length,
+  fieldId);
+  expect(afterSecondPass).toBe(5);
 });

@@ -1500,12 +1500,30 @@ export class FieldAnnotationController {
     if (!Array.isArray(record.coordinates) || record.coordinates.length < 3) {
       return;
     }
-    this.cornerPicker = { kind, id: record.id, selected: new Set() };
+    // record.coordinates is whatever corners were picked LAST time this ran
+    // -- offering only those on a re-straighten would make it impossible to
+    // add back a corner that got straightened away, or recover from picking
+    // too few/wrong ones the first time (see #selFeatureStraightenButton's
+    // own comment on why re-straighten is offered at all). The full walked
+    // track survives separately on the linked survey session, unaffected by
+    // any previous straighten, so prefer that; fall back to
+    // record.coordinates only when there is no linked session (e.g. a
+    // manually drawn feature).
+    const session = this.linkedSurveySession(record);
+    const points = session?.rawPoints?.length >= 3
+      ? session.rawPoints.map((point) => [Number(point.lat), Number(point.lon)])
+      : record.coordinates;
+    this.cornerPicker = { kind, id: record.id, points, selected: new Set() };
     if (this.elements.boundaryStraightenBar) {
       this.elements.boundaryStraightenBar.hidden = false;
     }
     this.updateBoundaryStraightenStatus();
     this.renderMapLayers();
+    // The map may still be framed for the smaller, already-straightened
+    // polygon (e.g. right after 編集 focused it) -- the raw track picked
+    // above can wander wider than that, so re-fit to every candidate point
+    // now, or some can render bunched together too tightly to click apart.
+    this.map.fitBounds(L.latLngBounds(points), { padding: [40, 40], maxZoom: 19 });
   }
 
   endBoundaryStraighten() {
@@ -1558,7 +1576,7 @@ export class FieldAnnotationController {
     if (!this.cornerPicker || this.cornerPicker.selected.size < 3) {
       return;
     }
-    const { kind, id, selected } = this.cornerPicker;
+    const { kind, id, selected, points } = this.cornerPicker;
     const record = kind === "field"
       ? this.fields.find((field) => field.id === id)
       : this.boundaryTracks.find((track) => track.id === id);
@@ -1566,7 +1584,7 @@ export class FieldAnnotationController {
       this.endBoundaryStraighten();
       return;
     }
-    const straightened = straightenBoundary(record.coordinates, [...selected]);
+    const straightened = straightenBoundary(points, [...selected]);
     if (!straightened) {
       return;
     }
@@ -1827,7 +1845,9 @@ export class FieldAnnotationController {
   }
 
   /**
-   * Draws one clickable marker per vertex of the record currently being
+   * Draws one clickable marker per candidate point (this.cornerPicker.points
+   * -- the record's own coordinates, or the fuller raw walked track when one
+   * is linked, see beginBoundaryStraighten()) for the record currently being
    * straightened (境界を直線化), colored by whether the farmer has picked it
    * as a corner yet. Clicking toggles membership in this.cornerPicker.selected
    * — order doesn't matter here, straightenBoundary() sorts by position along
@@ -1837,7 +1857,7 @@ export class FieldAnnotationController {
     if (!this.cornerPicker) {
       return;
     }
-    const { kind, id, selected } = this.cornerPicker;
+    const { kind, id, selected, points } = this.cornerPicker;
     const record = kind === "field"
       ? this.fields.find((field) => field.id === id)
       : this.boundaryTracks.find((track) => track.id === id);
@@ -1845,7 +1865,7 @@ export class FieldAnnotationController {
       this.endBoundaryStraighten();
       return;
     }
-    record.coordinates.forEach((coord, index) => {
+    points.forEach((coord, index) => {
       const isCorner = selected.has(index);
       L.circleMarker(coord, {
         radius: isCorner ? 7 : 4, weight: isCorner ? 3 : 1, color: "#ffffff",
