@@ -8147,6 +8147,11 @@
     function renderPaddyIntelligence() {
       if (paddyIntelligence) {
         paddyIntelligence.refresh();
+        // refresh() re-adds every layer with no visibility check of its own
+        // -- re-apply the current workspace's gate immediately (see
+        // syncAnalysisLayerVisibility()'s own comment) rather than leaving
+        // them visible until some later, unrelated switchWorkspace() call.
+        syncAnalysisLayerVisibility();
         return;
       }
 
@@ -8883,6 +8888,27 @@
       }
     }
 
+    // Extracted from syncLayerVisibility() so renderPaddyIntelligence() can
+    // re-apply this same gate right after rebuilding these layers. Without
+    // it, editing a 飛行計画 input (swathWidth/overlap/grid size -- reachable
+    // whenever #droneFlightPlanPanel is, i.e. 設定 or ドローンモード, see its
+    // own data-mode) called paddyIntelligence.refresh() directly, which
+    // re-adds every layer -- including the drone flight-path polyline --
+    // straight onto the map with no visibility check of its own. The layers
+    // stayed visible (e.g. into 基本モード) until some LATER, unrelated
+    // workspace/mode switch happened to call syncLayerVisibility() and hide
+    // them again.
+    function syncAnalysisLayerVisibility() {
+      const showAnalysisLayers = activeWorkspace === "analysis";
+      Object.entries(paddyLayers).forEach(([key, layer]) => {
+        setLayerVisible(layer, showAnalysisLayers && paddyLayerInputs[key].checked);
+      });
+      paddyIntelligence?.syncLayerVisibility();
+      if (!showAnalysisLayers && paddyIntelligence?.layers) {
+        Object.values(paddyIntelligence.layers).forEach((layer) => setLayerVisible(layer, false));
+      }
+    }
+
     function syncLayerVisibility() {
       setLayerVisible(fieldLayer, showFieldLayerInput.checked);
       // 測量チェック draws its own comparison layers and hides the plain QZ1
@@ -8898,14 +8924,7 @@
       setLayerVisible(basicBoundaryLayer, showLegacySurveyLayers && showQz1LayerInput.checked);
       setLayerVisible(phoneLayer, showLegacySurveyLayers && showPhoneLayerInput.checked);
       setLayerVisible(liveLocationLayer, showLegacySurveyLayers && showPhoneLayerInput.checked);
-      const showAnalysisLayers = activeWorkspace === "analysis";
-      Object.entries(paddyLayers).forEach(([key, layer]) => {
-        setLayerVisible(layer, showAnalysisLayers && paddyLayerInputs[key].checked);
-      });
-      paddyIntelligence?.syncLayerVisibility();
-      if (!showAnalysisLayers && paddyIntelligence?.layers) {
-        Object.values(paddyIntelligence.layers).forEach((layer) => setLayerVisible(layer, false));
-      }
+      syncAnalysisLayerVisibility();
       assuranceController?.setWorkspaceActive(activeWorkspace === "assurance");
       vegetationController?.setWorkspaceActive(activeWorkspace === "analysis");
       // 圃場レポート moved to 圃場データ along with the rest of the field panels.
