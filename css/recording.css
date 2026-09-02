@@ -189,6 +189,18 @@
   padding: 10px;
 }
 
+/* buildRegisteredCard()'s per-record <details>: the summary line is the only
+   thing shown collapsed, so it needs to read clearly as its own row and as
+   clickable, distinct from the detail grid/action buttons it reveals. */
+.rec-recovery-summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.rec-recovery-card[open] .rec-recovery-summary {
+  margin-bottom: 2px;
+}
+
 .rec-recovery-actions {
   display: grid;
   gap: 6px;

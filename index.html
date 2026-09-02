@@ -9519,10 +9519,13 @@
       // to ドローンモード's own field summary (see #droneShowPointsButton), and
       // the ordinary NMEA uploader was removed from 開発ツール entirely
       // (see the comment above #basicNmeaInput) -- 判断デモ/QZ1測量 simply have
-      // no primary header action left, so the button hides for both.
+      // no primary header action left, so the button hides for both. "fields"
+      // also has no entry, on request: its per-field data now lives inside
+      // each 登録済み圃場・測量ログ card as a click-to-expand <details> (see
+      // buildRegisteredCard()) instead of behind a single global header
+      // button covering whichever field happened to be selected.
       const primaryActionText = {
         assurance: "測量チェックを実行",
-        fields: "圃場・水管理データを表示",
         analysis: "解析デモを読み込む",
         devtools: "バックエンド状態を確認"
       }[workspace];

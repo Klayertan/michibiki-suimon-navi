@@ -645,6 +645,9 @@ test("a small NMEA upload stores rawNmeaText, and the registered card shows 保�
   await expect(page.locator("#registeredFieldsContainer")).toContainText("保存済み");
   await expect(page.locator("#registeredFieldsContainer")).toContainText("行数");
   await expect(page.locator("#registeredFieldsContainer")).toContainText("5");
+  // Each registered card is a collapsed <details> -- open it to reach the
+  // action buttons it reveals.
+  await page.locator(".rec-recovery-summary").click();
   await expect(page.locator("button", { hasText: "元NMEAを書き出し" })).toBeVisible();
 });
 
@@ -670,6 +673,9 @@ test("元NMEAを書き出し downloads the exact original NMEA text when it was 
   await openSurveyWorkspace(page);
   await uploadNmea(page, TIGHT_LOOP_NMEA, "walk.txt");
   await page.locator("#fieldRegConfirmButton").click();
+  // The registered card is a collapsed <details> -- open it to reach the
+  // action buttons it reveals.
+  await page.locator(".rec-recovery-summary").click();
 
   const downloadPromise = page.waitForEvent("download");
   await page.locator("button", { hasText: "元NMEAを書き出し" }).click();
@@ -944,6 +950,10 @@ test("境界を直線化 starts as its own button, then moves inside 編集 once
   const fieldId = await page.evaluate(() => window.fieldAnnotationController.fields[0].id);
   const straightenButton = page.locator(`button[data-id="${fieldId}"][data-action="straighten"]`);
   const editButton = page.locator(`button[data-id="${fieldId}"][data-action="edit"]`);
+  // The registered card is a collapsed <details> -- open it to reach the
+  // action buttons it reveals (expand state survives the re-renders below,
+  // see FieldAnnotationController's expandedRecordIds).
+  await page.locator(".rec-recovery-summary").click();
 
   // Never straightened yet: standalone button on the card, nothing in 編集.
   await expect(straightenButton).toBeVisible();

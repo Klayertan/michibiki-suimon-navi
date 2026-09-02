@@ -211,6 +211,13 @@ export class FieldAnnotationController {
     // Rebuilt from this set on every renderMapLayers() call, the same way
     // fields/tracks themselves render from this.fields/this.boundaryTracks.
     this.gnssVisibleIds = new Set();
+    // Field/track ids whose 登録済み圃場・測量ログ card is currently expanded.
+    // renderRegisteredList() rebuilds a fresh <details> per record on every
+    // call (any action -- delete a different field, straighten, toggle-gnss
+    // -- calls renderAll()), so without tracking this separately, an open
+    // card would silently re-collapse the moment anything else in the list
+    // changed.
+    this.expandedRecordIds = new Set();
     // Active 境界を直線化 (straighten boundary) session, or null when not
     // picking corners: { kind: "field" | "track", id, selected: Set<number> }
     // -- selected holds indices into that record's own coordinates array.
@@ -2028,20 +2035,41 @@ export class FieldAnnotationController {
     records.forEach(({ kind, record }) => container.append(this.buildRegisteredCard(kind, record)));
   }
 
+  /**
+   * A <details> per record, collapsed by default: with several fields
+   * registered this list used to show every field's full point-count/DGPS/
+   * source-file breakdown and all six action buttons at once, all the time,
+   * pushing the list a long way down the panel. The 圃場名/ID summary line
+   * stays visible either way (and is what a farmer scanning the list for a
+   * specific field actually needs); the detail grid and action buttons only
+   * render once that field's own row is expanded.
+   */
   buildRegisteredCard(kind, record) {
-    const card = document.createElement("div");
+    const card = document.createElement("details");
     card.className = "rec-recovery-card";
+    card.open = this.expandedRecordIds.has(record.id);
+    card.addEventListener("toggle", () => {
+      if (card.open) {
+        this.expandedRecordIds.add(record.id);
+      } else {
+        this.expandedRecordIds.delete(record.id);
+      }
+    });
+
+    const summary = document.createElement("summary");
+    summary.className = "rec-recovery-summary";
+    summary.textContent = `${record.name || "—"} / ${record.id}`;
+    card.append(summary);
 
     const session = this.linkedSurveySession(record);
     const grid = document.createElement("div");
     grid.className = "paddy-detail-grid";
-    appendDetailRow(grid, "圃場名 / ID", `${record.name || "—"} / ${record.id}`);
     appendDetailRow(grid, "測量ファイル", record.properties?.sourceFileName || "—");
     appendDetailRow(grid, "測量タイプ", kind === "field" ? "圃場ポリゴン" : "境界トラック");
-    const summary = record.properties?.fixQualitySummary;
-    appendDetailRow(grid, "総ポイント", summary ? String(summary.total) : "—");
-    appendDetailRow(grid, "DGPS fix", summary ? String(summary.byFixQuality?.["2"] || 0) : "—");
-    appendDetailRow(grid, "GPS単独", summary ? String(summary.byFixQuality?.["1"] || 0) : "—");
+    const fixQualitySummary = record.properties?.fixQualitySummary;
+    appendDetailRow(grid, "総ポイント", fixQualitySummary ? String(fixQualitySummary.total) : "—");
+    appendDetailRow(grid, "DGPS fix", fixQualitySummary ? String(fixQualitySummary.byFixQuality?.["2"] || 0) : "—");
+    appendDetailRow(grid, "GPS単独", fixQualitySummary ? String(fixQualitySummary.byFixQuality?.["1"] || 0) : "—");
     appendDetailRow(grid, "作成日時", formatDateTime(record.properties?.createdAt));
     appendDetailRow(grid, "元NMEA", rawNmeaStatusLabel(session));
     appendDetailRow(grid, "行数", session ? String(session.rawNmeaLineCount || 0) : "—");
