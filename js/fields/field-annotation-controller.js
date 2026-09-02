@@ -126,7 +126,10 @@ const ELEMENT_IDS = [
   "droneActiveFieldSelect",
   // Stage-1 (Basic mode) field-only registration dialog. Deliberately has no
   // measurement-type choice and no 境界トラック escape hatch — both remain
-  // available on the Settings dialog above.
+  // available on the Settings dialog above. #basicUploadStep is the upload/
+  // trim step it shares one #basicStage1Card with — the two are mutually
+  // exclusive, see beginBasicFieldRegistration() and its counterparts below.
+  "basicUploadStep",
   "basicFieldRegDialog", "basicFieldRegSummary", "basicFieldRegNameInput", "basicFieldRegIdInput",
   "basicFieldRegMemoInput", "basicFieldRegConfirmButton", "basicFieldRegCancelButton", "basicFieldRegMessage",
   "basicFieldRegCloseWarning", "basicFieldRegCloseWarningText",
@@ -631,6 +634,12 @@ export class FieldAnnotationController {
       `選択範囲: ${rawPoints.length}点 / DGPS fix: ${summary.byFixQuality["2"] || 0} / GPS単独: ${summary.byFixQuality["1"] || 0}`;
     this.setBasicFieldRegMessage("");
     this.hidePendingClosureUi(el.basicFieldRegCloseWarning);
+    // #basicUploadStep and #basicFieldRegDialog share one card and are
+    // mutually exclusive steps of the same flow — see this element's own
+    // comment in index.html.
+    if (el.basicUploadStep) {
+      el.basicUploadStep.hidden = true;
+    }
     el.basicFieldRegDialog.hidden = false;
     scrollWithinPanel(el.basicFieldRegDialog, { block: "nearest" });
     this.pendingBasicRegistration = { rawPoints, coordinates, fileName, rawText, selection };
@@ -697,6 +706,9 @@ export class FieldAnnotationController {
     if (this.elements.basicFieldRegDialog) {
       this.elements.basicFieldRegDialog.hidden = true;
     }
+    if (this.elements.basicUploadStep) {
+      this.elements.basicUploadStep.hidden = false;
+    }
     this.setBasicFieldRegMessage("");
     this.onBasicReselect();
   }
@@ -715,6 +727,9 @@ export class FieldAnnotationController {
     this.hidePendingClosureUi(this.elements.basicFieldRegCloseWarning);
     if (this.elements.basicFieldRegDialog) {
       this.elements.basicFieldRegDialog.hidden = true;
+    }
+    if (this.elements.basicUploadStep) {
+      this.elements.basicUploadStep.hidden = false;
     }
     this.setBasicFieldRegMessage("");
     this.onBasicRegistered(field);

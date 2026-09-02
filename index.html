@@ -3582,82 +3582,101 @@
              the real boundary -> build the polygon. Everything technical
              about the same workflow (WebSerial, baud, session diagnostics,
              measurement-type choice, boundary tracks) is in Settings. -->
+        <!-- Stage 1, farmer-facing: load QZ1/NMEA -> trim the walked track to
+             the real boundary -> build the polygon. Everything technical
+             about the same workflow (WebSerial, baud, session diagnostics,
+             measurement-type choice, boundary tracks) is in Settings.
+
+             #basicUploadStep and #basicFieldRegDialog used to be two
+             separate .card sections, each with its own "圃場を登録する"
+             eyebrow -- on request: they are sequential steps of ONE flow
+             (upload -> trim -> name it), not two independent cards, and
+             showing both stacked (with the boundary picker still fully
+             interactive underneath the name/memo form) read as duplicated
+             and confusing on every viewport. Now one outer card, one
+             eyebrow, and only one step's content visible at a time --
+             see the FieldAnnotationController calls that toggle
+             #basicUploadStep alongside #basicFieldRegDialog
+             (beginBasicFieldRegistration / cancelBasicFieldRegistration /
+             finishBasicRegistration). -->
         <section id="basicStage1Card" class="card basic-stage1" data-mode="basic">
           <!-- The 使い方 control used to live here; it is now the single
                header-level affordance. Do not reintroduce a second one. -->
           <span class="eyebrow">圃場を登録する</span>
-          <h2>QZ1データから圃場を作る</h2>
 
-          <label class="action-button basic-upload-button">
-            NMEAをアップロード
-            <!-- No accept filter, deliberately: iOS Safari hands the list to
-                 the native Files picker, which greys out .nmea (no platform
-                 UTType) and made a farmer's own recording unselectable on an
-                 iPhone while opening fine on a Mac. This is the picker an
-                 iPhone farmer actually taps, so it is the one the bug was
-                 reported against. -->
-            <input id="basicNmeaInput" type="file">
-          </label>
-          <p id="basicTrackSummary" class="basic-track-summary" role="status" aria-live="polite" hidden>測位点 <strong id="basicTrackPointCount">0</strong></p>
-          <!-- Post-selection rejection, in farmer language. The picker cannot
-               filter NMEA on iOS, so this is where a wrong pick is explained. -->
-          <p id="basicNmeaMessage" class="basic-nmea-message" role="status" aria-live="polite" hidden></p>
+          <div id="basicUploadStep">
+            <h2>QZ1データから圃場を作る</h2>
 
-          <div id="basicBoundaryControls" class="basic-boundary" hidden>
-            <p class="basic-boundary-title">圃場の境界を選ぶ</p>
-            <div class="basic-boundary-row" data-boundary-end="start">
-              <span class="basic-boundary-label">開始点</span>
-              <strong id="basicBoundaryStartValue" class="basic-boundary-value" data-state="empty">未選択</strong>
-              <button id="basicPickStartButton" class="panel-button" type="button" aria-pressed="false">地図で選ぶ</button>
-            </div>
-            <div class="basic-boundary-row" data-boundary-end="end">
-              <span class="basic-boundary-label">終了点</span>
-              <strong id="basicBoundaryEndValue" class="basic-boundary-value" data-state="empty">未選択</strong>
-              <button id="basicPickEndButton" class="panel-button" type="button" aria-pressed="false">地図で選ぶ</button>
-            </div>
-            <p id="basicBoundaryHint" class="basic-boundary-hint" role="status" aria-live="polite" hidden></p>
-            <p class="basic-boundary-count">選択範囲 <strong id="basicBoundaryCount">—</strong></p>
-            <div class="veg-actions">
-              <button id="basicCreateFieldButton" class="panel-button primary" type="button">この範囲で圃場を作る</button>
-              <button id="basicBoundaryResetButton" class="panel-button" type="button">全体に戻す</button>
+            <label class="action-button basic-upload-button">
+              NMEAをアップロード
+              <!-- No accept filter, deliberately: iOS Safari hands the list to
+                   the native Files picker, which greys out .nmea (no platform
+                   UTType) and made a farmer's own recording unselectable on an
+                   iPhone while opening fine on a Mac. This is the picker an
+                   iPhone farmer actually taps, so it is the one the bug was
+                   reported against. -->
+              <input id="basicNmeaInput" type="file">
+            </label>
+            <p id="basicTrackSummary" class="basic-track-summary" role="status" aria-live="polite" hidden>測位点 <strong id="basicTrackPointCount">0</strong></p>
+            <!-- Post-selection rejection, in farmer language. The picker cannot
+                 filter NMEA on iOS, so this is where a wrong pick is explained. -->
+            <p id="basicNmeaMessage" class="basic-nmea-message" role="status" aria-live="polite" hidden></p>
+
+            <div id="basicBoundaryControls" class="basic-boundary" hidden>
+              <p class="basic-boundary-title">圃場の境界を選ぶ</p>
+              <div class="basic-boundary-row" data-boundary-end="start">
+                <span class="basic-boundary-label">開始点</span>
+                <strong id="basicBoundaryStartValue" class="basic-boundary-value" data-state="empty">未選択</strong>
+                <button id="basicPickStartButton" class="panel-button" type="button" aria-pressed="false">地図で選ぶ</button>
+              </div>
+              <div class="basic-boundary-row" data-boundary-end="end">
+                <span class="basic-boundary-label">終了点</span>
+                <strong id="basicBoundaryEndValue" class="basic-boundary-value" data-state="empty">未選択</strong>
+                <button id="basicPickEndButton" class="panel-button" type="button" aria-pressed="false">地図で選ぶ</button>
+              </div>
+              <p id="basicBoundaryHint" class="basic-boundary-hint" role="status" aria-live="polite" hidden></p>
+              <p class="basic-boundary-count">選択範囲 <strong id="basicBoundaryCount">—</strong></p>
+              <div class="veg-actions">
+                <button id="basicCreateFieldButton" class="panel-button primary" type="button">この範囲で圃場を作る</button>
+                <button id="basicBoundaryResetButton" class="panel-button" type="button">全体に戻す</button>
+              </div>
             </div>
           </div>
-        </section>
 
-        <!-- Stage-1 registration: field only. No 測量タイプ radios (a farmer
-             registering a paddy should not have to classify their walk as a
-             polygon vs a boundary track vs water points) and no
-             境界トラックとして保存 escape hatch. Both remain on #fieldRegDialog
-             under Settings. -->
-        <section id="basicFieldRegDialog" class="card basic-field-reg" data-mode="basic" hidden>
-          <span class="eyebrow">圃場を登録する</span>
-          <h2>この範囲を圃場にする</h2>
-          <p id="basicFieldRegSummary" class="meta"></p>
-          <div class="input-row">
-            <label for="basicFieldRegNameInput">圃場名</label>
-            <input id="basicFieldRegNameInput" type="text" autocomplete="off">
-          </div>
-          <div class="input-row">
-            <label for="basicFieldRegMemoInput">メモ</label>
-            <textarea id="basicFieldRegMemoInput" rows="2"></textarea>
-          </div>
-          <details class="basic-field-reg-advanced">
-            <summary>詳細</summary>
+          <!-- Stage-1 registration: field only. No 測量タイプ radios (a farmer
+               registering a paddy should not have to classify their walk as a
+               polygon vs a boundary track vs water points) and no
+               境界トラックとして保存 escape hatch. Both remain on
+               #fieldRegDialog under Settings. -->
+          <div id="basicFieldRegDialog" class="basic-field-reg" hidden>
+            <h2>この範囲を圃場にする</h2>
+            <p id="basicFieldRegSummary" class="meta"></p>
             <div class="input-row">
-              <label for="basicFieldRegIdInput">圃場ID（自動）</label>
-              <input id="basicFieldRegIdInput" type="text" autocomplete="off" readonly>
+              <label for="basicFieldRegNameInput">圃場名</label>
+              <input id="basicFieldRegNameInput" type="text" autocomplete="off">
             </div>
-          </details>
-          <div class="veg-actions">
-            <button id="basicFieldRegConfirmButton" class="panel-button primary" type="button">登録する</button>
-            <button id="basicFieldRegCancelButton" class="panel-button" type="button">キャンセル</button>
-          </div>
-          <p id="basicFieldRegMessage" class="meta" role="status" aria-live="polite"></p>
-          <div id="basicFieldRegCloseWarning" class="field-close-warning" role="alertdialog" hidden>
-            <p id="basicFieldRegCloseWarningText"></p>
-            <div class="field-close-warning-actions basic-close-actions">
-              <button id="basicFieldRegForceCloseButton" class="panel-button primary" type="button">この範囲で圃場を作る</button>
-              <button id="basicFieldRegReselectButton" class="panel-button" type="button">選び直す</button>
+            <div class="input-row">
+              <label for="basicFieldRegMemoInput">メモ</label>
+              <textarea id="basicFieldRegMemoInput" rows="2"></textarea>
+            </div>
+            <details class="basic-field-reg-advanced">
+              <summary>詳細</summary>
+              <div class="input-row">
+                <label for="basicFieldRegIdInput">圃場ID（自動）</label>
+                <input id="basicFieldRegIdInput" type="text" autocomplete="off" readonly>
+              </div>
+            </details>
+            <div class="veg-actions">
+              <button id="basicFieldRegConfirmButton" class="panel-button primary" type="button">登録する</button>
+              <button id="basicFieldRegCancelButton" class="panel-button" type="button">キャンセル</button>
+            </div>
+            <p id="basicFieldRegMessage" class="meta" role="status" aria-live="polite"></p>
+            <div id="basicFieldRegCloseWarning" class="field-close-warning" role="alertdialog" hidden>
+              <p id="basicFieldRegCloseWarningText"></p>
+              <div class="field-close-warning-actions basic-close-actions">
+                <button id="basicFieldRegForceCloseButton" class="panel-button primary" type="button">この範囲で圃場を作る</button>
+                <button id="basicFieldRegReselectButton" class="panel-button" type="button">選び直す</button>
+              </div>
             </div>
           </div>
         </section>
