@@ -155,12 +155,12 @@ flowchart TD
 - **地図表示：** Leaflet ＋ Leaflet.markercluster ＋ Turf.js（境界ポリゴンから面積算出）
 - **気象データ：** [Open-Meteo](https://open-meteo.com/)（無料・APIキー不要）から水門座標で自動取得。失敗時は `data/weather.json` にフォールバック
 - **水管理モデル：** `js/water/` — DOM非依存の純粋モジュール群、ユニットテスト済み
-- **アプリ：** プレーンなHTML/CSS/JS、GitHub Pagesでホスティング
+- **アプリ：** プレーンなHTML/CSS/JS。本番は [suisuinavi.sakura.ne.jp](https://suisuinavi.sakura.ne.jp/)（さくらインターネット、`main`push時にGitHub Actionsで自動デプロイ）。GitHub Pagesは副系として稼働中
 - **クラウド：** Supabase（アカウント＋圃場同期）。ローカルストレージが正、同期は追加的
 
 ## 使い方 (How to use)
 
-1. HTTP経由で配信します（GitHub Pages、またはローカルで `node scripts/dev-server.mjs` → `http://localhost:4173/`）。
+1. HTTP経由で配信します（本番: suisuinavi.sakura.ne.jp、副系: GitHub Pages、またはローカルで `node scripts/dev-server.mjs` → `http://localhost:4173/`）。
 2. **NMEAをアップロード** — QZ1のログ（`.nmea`/`.txt`/`.log`）を読み込みます。緑＝DGNSS fix、オレンジ＝単独測位。
    - PCでのライブ記録は **QZ1ライブ記録** カード（Chrome/Edge、HTTPS or localhost）。
    - スマホはWeb Serial非対応のため、Serial Bluetooth Terminal等でログ保存 → アップロード。
