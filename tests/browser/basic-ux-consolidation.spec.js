@@ -466,6 +466,18 @@ test("Drone Mode requires explicit flight-path application and lets the operator
   await expect(page.locator("#applyDronePathButton")).toBeEnabled();
   await page.locator("#applyDronePathButton").click();
   await expect.poll(() => page.evaluate(() => map.hasLayer(paddyIntelligence.layers.drone))).toBe(true);
+  const renderedDronePasses = await page.evaluate(() => {
+    const [path] = Object.values(window.paddyIntelligence.layers.drone._layers);
+    return {
+      interactive: path.options.interactive,
+      passLengths: path.getLatLngs().map((pass) => pass.length)
+    };
+  });
+  // Each pass is independent: no connected outer frame can cover the water
+  // points, and the route layer deliberately lets their clicks pass through.
+  expect(renderedDronePasses.interactive).toBe(false);
+  expect(renderedDronePasses.passLengths).toHaveLength(await page.evaluate(() => paddyIntelligence.dronePlan.lineCount));
+  expect(renderedDronePasses.passLengths.every((length) => length === 2)).toBe(true);
   await expect(page.locator("#disableDronePathButton")).toBeEnabled();
   await page.locator("#droneActiveFieldSelect").selectOption(fieldIds[0]);
   await expect(page.locator("#basicActiveFieldSelect")).toHaveValue(fieldIds[0]);

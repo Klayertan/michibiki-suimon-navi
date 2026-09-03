@@ -568,18 +568,17 @@
         return;
       }
       if (this.dronePlan.path.length >= 2) {
-        L.polyline(this.dronePlan.path, STYLES.drone)
-          .bindTooltip("ドローン概算飛行経路")
-          .on("click", (event) => {
-            event.originalEvent?.stopPropagation();
-            this.selectFeature({
-            id: "drone-path",
-            type: "line",
-            category: "drone",
-            coordinates: this.dronePlan.path,
-            note: `${this.dronePlan.lineCount} lines, ${formatMeters(this.dronePlan.pathLengthMeters)}`
-            });
-          })
+        // The plan is stored as consecutive start/end pairs so its metrics
+        // include the aircraft's turns. Drawing that flattened list as one
+        // polyline, however, joins each pair and produces a large rectangular
+        // frame around the paddy. It also sits above water-control markers.
+        // Render each capture pass as a separate, click-through line instead:
+        // the plan remains available, while field points stay easy to tap.
+        const capturePasses = [];
+        for (let index = 0; index + 1 < this.dronePlan.path.length; index += 2) {
+          capturePasses.push([this.dronePlan.path[index], this.dronePlan.path[index + 1]]);
+        }
+        L.polyline(capturePasses, { ...STYLES.drone, interactive: false })
           .addTo(this.layers.drone);
       }
       this.dronePlan.warningSegments.forEach((segment, index) => {

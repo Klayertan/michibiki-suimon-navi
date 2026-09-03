@@ -8515,8 +8515,14 @@
 
       dronePlan = generateDronePath();
       if (dronePlan.path.length >= 2) {
-        L.polyline(dronePlan.path, PADDY_STYLES.drone)
-          .bindTooltip("ドローン概算飛行経路")
+        // Keep the legacy renderer consistent with PaddyFieldIntelligence:
+        // drawing the flattened plan as one line connects passes into a
+        // rectangle that masks the points placed in the field.
+        const capturePasses = [];
+        for (let index = 0; index + 1 < dronePlan.path.length; index += 2) {
+          capturePasses.push([dronePlan.path[index], dronePlan.path[index + 1]]);
+        }
+        L.polyline(capturePasses, { ...PADDY_STYLES.drone, interactive: false })
           .addTo(paddyLayers.drone);
       }
 
