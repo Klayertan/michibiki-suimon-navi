@@ -113,7 +113,7 @@ test("switching away from 開発ツール and back stays stable, and a refresh r
   const devtoolsMapHeight = () => page.evaluate(() => document.querySelector(".map-wrap").getBoundingClientRect().height);
   const first = await devtoolsMapHeight();
 
-  // ドローンモード's own 巡回/接続 tabs reuse data-workspace-target="analysis"/
+  // ドローンモード's own 報告/飛行/接続 tabs reuse data-workspace-target="analysis"/
   // "devtools" too (see .drone-engineering-nav in index.html), so these need
   // to name the Settings tabs specifically by their own text.
   await page.getByRole("button", { name: "圃場データ" }).click();
@@ -434,11 +434,36 @@ test("the three top-level modes and the Settings workspaces are unchanged", asyn
 
   await page.goto("/#settings");
   // Scoped to .engineering-nav specifically: ドローンモード now has its own
-  // 巡回/接続 tabs (.drone-engineering-nav) reusing the same
+  // 報告/飛行/接続 tabs (.drone-engineering-nav) reusing the same
   // data-workspace-target values, which a bare [data-workspace-target]
   // locator would also pick up.
   const workspaces = await page.locator(".engineering-nav [data-workspace-target]").allTextContents();
   expect(workspaces).toEqual(["判断デモ", "QZ1測量", "圃場データ", "詳細解析", "開発ツール"]);
+});
+
+test("Drone Mode separates reporting, flight planning, and connection", async ({ page }) => {
+  await openSettingsFields(page);
+  await registerField(page, { nmea: LOOP_A, fileName: "drone-tabs.nmea" });
+  await page.evaluate(() => switchMode("drone"));
+
+  const droneTabs = page.locator("#droneWorkspaceNav [data-workspace-target]");
+  await expect(droneTabs).toHaveText(["報告", "飛行", "接続"]);
+  await expect(page.locator("#droneFlightPlanPanel")).toBeHidden();
+  await expect(page.locator("#dronePanel")).toBeHidden();
+
+  await droneTabs.filter({ hasText: "飛行" }).click();
+  await expect(page.locator("body")).toHaveAttribute("data-workspace", "flight");
+  await expect(page.locator("#droneFlightPlanPanel")).toBeVisible();
+  await expect(page.locator("#dronePanel")).toBeHidden();
+  await expect(page.locator("details[data-workspace='analysis']").first()).toBeHidden();
+  await expect.poll(() => page.evaluate(() => map.hasLayer(paddyIntelligence.layers.drone))).toBe(true);
+
+  await droneTabs.filter({ hasText: "接続" }).click();
+  await expect(page.locator("#dronePanel")).toBeVisible();
+  await expect(page.locator("#droneFlightPlanPanel")).toBeHidden();
+
+  await page.evaluate(() => switchMode("settings", { workspace: "analysis" }));
+  await expect(page.locator("#droneFlightPlanPanel")).toBeVisible();
 });
 
 test("there is exactly one help control, in the header, at a 44px target", async ({ page }) => {

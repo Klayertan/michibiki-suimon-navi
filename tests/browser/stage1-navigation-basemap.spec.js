@@ -48,7 +48,7 @@ test("legacy workspaces remain compatible inside Settings and canonicalize after
   await expect(page.locator(".engineering-nav")).toBeVisible();
   await expect(page.locator('[data-workspace-target="survey"]')).toHaveAttribute("aria-selected", "true");
 
-  // ドローンモード's own 巡回 tab reuses data-workspace-target="analysis"
+  // ドローンモード's own 報告 tab reuses data-workspace-target="analysis"
   // too (see .drone-engineering-nav in index.html), so this needs to name
   // the Settings tab specifically by its own text.
   await page.getByRole("button", { name: "詳細解析" }).click();

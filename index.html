@@ -3113,22 +3113,23 @@
           <button class="workspace-tab" type="button" data-workspace-target="devtools" aria-selected="false">開発ツール</button>
         </nav>
       </div>
-      <!-- ドローンモード's own 2-tab nav, on request -- structurally
+      <!-- ドローンモード's own 3-tab nav, on request -- structurally
            .engineering-nav's twin (own wrapper, own .workspace-nav; kept a
            distinct wrapper class, .drone-engineering-nav, purely so
            page.locator(".engineering-nav") in existing tests still resolves
            to exactly one element). Reuses the same data-workspace-target
            values as the Settings tabs above, so the existing
            `[data-workspace-target]` click-wiring loop picks these buttons up
-           for free -- scoped to data-mode="drone" and to just the two
-           workspaces that now render there: 巡回 (=analysis, 圃場解析デモ +
-           ドローン飛行計画) and 接続 (=devtools, #dronePanel). Hidden until a
-           field exists -- toggled by renderDroneModeGate() alongside
-           #dronePanel/#droneFlightPlanPanel, since there's nothing to show
-           under either tab before then. -->
+           for free -- scoped to data-mode="drone" and to three workspaces:
+           報告 (=analysis, 圃場解析デモ), 飛行 (=flight,
+           #droneFlightPlanPanel), and 接続 (=devtools, #dronePanel). Hidden
+           until a field exists -- toggled by renderDroneModeGate() alongside
+           the two field-dependent panels, since there is nothing to show
+           under any tab before then. -->
       <div class="drone-engineering-nav" data-mode="drone">
         <nav id="droneWorkspaceNav" class="workspace-nav" aria-label="ドローンモード画面" hidden>
-          <button class="workspace-tab" type="button" data-workspace-target="analysis" aria-selected="false">巡回</button>
+          <button class="workspace-tab" type="button" data-workspace-target="analysis" aria-selected="false">報告</button>
+          <button class="workspace-tab" type="button" data-workspace-target="flight" aria-selected="false">飛行</button>
           <button class="workspace-tab" type="button" data-workspace-target="devtools" aria-selected="false">接続</button>
         </nav>
       </div>
@@ -4163,11 +4164,9 @@
              settings" -- same pattern already used for #dronePanel /
              #droneFlightPlanPanel above. Still reachable from 設定 →
              詳細解析 unchanged (data-workspace untouched). In ドローンモード
-             these render under the new 巡回 tab (see .drone-workspace-nav
-             and the workspaceGated change in switchWorkspace()), the same
-             way #dronePanel renders under 接続 -- planning a flight and
-             reading the field's own analysis belong together, next to the
-             drone that flies it. -->
+             these render under the 報告 tab (see .drone-engineering-nav and
+             the workspaceGated change in switchWorkspace()), while the
+             dedicated 飛行 tab contains #droneFlightPlanPanel. -->
         <details class="card paddy-collapsible" data-workspace="analysis" data-mode="drone settings" open hidden>
           <summary><span class="details-title">圃場解析デモ<span class="en">Paddy intelligence</span></span></summary>
           <div class="details-content">
@@ -4891,13 +4890,12 @@
           </div>
         </details>
 
-        <!-- Moved from 詳細解析 into ドローンモード, alongside dronePanel --
-             planning a coverage flight belongs next to the drone that flies
-             it, not buried in the general analysis tab. Still reachable from
-             設定 too (data-workspace unchanged), same dual-tag pattern as
-             dronePanel/pilotPanel above. Gated the same way as dronePanel by
-             renderDroneModeGate() -- no field, no flight plan. -->
-        <details id="droneFlightPlanPanel" class="card paddy-collapsible" data-workspace="analysis" data-mode="drone settings" open hidden>
+        <!-- The dedicated ドローンモード → 飛行 tab owns flight planning. It
+             remains reachable from 設定 → 詳細解析 through the narrow
+             Settings compatibility case in switchWorkspace(), so its
+             data-mode="drone settings" dual reachability is preserved.
+             renderDroneModeGate() still requires a field in ドローンモード. -->
+        <details id="droneFlightPlanPanel" class="card paddy-collapsible" data-workspace="flight" data-mode="drone settings" open hidden>
           <summary><span class="details-title">ドローン飛行計画<span class="en">Lawnmower path</span></span></summary>
           <div class="details-content">
           <div id="droneWarnings" class="paddy-warning-list paddy-drone-warning-list" role="status" aria-live="polite"></div>
@@ -7433,9 +7431,9 @@
         droneSelectRow.hidden = fields.length <= 1;
       }
       if (document.body.dataset.mode === "drone") {
-        // #dronePanel / #droneFlightPlanPanel are now ALSO workspace-gated
-        // (see switchWorkspace()'s workspaceGated change) -- 接続/巡回 only
-        // show the one matching the active tab. Recomputed from both gates
+        // #dronePanel / #droneFlightPlanPanel are workspace-gated too (see
+        // switchWorkspace()'s workspaceGated change): 報告/飛行/接続 show
+        // only the panel matching the active tab. Recomputed from both gates
         // together, rather than just setting hidden = !field, so this holds
         // regardless of whether switchWorkspace() or this function ran last:
         // unconditionally forcing hidden = false whenever a field exists
@@ -7448,10 +7446,10 @@
         }
         const droneWorkspaceNav = document.getElementById("droneWorkspaceNav");
         if (droneWorkspaceNav) {
-          // The 巡回/接続 tab bar itself: like #droneModeGateCard's own
+          // The 報告/飛行/接続 tab bar itself: like #droneModeGateCard's own
           // message, there is nothing to switch between before a field
           // exists, so it stays hidden alongside the panels rather than
-          // showing two tabs that both lead nowhere.
+          // showing tabs that all lead nowhere.
           droneWorkspaceNav.hidden = !field;
         }
       }
@@ -9012,12 +9010,16 @@
     // them again.
     function syncAnalysisLayerVisibility() {
       const showAnalysisLayers = activeWorkspace === "analysis";
+      const showFlightPath = activeWorkspace === "flight";
       Object.entries(paddyLayers).forEach(([key, layer]) => {
-        setLayerVisible(layer, showAnalysisLayers && paddyLayerInputs[key].checked);
+        setLayerVisible(layer, (showAnalysisLayers || (showFlightPath && key === "drone")) && paddyLayerInputs[key].checked);
       });
       paddyIntelligence?.syncLayerVisibility();
-      if (!showAnalysisLayers && paddyIntelligence?.layers) {
-        Object.values(paddyIntelligence.layers).forEach((layer) => setLayerVisible(layer, false));
+      if (paddyIntelligence?.layers) {
+        const showFlightPathLayer = showFlightPath && paddyIntelligence.elements?.layers?.drone?.checked !== false;
+        Object.entries(paddyIntelligence.layers).forEach(([key, layer]) => {
+          setLayerVisible(layer, showAnalysisLayers || (showFlightPathLayer && key === "drone"));
+        });
       }
     }
 
@@ -9546,7 +9548,7 @@
     }
 
     const PRODUCT_MODES = ["basic", "drone", "settings"];
-    const WORKSPACES = ["decision", "survey", "assurance", "fields", "analysis", "devtools"];
+    const WORKSPACES = ["decision", "survey", "assurance", "fields", "analysis", "flight", "devtools"];
     // Only these four ever had bare #hash routes in the wild, so only these
     // stay accepted as top-level legacy routes. "fields"/"devtools" are new
     // and are reachable as settings/* only.
@@ -9597,9 +9599,9 @@
       // 基本モード has no workspace tabs of its own (data-mode alone gates
       // its cards), so "survey" here is really just "not decision/analysis" --
       // harmless as long as nothing in Basic mode is workspace-gated, which
-      // holds today. ドローンモード now DOES have its own tabs (巡回/接続,
+      // holds today. ドローンモード now DOES have its own tabs (報告/飛行/接続,
       // see #droneWorkspaceNav above), so it needs its own real default:
-      // 巡回 (=analysis) is the more useful first screen, and matters once
+      // 報告 (=analysis) is the more useful first screen, and matters once
       // workspaceGated in switchWorkspace() below applies to drone mode too.
       const defaultWorkspace = workspace ?? (mode === "settings" ? "decision" : mode === "drone" ? "analysis" : "survey");
       switchWorkspace(defaultWorkspace, { updateHash: false });
@@ -9627,16 +9629,20 @@
       // 基本モード. data-mode is the single source of truth there.
       //
       // ドローンモード is the one exception, on request: #droneWorkspaceNav
-      // gives it its own 巡回/接続 tabs, reusing this exact mechanism against
-      // the "analysis"/"devtools" workspaces (data-workspace unchanged on
-      // #droneFlightPlanPanel / the 詳細解析 cards / #dronePanel -- only their
-      // data-mode gained "drone"). This is safe to turn on for drone mode
+      // gives it its own 報告/飛行/接続 tabs, reusing this exact mechanism
+      // against the "analysis"/"flight"/"devtools" workspaces. The flight
+      // plan alone remains visible in Settings → 詳細解析 for backwards
+      // compatibility, despite its dedicated Drone workspace. This is safe to
+      // turn on for drone mode
       // specifically because the ONLY other data-mode="drone" element,
       // #droneModeGateCard, deliberately carries no data-workspace at all
       // (see its own comment) and so is untouched by the loop below.
       const workspaceGated = document.body.dataset.mode === "settings" || document.body.dataset.mode === "drone";
       document.querySelectorAll("[data-workspace]").forEach((section) => {
-        section.hidden = workspaceGated && section.dataset.workspace !== workspace;
+        const isFlightPlanInSettingsAnalysis = section.id === "droneFlightPlanPanel"
+          && document.body.dataset.mode === "settings"
+          && workspace === "analysis";
+        section.hidden = workspaceGated && section.dataset.workspace !== workspace && !isFlightPlanInSettingsAnalysis;
       });
       document.querySelectorAll("[data-workspace-target]").forEach((tab) => {
         const selected = tab.dataset.workspaceTarget === workspace;
