@@ -275,6 +275,19 @@ test("map-click placement works for 水位センサ and 発見", async ({ page }
   expect(discovery.properties.discoveryPhoto.name).toBe("discovery.png");
   expect(discovery.properties.discoveryPhoto.dataUrl).toMatch(/^data:image\/png;base64,/);
 
+  // The discovery marker remains on top of the paddy boundary even after the
+  // analysis layer redraws, so a real map click reaches the marker popup.
+  const markerPosition = await page.evaluate(() => {
+    const controller = window.fieldAnnotationController;
+    const marker = Object.values(controller.layers.waterPoints._layers).at(-1);
+    const point = map.latLngToContainerPoint(marker.getLatLng());
+    const rect = document.getElementById("map").getBoundingClientRect();
+    return { x: rect.left + point.x, y: rect.top + point.y, pane: marker.options.pane };
+  });
+  expect(markerPosition.pane).toBe("fieldAnnotationPoints");
+  await page.mouse.click(markerPosition.x, markerPosition.y);
+  await expect(page.locator(".leaflet-popup")).toContainText("写真を変更");
+
   // A farmer can attach or replace a photo right from the marker popup,
   // without opening the separate selected-feature editor.
   await page.evaluate(() => {

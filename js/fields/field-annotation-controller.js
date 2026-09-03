@@ -77,6 +77,12 @@ const OBSERVATION_TYPE_BUTTON_IDS = {
   obsAddNoteButton: "note"
 };
 
+// Field polygons and analysis boundaries are SVG overlays. They may be
+// refreshed after a point is added, which otherwise puts their fill above the
+// point and steals its click. Keep actionable point markers in a dedicated
+// pane above every overlay, but beneath Leaflet's popup pane.
+const FIELD_ANNOTATION_POINT_PANE = "fieldAnnotationPoints";
+
 const ELEMENT_IDS = [
   // Upload-triggered registration dialog (primary workflow, in QZ1測量).
   "fieldRegDialog", "fieldRegSummary", "fieldRegNameInput", "fieldRegIdInput",
@@ -238,6 +244,9 @@ export class FieldAnnotationController {
     this.hydrateFromStorage();
     this.populateStaticOptions();
     this.bindEvents();
+    const pointPane = this.map.getPane(FIELD_ANNOTATION_POINT_PANE)
+      || this.map.createPane(FIELD_ANNOTATION_POINT_PANE);
+    pointPane.style.zIndex = "660";
     this.layers.fields.addTo(this.map);
     this.layers.tracks.addTo(this.map);
     this.layers.waterPoints.addTo(this.map);
@@ -1853,6 +1862,7 @@ export class FieldAnnotationController {
       const internalType = waterControlInternalType(point);
       const style = WATER_CONTROL_STYLES[internalType] || WATER_CONTROL_STYLES.gate;
       L.circleMarker(point.coordinates, {
+        pane: FIELD_ANNOTATION_POINT_PANE,
         radius: 8, color: "#ffffff", weight: 2, fillColor: style.fillColor, fillOpacity: 0.95
       })
         .bindTooltip(point.name || WATER_CONTROL_TYPE_LABELS[internalType] || internalType)
@@ -1869,6 +1879,7 @@ export class FieldAnnotationController {
       const style = OBSERVATION_STYLES[internalType] || OBSERVATION_STYLES.note;
       const radius = SEVERITY_MARKER_RADIUS[normalizeSeverity(obs.properties?.severity)] || SEVERITY_MARKER_RADIUS.medium;
       L.circleMarker(obs.coordinates, {
+        pane: FIELD_ANNOTATION_POINT_PANE,
         radius, color: "#ffffff", weight: 2, fillColor: style.fillColor, fillOpacity: 0.95
       })
         .bindPopup(this.buildObservationPopup(obs))
