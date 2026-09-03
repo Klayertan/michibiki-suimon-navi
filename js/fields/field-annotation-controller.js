@@ -113,6 +113,7 @@ const ELEMENT_IDS = [
   // Selected-feature editor (shared by fields / tracks / water points / observations).
   "selFeatureEmpty", "selFeatureForm", "selFeatureTypeRow", "selFeatureTypeSelect", "selFeatureNameInput", "selFeatureIdInput",
   "selFeatureMemoInput", "selFeatureRelatedFieldSelect", "selFeatureSaveButton", "selFeatureStraightenButton", "selFeatureDeleteButton", "selFeatureMessage",
+  "selFeatureImageRow", "selFeatureImageInput", "selFeatureImagePreview", "selFeatureImageRemoveButton",
   "selFeatureObsTypeRow", "selFeatureObsTypeSelect", "selFeatureSeverityRow", "selFeatureSeveritySelect",
   // Legend / summary.
   "fieldAnnotationLegend", "fieldAnnotationSummaryFields", "fieldAnnotationSummaryTracks",
@@ -193,6 +194,7 @@ export class FieldAnnotationController {
     this.workflowState = { lastExportedAt: null };
 
     this.selected = null; // { kind: "field" | "track" | "point" | "observation", record }
+    this.pendingDiscoveryPhoto = null;
     this.pendingUploadRegistration = null; // gathered inputs awaiting a closure decision
     this.pendingManualClosure = null; // same, for the advanced/manual card
     this.pendingBasicRegistration = null; // Stage-1 field-only registration
@@ -345,6 +347,8 @@ export class FieldAnnotationController {
 
     // Selected-feature editor.
     el.selFeatureSaveButton?.addEventListener("click", () => this.saveSelectedFeature());
+    el.selFeatureImageInput?.addEventListener("change", (event) => this.handleDiscoveryPhotoInput(event));
+    el.selFeatureImageRemoveButton?.addEventListener("click", () => this.removeDiscoveryPhoto());
     el.selFeatureStraightenButton?.addEventListener("click", () => {
       if (this.selected) this.beginBoundaryStraighten(this.selected.kind, this.selected.record);
     });
@@ -1263,6 +1267,9 @@ export class FieldAnnotationController {
   // -------------------------------------------------------------------------
 
   selectFeature(kind, record) {
+    if (this.pendingDiscoveryPhoto?.recordId !== record.id) {
+      this.pendingDiscoveryPhoto = null;
+    }
     this.selected = { kind, record };
     this.setSelFeatureMessage("");
     this.renderSelectedFeature();
@@ -1296,7 +1303,35 @@ export class FieldAnnotationController {
 
   clearSelection() {
     this.selected = null;
+    this.pendingDiscoveryPhoto = null;
     this.setSelFeatureMessage("");
+    this.renderSelectedFeature();
+  }
+
+  async handleDiscoveryPhotoInput(event) {
+    const selected = this.selected;
+    const file = event.target?.files?.[0];
+    if (!file || selected?.kind !== "point" || waterControlInternalType(selected.record) !== "photo") {
+      return;
+    }
+    try {
+      const photo = await prepareDiscoveryPhoto(file);
+      this.pendingDiscoveryPhoto = { recordId: selected.record.id, ...photo };
+      this.setSelFeatureMessage("写真を追加しました。「保存」で発見に紐付けます。");
+      this.renderSelectedFeature();
+    } catch (error) {
+      event.target.value = "";
+      this.setSelFeatureMessage(error?.message || "写真を読み込めませんでした。");
+    }
+  }
+
+  removeDiscoveryPhoto() {
+    const selected = this.selected;
+    if (selected?.kind !== "point" || waterControlInternalType(selected.record) !== "photo") {
+      return;
+    }
+    this.pendingDiscoveryPhoto = { recordId: selected.record.id, remove: true };
+    this.setSelFeatureMessage("写真を外します。「保存」で反映します。");
     this.renderSelectedFeature();
   }
 
@@ -1344,6 +1379,19 @@ export class FieldAnnotationController {
       if (isWaterControlType(nextType)) {
         record.type = WATER_CONTROL_EXPORT_TYPES[nextType];
       }
+      const pendingPhoto = this.pendingDiscoveryPhoto?.recordId === oldId ? this.pendingDiscoveryPhoto : null;
+      if (nextType === "photo" && pendingPhoto?.remove) {
+        delete record.properties.discoveryPhoto;
+      } else if (nextType === "photo" && pendingPhoto?.dataUrl) {
+        record.properties.discoveryPhoto = {
+          dataUrl: pendingPhoto.dataUrl,
+          name: pendingPhoto.name,
+          attachedAt: new Date().toISOString()
+        };
+      } else if (nextType !== "photo") {
+        delete record.properties.discoveryPhoto;
+      }
+      this.pendingDiscoveryPhoto = null;
       record.relatedFieldId = el.selFeatureRelatedFieldSelect.value || null;
       record.properties.updatedAt = new Date().toISOString();
     } else if (kind === "track") {
@@ -1921,6 +1969,14 @@ export class FieldAnnotationController {
       row.append(strong, document.createTextNode(value));
       container.append(row);
     });
+    const photoDataUrl = internalType === "photo" && safeDiscoveryPhotoDataUrl(point.properties?.discoveryPhoto?.dataUrl);
+    if (photoDataUrl) {
+      const image = document.createElement("img");
+      image.className = "discovery-photo-preview";
+      image.alt = point.properties?.discoveryPhoto?.name || "発見時の写真";
+      image.src = photoDataUrl;
+      container.append(image);
+    }
 
     const actions = document.createElement("div");
     actions.className = "obs-popup-actions";
@@ -2208,6 +2264,26 @@ export class FieldAnnotationController {
     el.selFeatureNameInput.value = record.name || "";
     el.selFeatureIdInput.value = record.id || "";
     el.selFeatureMemoInput.value = record.properties?.memo || "";
+    const isDiscoveryPoint = kind === "point" && waterControlInternalType(record) === "photo";
+    if (el.selFeatureImageRow) {
+      el.selFeatureImageRow.hidden = !isDiscoveryPoint;
+    }
+    if (el.selFeatureImageInput) {
+      // Browsers intentionally do not allow a saved file path to be restored.
+      // The persisted thumbnail below is the source of truth after reload.
+      el.selFeatureImageInput.value = "";
+    }
+    const pendingPhoto = this.pendingDiscoveryPhoto?.recordId === record.id ? this.pendingDiscoveryPhoto : null;
+    const savedPhoto = record.properties?.discoveryPhoto;
+    const photo = pendingPhoto?.remove ? null : (pendingPhoto?.dataUrl ? pendingPhoto : savedPhoto);
+    const photoDataUrl = safeDiscoveryPhotoDataUrl(photo?.dataUrl);
+    if (el.selFeatureImagePreview) {
+      el.selFeatureImagePreview.hidden = !isDiscoveryPoint || !photoDataUrl;
+      el.selFeatureImagePreview.src = photoDataUrl || "";
+    }
+    if (el.selFeatureImageRemoveButton) {
+      el.selFeatureImageRemoveButton.hidden = !isDiscoveryPoint || !photoDataUrl;
+    }
 
     // Second-and-later 境界を直線化 lives here rather than as a standalone
     // button on the registered-fields card -- see this button's own markup
@@ -2454,6 +2530,66 @@ function formatDateTime(iso) {
   }
   const ms = Date.parse(iso);
   return Number.isFinite(ms) ? new Date(ms).toLocaleString("ja-JP") : iso;
+}
+
+const DISCOVERY_PHOTO_MAX_BYTES = 350 * 1024;
+const DISCOVERY_PHOTO_MAX_EDGE_PX = 1280;
+const DISCOVERY_PHOTO_PREFIX = /^data:image\/(?:jpeg|png|webp);base64,/i;
+
+function dataUrlByteLength(dataUrl) {
+  const base64 = String(dataUrl || "").split(",")[1] || "";
+  return Math.floor(base64.length * 3 / 4);
+}
+
+function safeDiscoveryPhotoDataUrl(dataUrl) {
+  const value = String(dataUrl || "");
+  return DISCOVERY_PHOTO_PREFIX.test(value) && dataUrlByteLength(value) <= DISCOVERY_PHOTO_MAX_BYTES ? value : null;
+}
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("写真を読み込めませんでした。"));
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.readAsDataURL(file);
+  });
+}
+
+function loadImage(dataUrl) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onerror = () => reject(new Error("対応していない画像形式です。JPEG、PNG、WebPを選んでください。"));
+    image.onload = () => resolve(image);
+    image.src = dataUrl;
+  });
+}
+
+async function prepareDiscoveryPhoto(file) {
+  if (!file.type.startsWith("image/")) {
+    throw new Error("画像ファイルを選んでください。");
+  }
+  const original = await readFileAsDataUrl(file);
+  if (safeDiscoveryPhotoDataUrl(original)) {
+    return { name: file.name || "discovery-photo", dataUrl: original };
+  }
+
+  const image = await loadImage(original);
+  const scale = Math.min(1, DISCOVERY_PHOTO_MAX_EDGE_PX / Math.max(image.naturalWidth, image.naturalHeight));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+  canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+  const context = canvas.getContext("2d");
+  if (!context) {
+    throw new Error("この端末では写真を縮小できませんでした。");
+  }
+  context.drawImage(image, 0, 0, canvas.width, canvas.height);
+  for (const quality of [0.8, 0.65, 0.5]) {
+    const dataUrl = canvas.toDataURL("image/jpeg", quality);
+    if (safeDiscoveryPhotoDataUrl(dataUrl)) {
+      return { name: file.name || "discovery-photo.jpg", dataUrl };
+    }
+  }
+  throw new Error("写真が大きすぎます。小さい画像を選んでください。");
 }
 
 /** "—" covers both "no linked survey session" and "session exists but never had raw NMEA text at all" (e.g. manual-panel range selection). */

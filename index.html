@@ -3108,7 +3108,7 @@
                data-workspace="assurance" cards, WORKSPACES/LEGACY_WORKSPACES,
                and #assurance hash routing are all unchanged: switchWorkspace
                ("assurance") still works exactly as before, from any caller. -->
-          <button class="workspace-tab" type="button" data-workspace-target="fields" aria-selected="false">圃場データ</button>
+          <button class="workspace-tab" type="button" data-workspace-target="fields" aria-selected="false">アカウント</button>
           <button class="workspace-tab" type="button" data-workspace-target="analysis" aria-selected="false">詳細解析</button>
           <button class="workspace-tab" type="button" data-workspace-target="devtools" aria-selected="false">開発ツール</button>
         </nav>
@@ -3200,7 +3200,7 @@
             <button type="button" class="map-quick-toolbar-button" data-water-quick-type="inlet">給水口</button>
             <button type="button" class="map-quick-toolbar-button" data-water-quick-type="outlet">排水口</button>
             <button type="button" class="map-quick-toolbar-button" data-water-quick-type="sensor">水位センサ</button>
-            <button type="button" class="map-quick-toolbar-button" data-water-quick-type="photo">撮影地点</button>
+            <button type="button" class="map-quick-toolbar-button" data-water-quick-type="photo">発見</button>
           </div>
           <p id="waterQuickStatus" class="map-quick-toolbar-status" role="status" aria-live="polite" hidden></p>
           <button id="waterQuickCancelButton" class="map-quick-toolbar-cancel" type="button" hidden>キャンセル</button>
@@ -3749,7 +3749,7 @@
           </div>
         </section>
 
-        <!-- 設定 → 圃場データ → アカウント.
+        <!-- 設定 → アカウント.
 
              Deliberately NOT a field selector: choosing which paddy you are
              working on is a 基本モード decision and has exactly one control
@@ -3932,6 +3932,13 @@
               <div class="input-row">
                 <label for="selFeatureMemoInput">メモ</label>
                 <textarea id="selFeatureMemoInput" rows="2"></textarea>
+              </div>
+              <div id="selFeatureImageRow" class="input-row field-annotation-toggle-row" hidden>
+                <label for="selFeatureImageInput">発見時の写真（任意）</label>
+                <input id="selFeatureImageInput" type="file" accept="image/jpeg,image/png,image/webp" capture="environment">
+                <p class="meta">JPEG / PNG / WebP。写真は縮小して保存します。クラウド同期設定時は、発見の記録として同期されます。</p>
+                <img id="selFeatureImagePreview" class="discovery-photo-preview" alt="発見時の写真のプレビュー" hidden>
+                <button id="selFeatureImageRemoveButton" class="panel-button" type="button" hidden>写真を外す</button>
               </div>
               <div class="input-row">
                 <label for="selFeatureRelatedFieldSelect">関連する圃場</label>
@@ -4532,7 +4539,7 @@
         <details class="card paddy-collapsible" data-workspace="analysis" data-mode="drone settings" hidden>
           <summary><span class="details-title">圃場ポリゴン作成（詳細設定）<span class="en">Create field polygon — advanced</span></span></summary>
           <div class="details-content">
-            <p class="meta">通常は圃場データタブでNMEAをアップロードすると自動的に登録を確認されます。この詳細設定は、既に読み込んだ点列から特定の範囲だけを選んで圃場ポリゴンを作りたい場合の高度なツールです。</p>
+            <p class="meta">通常はアカウントタブでNMEAをアップロードすると自動的に登録を確認されます。この詳細設定は、既に読み込んだ点列から特定の範囲だけを選んで圃場ポリゴンを作りたい場合の高度なツールです。</p>
             <div class="input-row">
               <label for="fieldSourceSelect">使用する点</label>
               <select id="fieldSourceSelect">
@@ -4940,6 +4947,35 @@
           <summary><span class="details-title">手動操縦（開発者向け）<span class="en">Manual Control</span></span></summary>
           <div id="pilotRoot" class="details-content"></div>
         </details>
+
+        <section id="weatherIncidentPanel" class="card weather-incident-card" data-workspace="devtools" data-mode="settings" hidden>
+          <span class="eyebrow">気象・災害ログ</span>
+          <h2>今日の安全確認<span class="en">Weather incident log</span></h2>
+          <p class="meta">現在の対象圃場の地域について、気象の状況と取るべき安全行動を記録します。公式の警報・避難情報は必ず気象庁・自治体で確認してください。</p>
+          <p id="weatherIncidentLocation" class="weather-incident-location"></p>
+          <div class="input-row">
+            <label for="weatherIncidentTypeSelect">状況</label>
+            <select id="weatherIncidentTypeSelect">
+              <option value="thunderstorm">雷雨・雷</option>
+              <option value="heavy_rain">大雨</option>
+              <option value="flood">浸水・洪水のおそれ</option>
+              <option value="strong_wind">強風・台風</option>
+              <option value="heat">高温</option>
+              <option value="other">その他</option>
+            </select>
+          </div>
+          <p id="weatherIncidentGuidance" class="weather-incident-guidance" role="status" aria-live="polite"></p>
+          <div class="input-row">
+            <label for="weatherIncidentNoteInput">現地メモ（任意）</label>
+            <textarea id="weatherIncidentNoteInput" rows="2" placeholder="例：雷鳴を確認。作業を中止して屋内へ退避。"></textarea>
+          </div>
+          <div class="veg-actions">
+            <button id="weatherIncidentRefreshButton" class="panel-button" type="button">現在地の気象を更新</button>
+            <button id="weatherIncidentRecordButton" class="panel-button primary" type="button">安全確認を記録</button>
+          </div>
+          <p id="weatherIncidentMessage" class="meta" role="status" aria-live="polite"></p>
+          <ol id="weatherIncidentLog" class="weather-incident-log"></ol>
+        </section>
 
         <!-- Relocated off 圃場データ to 開発ツール: this duplicated the
              farmer-facing upload flow on #basicStage1Card without adding
@@ -5686,6 +5722,16 @@
     const weatherMeta = document.getElementById("weatherMeta");
     const weatherFetchButton = document.getElementById("weatherFetchButton");
     const weatherFetchStatusEl = document.getElementById("weatherFetchStatus");
+    const weatherIncidentElements = {
+      location: document.getElementById("weatherIncidentLocation"),
+      type: document.getElementById("weatherIncidentTypeSelect"),
+      guidance: document.getElementById("weatherIncidentGuidance"),
+      note: document.getElementById("weatherIncidentNoteInput"),
+      refresh: document.getElementById("weatherIncidentRefreshButton"),
+      record: document.getElementById("weatherIncidentRecordButton"),
+      message: document.getElementById("weatherIncidentMessage"),
+      log: document.getElementById("weatherIncidentLog")
+    };
     const weatherInputs = {
       rain24hMm: document.getElementById("rain24hInput"),
       daysSinceRain: document.getElementById("daysSinceRainInput"),
@@ -5769,6 +5815,33 @@
     let gateRules = DEFAULT_GATE_RULES;
     let weatherData = DEFAULT_WEATHER;
     let baselineWeather = { ...DEFAULT_WEATHER };
+    const WEATHER_INCIDENT_LOG_STORAGE_KEY = "suimonNaviWeatherIncidentLogV1";
+    const WEATHER_INCIDENTS = {
+      thunderstorm: {
+        label: "雷雨・雷",
+        guidance: "直ちに屋外作業・ドローン飛行・水門操作を中止し、田圃や水路から離れて安全な建物または車内へ退避してください。雷鳴が聞こえなくなってからも30分は再開しません。"
+      },
+      heavy_rain: {
+        label: "大雨",
+        guidance: "田圃・水路・斜面の見回りは無理に行わず、冠水した道には入らないでください。水門操作は管理者の手順と安全が確認できる場合だけにし、自治体の避難情報を優先します。"
+      },
+      flood: {
+        label: "浸水・洪水のおそれ",
+        guidance: "避難情報と河川情報を最優先にし、田圃や水路の確認・水門操作のために近づかないでください。避難が必要な地域では、作業より先に安全な場所へ移動します。"
+      },
+      strong_wind: {
+        label: "強風・台風",
+        guidance: "ドローン飛行と高所作業を中止し、飛散しやすい資材を安全な場所に固定してください。雨や強風の最中は田圃・水路へ近づかず、警報と避難情報を確認します。"
+      },
+      heat: {
+        label: "高温",
+        guidance: "涼しい時間帯に短時間で作業し、水分・休憩を確保してください。体調不良を感じたら作業を中止し、単独での田圃作業を避けます。"
+      },
+      other: {
+        label: "その他",
+        guidance: "現地の危険を先に取り除き、公式の気象・避難情報と管理者の手順を確認してください。安全が確認できない作業は延期します。"
+      }
+    };
     let activeWorkspace = "decision";
     let activePointSource = "測量データ";
     let surveyedGate = null;
@@ -6258,6 +6331,86 @@
       }
     }
 
+    function selectedWeatherIncident() {
+      return WEATHER_INCIDENTS[weatherIncidentElements.type?.value] || WEATHER_INCIDENTS.other;
+    }
+
+    function readWeatherIncidentLog() {
+      try {
+        const parsed = JSON.parse(accountScopedStorage.getItem(WEATHER_INCIDENT_LOG_STORAGE_KEY) || "[]");
+        return Array.isArray(parsed) ? parsed.filter((entry) => entry && WEATHER_INCIDENTS[entry.type]).slice(0, 30) : [];
+      } catch {
+        return [];
+      }
+    }
+
+    function writeWeatherIncidentLog(entries) {
+      try {
+        accountScopedStorage.setItem(WEATHER_INCIDENT_LOG_STORAGE_KEY, JSON.stringify(entries.slice(0, 30)));
+      } catch {
+        weatherIncidentElements.message.textContent = "ログを端末に保存できませんでした。空き容量を確認してください。";
+      }
+    }
+
+    function renderWeatherIncidentLog() {
+      const location = activeWeatherLocation();
+      const field = (fieldAnnotationController?.fields || []).find((candidate) => candidate.id === location.fieldId);
+      if (weatherIncidentElements.location) {
+        weatherIncidentElements.location.textContent = field
+          ? `対象地域: ${field.name} の周辺`
+          : "対象地域: 現在の基準地点の周辺";
+      }
+      if (weatherIncidentElements.guidance) {
+        weatherIncidentElements.guidance.textContent = `推奨行動: ${selectedWeatherIncident().guidance}`;
+      }
+      const log = weatherIncidentElements.log;
+      if (!log) {
+        return;
+      }
+      log.replaceChildren();
+      const entries = readWeatherIncidentLog();
+      if (entries.length === 0) {
+        const item = document.createElement("li");
+        item.textContent = "まだ安全確認は記録されていません。";
+        log.append(item);
+        return;
+      }
+      entries.forEach((entry) => {
+        const item = document.createElement("li");
+        const incident = WEATHER_INCIDENTS[entry.type] || WEATHER_INCIDENTS.other;
+        const date = Number.isFinite(Date.parse(entry.recordedAt))
+          ? new Date(entry.recordedAt).toLocaleString("ja-JP")
+          : "日時不明";
+        const fieldLabel = entry.fieldName ? ` / ${entry.fieldName}` : "";
+        const note = entry.note ? ` — ${entry.note}` : "";
+        item.textContent = `${date}：${incident.label}${fieldLabel}${note}`;
+        log.append(item);
+      });
+    }
+
+    function recordWeatherIncident() {
+      const location = activeWeatherLocation();
+      const field = (fieldAnnotationController?.fields || []).find((candidate) => candidate.id === location.fieldId);
+      const entries = readWeatherIncidentLog();
+      entries.unshift({
+        type: weatherIncidentElements.type?.value || "other",
+        note: weatherIncidentElements.note?.value.trim() || "",
+        fieldId: field?.id || null,
+        fieldName: field?.name || "",
+        recordedAt: new Date().toISOString(),
+        weather: {
+          rain24hMm: finiteOr(weatherData?.rain24hMm, 0),
+          forecastRainProbPct: finiteOr(weatherData?.forecastRainProbPct, 0)
+        }
+      });
+      writeWeatherIncidentLog(entries);
+      if (weatherIncidentElements.note) weatherIncidentElements.note.value = "";
+      if (weatherIncidentElements.message) {
+        weatherIncidentElements.message.textContent = `${selectedWeatherIncident().label}の安全確認を記録しました。`;
+      }
+      renderWeatherIncidentLog();
+    }
+
     /**
      * The gate verdict for the ACTIVE field.
      *
@@ -6346,7 +6499,7 @@
     // -------------------------------------------------------------------------
     const DECISION_SAMPLE_VALUE = "__sample__";
     const DECISION_DEMO_VALUE = "__demo__";
-    const DECISION_NO_WATER_POINTS_MESSAGE = "この圃場には水門・給水口・排水口がまだ登録されていません。圃場データタブで水管理ポイントを追加してください。";
+    const DECISION_NO_WATER_POINTS_MESSAGE = "この圃場には水門・給水口・排水口がまだ登録されていません。アカウントタブで水管理ポイントを追加してください。";
     const DECISION_NO_OBSERVATIONS_MESSAGE = "現地観察メモはまだ登録されていません。";
     const DECISION_SAMPLE_WARNING = "現在はサンプルデータで判断しています。実際の圃場判断ではありません。";
     const DECISION_DEMO_WARNING = "現在はデモデータで判断しています。実際の圃場判断ではありません。";
@@ -7507,8 +7660,25 @@
       if (!fieldSelect || !targetInput) {
         return;
       }
-      const value = readTargetWaterLevels()[fieldSelect.value];
-      targetInput.value = Number.isFinite(value) ? value : "";
+      const storedValue = readTargetWaterLevels()[fieldSelect.value];
+      if (Number.isFinite(storedValue)) {
+        targetInput.value = storedValue;
+      } else {
+        // No target saved for this field yet: pre-fill the DISPLAYED value
+        // (never written to storage here) with the stage-based reference
+        // midpoint -- the same number 参考値を目標水位に反映 offers to apply
+        // explicitly (see renderWaterManagementCard()) -- so the farmer
+        // sees a sensible starting point instead of a blank field, and can
+        // still freely edit or clear it. Nothing persists until they
+        // actually interact with the input (its "input" listener below) or
+        // press that button, so this is not "applying" anything silently.
+        const field = (fieldAnnotationController?.fields || []).find((candidate) => candidate.id === fieldSelect.value);
+        const result = field ? fieldWaterResult(field) : null;
+        const hasNumericTarget = result && Number.isFinite(result.target?.targetMinMm) && Number.isFinite(result.target?.targetMaxMm);
+        targetInput.value = hasNumericTarget
+          ? Math.round((result.target.targetMinMm + result.target.targetMaxMm) / 2) / 10
+          : "";
+      }
       // Same active-field switch also has to refresh the persisted *current*
       // reading -- otherwise switching from 圃場2 to 圃場1 would leave 圃場2's
       // water level sitting in the input.
@@ -9676,6 +9846,7 @@
         writeRoute(route, { replace });
       }
       syncLayerVisibility();
+      renderWeatherIncidentLog();
       window.setTimeout(() => map.invalidateSize(), 80);
     }
 
@@ -10702,6 +10873,14 @@
     weatherFetchButton.addEventListener("click", fetchLiveWeather);
     Object.values(weatherInputs).forEach((input) => input.addEventListener("input", updateDecision));
     Object.values(thresholdInputs).forEach((input) => input.addEventListener("input", updateDecision));
+    weatherIncidentElements.type?.addEventListener("change", renderWeatherIncidentLog);
+    weatherIncidentElements.record?.addEventListener("click", recordWeatherIncident);
+    weatherIncidentElements.refresh?.addEventListener("click", async () => {
+      weatherIncidentElements.refresh.disabled = true;
+      await fetchLiveWeather({ force: true });
+      weatherIncidentElements.refresh.disabled = false;
+      renderWeatherIncidentLog();
+    });
     loadProofButton.addEventListener("click", showSelectedDatasetOnMap);
     decisionFieldSelect?.addEventListener("change", handleDecisionFieldChange);
     decisionProfileSelect?.addEventListener("change", renderDecisionFieldSummary);
@@ -11248,6 +11427,7 @@
             renderDroneModeGate();
             populateDecisionFieldOptions();
             loadTargetWaterLevelForActiveField();
+            renderWeatherIncidentLog();
           },
           // あなたの圃場 is a view, not a second selector: it drives the ONE
           // authoritative active-field control, whose existing change handler
@@ -11375,6 +11555,7 @@
       }
       syncPilotPanelVisibility();
       syncLayerVisibility();
+      renderWeatherIncidentLog();
       updateGatePanel();
       updateDecision();
       fitFieldBounds();

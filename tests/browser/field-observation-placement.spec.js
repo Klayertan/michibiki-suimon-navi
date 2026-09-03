@@ -270,7 +270,7 @@ test("field report shows 手動配置 as the observation's source, agreeing with
   await mapClick(page, INSIDE_FIELD_LATLNG);
   await page.locator("#selFeatureSaveButton").click();
 
-  await page.getByRole("button", { name: "圃場データ" }).click();
+  await page.locator(".engineering-nav").getByRole("button", { name: "アカウント" }).click();
   await page.evaluate(() => {
     document.querySelectorAll("details[data-workspace='fields']").forEach((card) => { card.open = true; });
   });

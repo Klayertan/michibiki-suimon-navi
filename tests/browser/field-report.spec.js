@@ -17,9 +17,9 @@ const OPEN_L_SHAPE_NMEA = [
   "$GNGGA,193912.00,3439.2664,N,13549.8162,E,1,8,1.1,45.0,M,30.0,M,,*75"
 ].join("\r\n");
 
-/** 圃場レポート lives in 圃場データ alongside the rest of the field panels. */
+/** 圃場レポート lives in アカウント alongside the rest of the field panels. */
 async function openFieldsWorkspace(page) {
-  await page.getByRole("button", { name: "圃場データ" }).click();
+  await page.locator(".engineering-nav").getByRole("button", { name: "アカウント" }).click();
   await page.evaluate(() => {
     document.querySelectorAll("details[data-workspace='fields']").forEach((card) => { card.open = true; });
   });

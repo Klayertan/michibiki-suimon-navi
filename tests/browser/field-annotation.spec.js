@@ -185,7 +185,7 @@ test("registered fields are visible in 圃場データ, survive a tab switch, an
   await page.getByRole("button", { name: "詳細解析" }).click();
   const stillOnMap = await page.evaluate(() => window.map.hasLayer(window.fieldAnnotationController.layers.fields));
   expect(stillOnMap).toBe(true);
-  await page.getByRole("button", { name: "圃場データ" }).click();
+  await page.locator(".engineering-nav").getByRole("button", { name: "アカウント" }).click();
   await expect(page.locator("#registeredFieldsContainer")).toContainText("圃場1 / paddy-001");
 
   // A full reload must restore state from localStorage.
@@ -249,7 +249,7 @@ test("水門・給水口・排水口 can each be added and linked to a specific 
   await expect(page.locator("#fieldAnnotationSummaryPoints")).toHaveText("3");
 });
 
-test("map-click placement works for 水位センサ and 撮影地点", async ({ page }) => {
+test("map-click placement works for 水位センサ and 発見", async ({ page }) => {
   await openSurveyWorkspace(page);
   await uploadNmea(page, TIGHT_LOOP_NMEA);
   await page.locator("#fieldRegConfirmButton").click();
@@ -263,6 +263,17 @@ test("map-click placement works for 水位センサ and 撮影地点", async ({ 
   await page.locator('#waterQuickToolbar button[data-water-quick-type="photo"]').click();
   await page.locator("#map").click({ position: { x: 320, y: 220 } });
   await expect(page.locator("#fieldAnnotationSummaryPoints")).toHaveText("2");
+  await expect(page.locator("#selFeatureImageRow")).toBeVisible();
+  await page.locator("#selFeatureImageInput").setInputFiles({
+    name: "discovery.png",
+    mimeType: "image/png",
+    buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL6UQAAAABJRU5ErkJggg==", "base64")
+  });
+  await expect(page.locator("#selFeatureImagePreview")).toBeVisible();
+  await page.locator("#selFeatureSaveButton").click();
+  const discovery = await page.evaluate(() => window.fieldAnnotationController.waterControlPoints.at(-1));
+  expect(discovery.properties.discoveryPhoto.name).toBe("discovery.png");
+  expect(discovery.properties.discoveryPhoto.dataUrl).toMatch(/^data:image\/png;base64,/);
 });
 
 test("water-management buttons stay disabled with no field, and auto-select the target once exactly one field is registered", async ({ page }) => {
@@ -404,7 +415,7 @@ test("a water-control marker's popup shows 編集/削除; 削除 removes it from
   await expect(page.locator("#workflowProgressLabel")).toHaveText("進捗: 2 / 5 完了");
 
   // 圃場レポート no longer lists the deleted point.
-  await page.getByRole("button", { name: "圃場データ" }).click();
+  await page.locator(".engineering-nav").getByRole("button", { name: "アカウント" }).click();
   await page.evaluate(() => {
     document.querySelectorAll("details[data-workspace='fields']").forEach((card) => { card.open = true; });
   });
@@ -581,7 +592,7 @@ test("observation markers persist after tab switching and after a page reload", 
   await page.getByRole("button", { name: "詳細解析" }).click();
   const stillOnMap = await page.evaluate(() => window.map.hasLayer(window.fieldAnnotationController.layers.observations));
   expect(stillOnMap).toBe(true);
-  await page.getByRole("button", { name: "圃場データ" }).click();
+  await page.locator(".engineering-nav").getByRole("button", { name: "アカウント" }).click();
   await expect(page.locator("#fieldAnnotationSummaryObservations")).toHaveText("1");
 
   await page.reload();

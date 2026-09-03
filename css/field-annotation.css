@@ -137,6 +137,49 @@
   display: none;
 }
 
+.discovery-photo-preview {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: block;
+  max-height: 240px;
+  max-width: 100%;
+  object-fit: contain;
+}
+
+.weather-incident-card {
+  background: #fffaf0;
+  border-color: #f59e0b;
+}
+
+.weather-incident-location {
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+.weather-incident-guidance {
+  background: #fffbeb;
+  border-left: 4px solid #f59e0b;
+  border-radius: 6px;
+  color: #78350f;
+  line-height: 1.55;
+  margin: 0;
+  padding: 10px 12px;
+}
+
+.weather-incident-log {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0 0;
+  padding-left: 22px;
+}
+
+.weather-incident-log li {
+  color: var(--muted);
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+
 @media (max-width: 760px) {
   .field-close-warning-actions,
   .wcp-type-buttons,

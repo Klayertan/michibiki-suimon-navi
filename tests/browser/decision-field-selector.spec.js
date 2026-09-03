@@ -66,7 +66,7 @@ test("selecting 田圃1 updates the decision card with real survey data, and emp
   await expect(page.locator("#decisionGpsBreakdown")).toHaveText("4点 / 1点");
   await expect(page.locator("#decisionReliability")).not.toHaveText("—");
   await expect(page.locator("#decisionWaterPointsNote")).toHaveText(
-    "この圃場には水門・給水口・排水口がまだ登録されていません。圃場データタブで水管理ポイントを追加してください。"
+    "この圃場には水門・給水口・排水口がまだ登録されていません。アカウントタブで水管理ポイントを追加してください。"
   );
   await expect(page.locator("#decisionObservationsNote")).toHaveText("現地観察メモはまだ登録されていません。");
 });
@@ -141,13 +141,13 @@ test("選択している圃場に水管理ポイントが無い場合、追加�
   await openDecisionWorkspace(page);
 
   await expect(page.locator("#decisionWaterPointsNote")).toHaveText(
-    "この圃場には水門・給水口・排水口がまだ登録されていません。圃場データタブで水管理ポイントを追加してください。"
+    "この圃場には水門・給水口・排水口がまだ登録されていません。アカウントタブで水管理ポイントを追加してください。"
   );
   const addButton = page.locator("#decisionAddWaterPointButton");
   await expect(addButton).toBeVisible();
   await addButton.click();
 
-  await expect(page.getByRole("button", { name: "圃場データ" })).toHaveClass(/active/);
+  await expect(page.locator(".engineering-nav").getByRole("button", { name: "アカウント" })).toHaveClass(/active/);
   // Destination is the always-visible on-map toolbar now, not a scrolled
   // side panel -- see the #waterControlPanel comment in index.html.
   await expect(page.locator('#waterQuickToolbar button[data-water-quick-type="gate"]')).toBeFocused();

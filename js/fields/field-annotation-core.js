@@ -35,7 +35,7 @@ export const WATER_CONTROL_TYPE_LABELS = {
   inlet: "給水口",
   outlet: "排水口",
   sensor: "水位センサ",
-  photo: "撮影地点"
+  photo: "発見"
 };
 
 export const FEATURE_TYPE_LABELS = {

@@ -116,7 +116,7 @@ test("switching away from 開発ツール and back stays stable, and a refresh r
   // ドローンモード's own 報告/飛行/接続 tabs reuse data-workspace-target="analysis"/
   // "devtools" too (see .drone-engineering-nav in index.html), so these need
   // to name the Settings tabs specifically by their own text.
-  await page.getByRole("button", { name: "圃場データ" }).click();
+  await page.locator(".engineering-nav").getByRole("button", { name: "アカウント" }).click();
   await expect(page.locator("body")).toHaveAttribute("data-workspace", "fields");
   await page.getByRole("button", { name: "開発ツール" }).click();
   await expect(page.locator("body")).toHaveAttribute("data-workspace", "devtools");
@@ -438,7 +438,7 @@ test("the three top-level modes and the Settings workspaces are unchanged", asyn
   // data-workspace-target values, which a bare [data-workspace-target]
   // locator would also pick up.
   const workspaces = await page.locator(".engineering-nav [data-workspace-target]").allTextContents();
-  expect(workspaces).toEqual(["判断デモ", "QZ1測量", "圃場データ", "詳細解析", "開発ツール"]);
+  expect(workspaces).toEqual(["判断デモ", "QZ1測量", "アカウント", "詳細解析", "開発ツール"]);
 });
 
 test("Drone Mode separates reporting, flight planning, and connection", async ({ page }) => {

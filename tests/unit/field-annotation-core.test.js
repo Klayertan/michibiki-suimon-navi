@@ -259,7 +259,7 @@ test("normalizeWaterControlType and isWaterControlType cover exactly the five re
   assert.equal(FEATURE_TYPE_LABELS.inlet, "給水口");
   assert.equal(FEATURE_TYPE_LABELS.outlet, "排水口");
   assert.equal(FEATURE_TYPE_LABELS.sensor, "水位センサ");
-  assert.equal(FEATURE_TYPE_LABELS.photo, "撮影地点");
+  assert.equal(FEATURE_TYPE_LABELS.photo, "発見");
   assert.equal(isWaterControlType("field"), false);
   assert.equal(isWaterControlType("gate"), true);
   assert.equal(normalizeWaterControlType("water_level_sensor"), "sensor");
