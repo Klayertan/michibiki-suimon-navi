@@ -210,6 +210,9 @@
       this.metrics = {};
       this.gridCells = [];
       this.dronePlan = emptyDronePlan();
+      // A plan is calculated for metrics, but it is intentionally not drawn
+      // until the operator explicitly applies it from the flight-plan card.
+      this.dronePathApplied = false;
       this.gnssAssociations = [];
       this.gnssSummary = emptyGnssSummary();
       this.selected = null;
@@ -282,7 +285,9 @@
           export: byId("exportAnalysisButton"),
           recalculateGnss: byId("recalculateGnssAssociationButton"),
           saveNote: byId("saveSelectedNoteButton"),
-          saveGrid: byId("saveGridCellButton")
+          saveGrid: byId("saveGridCellButton"),
+          applyDronePath: byId("applyDronePathButton"),
+          disableDronePath: byId("disableDronePathButton")
         },
         tables: {
           problem: byId("problemAreaTable"),
@@ -334,16 +339,22 @@
       this.elements.buttons.recalculateGnss?.addEventListener("click", () => this.refresh());
       this.elements.buttons.saveNote?.addEventListener("click", () => this.saveSelectedNote());
       this.elements.buttons.saveGrid?.addEventListener("click", () => this.saveSelectedGridCell());
+      this.elements.buttons.applyDronePath?.addEventListener("click", () => this.applyDronePath());
+      this.elements.buttons.disableDronePath?.addEventListener("click", () => this.disableDronePath());
       this.elements.inputs.import?.addEventListener("change", (event) => this.importJsonFromInput(event));
       this.elements.inputs.annotationType?.addEventListener("change", () => this.setAnnotationMode());
-      [
-        this.elements.inputs.waterDepth,
+      const flightPathInputs = [
         this.elements.inputs.altitude,
         this.elements.inputs.swathWidth,
         this.elements.inputs.overlap,
         this.elements.inputs.speed,
         this.elements.inputs.angle,
-        this.elements.inputs.safetyMargin,
+        this.elements.inputs.safetyMargin
+      ];
+      flightPathInputs.forEach((input) => input?.addEventListener("input", () => this.invalidateDronePathApplication({ refresh: false })));
+      [
+        this.elements.inputs.waterDepth,
+        ...flightPathInputs,
         this.elements.inputs.gnssThreshold,
         this.elements.inputs.gridSize
       ].forEach((input) => input?.addEventListener("input", () => this.refresh()));
@@ -377,7 +388,46 @@
       };
       this.clearSelection();
       this.cancelDrawing({ resetMode: true });
+      this.invalidateDronePathApplication({ refresh: false });
       this.refresh();
+    }
+
+    applyDronePath() {
+      if (this.dronePlan.path.length < 2) {
+        this.updateDronePathApplyUi();
+        return;
+      }
+      this.dronePathApplied = true;
+      this.refresh();
+    }
+
+    disableDronePath() {
+      this.invalidateDronePathApplication();
+    }
+
+    invalidateDronePathApplication({ refresh = true } = {}) {
+      this.dronePathApplied = false;
+      if (refresh) {
+        this.refresh();
+        return;
+      }
+      this.updateDronePathApplyUi();
+    }
+
+    updateDronePathApplyUi() {
+      const hasPath = this.dronePlan.path.length >= 2;
+      const applyButton = this.elements.buttons.applyDronePath;
+      const disableButton = this.elements.buttons.disableDronePath;
+      const message = document.getElementById("dronePathApplyMessage");
+      if (applyButton) applyButton.disabled = !hasPath;
+      if (disableButton) disableButton.disabled = !this.dronePathApplied;
+      if (message) {
+        message.textContent = this.dronePathApplied
+          ? "飛行経路を地図に適用中です。設定または圃場を変更すると、再適用が必要です。"
+          : hasPath
+            ? "飛行経路は未適用です。内容を確認してから「飛行経路を地図に適用」を押してください。"
+            : "圃場境界と飛行設定を確認すると、適用できる経路を計算します。";
+      }
     }
 
     setDefaultInputsFromAnalysis() {
@@ -421,6 +471,7 @@
       this.updateGnssAssociations();
       this.renderGridCells();
       this.updateMetrics();
+      this.updateDronePathApplyUi();
       this.renderWarnings();
       this.syncLayerVisibility();
       this.updateDrawingUi();
@@ -513,6 +564,9 @@
     }
 
     renderDronePath() {
+      if (!this.dronePathApplied) {
+        return;
+      }
       if (this.dronePlan.path.length >= 2) {
         L.polyline(this.dronePlan.path, STYLES.drone)
           .bindTooltip("ドローン概算飛行経路")
@@ -1286,7 +1340,7 @@
           return;
         }
         const input = this.elements.layers[key];
-        const visible = input ? input.checked : true;
+        const visible = (input ? input.checked : true) && (key !== "drone" || this.dronePathApplied);
         if (visible && !this.map.hasLayer(layer)) {
           layer.addTo(this.map);
         }

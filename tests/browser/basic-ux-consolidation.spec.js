@@ -441,10 +441,16 @@ test("the three top-level modes and the Settings workspaces are unchanged", asyn
   expect(workspaces).toEqual(["判断デモ", "QZ1測量", "アカウント", "詳細解析", "開発ツール"]);
 });
 
-test("Drone Mode separates reporting, flight planning, and connection", async ({ page }) => {
+test("Drone Mode requires explicit flight-path application and lets the operator choose a paddy", async ({ page }) => {
   await openSettingsFields(page);
-  await registerField(page, { nmea: LOOP_A, fileName: "drone-tabs.nmea" });
+  await registerTwoFields(page);
   await page.evaluate(() => switchMode("drone"));
+
+  const fieldIds = await page.evaluate(() => window.fieldAnnotationController.fields.map((field) => field.id));
+  await expect(page.locator("#droneActiveFieldSelect")).toBeVisible();
+  await expect(page.locator("#droneActiveFieldSelect option")).toHaveCount(fieldIds.length + 1);
+  await page.locator("#droneActiveFieldSelect").selectOption(fieldIds[1]);
+  await expect(page.locator("#basicActiveFieldSelect")).toHaveValue(fieldIds[1]);
 
   const droneTabs = page.locator("#droneWorkspaceNav [data-workspace-target]");
   await expect(droneTabs).toHaveText(["報告", "飛行", "接続"]);
@@ -456,7 +462,19 @@ test("Drone Mode separates reporting, flight planning, and connection", async ({
   await expect(page.locator("#droneFlightPlanPanel")).toBeVisible();
   await expect(page.locator("#dronePanel")).toBeHidden();
   await expect(page.locator("details[data-workspace='analysis']").first()).toBeHidden();
+  await expect.poll(() => page.evaluate(() => map.hasLayer(paddyIntelligence.layers.drone))).toBe(false);
+  await expect(page.locator("#applyDronePathButton")).toBeEnabled();
+  await page.locator("#applyDronePathButton").click();
   await expect.poll(() => page.evaluate(() => map.hasLayer(paddyIntelligence.layers.drone))).toBe(true);
+  await expect(page.locator("#disableDronePathButton")).toBeEnabled();
+  await page.locator("#droneActiveFieldSelect").selectOption(fieldIds[0]);
+  await expect(page.locator("#basicActiveFieldSelect")).toHaveValue(fieldIds[0]);
+  await expect.poll(() => page.evaluate(() => map.hasLayer(paddyIntelligence.layers.drone))).toBe(false);
+  await expect(page.locator("#dronePathApplyMessage")).toContainText("未適用");
+  await page.locator("#applyDronePathButton").click();
+  await expect.poll(() => page.evaluate(() => map.hasLayer(paddyIntelligence.layers.drone))).toBe(true);
+  await page.locator("#disableDronePathButton").click();
+  await expect.poll(() => page.evaluate(() => map.hasLayer(paddyIntelligence.layers.drone))).toBe(false);
 
   await droneTabs.filter({ hasText: "接続" }).click();
   await expect(page.locator("#dronePanel")).toBeVisible();

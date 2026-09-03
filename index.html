@@ -4935,6 +4935,12 @@
           <div class="kv"><span>推定経路長</span><strong id="flightLengthMetric">—</strong></div>
           <div class="kv"><span>概算飛行時間</span><strong id="flightTimeMetric">—</strong></div>
           <div class="kv"><span>概算写真枚数</span><strong id="flightPhotoMetric">—</strong></div>
+          <div class="veg-actions">
+            <button id="applyDronePathButton" class="panel-button primary" type="button" disabled>飛行経路を地図に適用</button>
+            <button id="disableDronePathButton" class="panel-button" type="button" disabled>飛行経路を無効にする</button>
+          </div>
+          <p id="dronePathApplyMessage" class="meta" role="status" aria-live="polite"></p>
+          <p class="meta">経路は適用するまで地図に表示されません。これは地図上の計画表示のみで、機体への送信や飛行開始は行いません。</p>
           <p class="meta">飛行禁止区域は可能な範囲でラインを分割します。交差が残る場合は警告と赤線で表示します。</p>
           </div>
         </details>
@@ -6754,6 +6760,10 @@
         note: `圃場: ${field.name || field.id}`,
         photoRef: ""
       }));
+      // A flight path is specific to its field boundary. Switching paddies
+      // must never redraw a former plan as though the farmer approved it for
+      // the new paddy.
+      paddyIntelligence?.invalidateDronePathApplication({ refresh: false });
       refreshFieldOverlay();
       paddyIntelligence?.refresh();
     }
@@ -9182,13 +9192,15 @@
       const showAnalysisLayers = activeWorkspace === "analysis";
       const showFlightPath = activeWorkspace === "flight";
       Object.entries(paddyLayers).forEach(([key, layer]) => {
-        setLayerVisible(layer, (showAnalysisLayers || (showFlightPath && key === "drone")) && paddyLayerInputs[key].checked);
+        const flightPathIsApplied = key !== "drone" || paddyIntelligence?.dronePathApplied === true;
+        setLayerVisible(layer, flightPathIsApplied && (showAnalysisLayers || (showFlightPath && key === "drone")) && paddyLayerInputs[key].checked);
       });
       paddyIntelligence?.syncLayerVisibility();
       if (paddyIntelligence?.layers) {
         const showFlightPathLayer = showFlightPath && paddyIntelligence.elements?.layers?.drone?.checked !== false;
         Object.entries(paddyIntelligence.layers).forEach(([key, layer]) => {
-          setLayerVisible(layer, showAnalysisLayers || (showFlightPathLayer && key === "drone"));
+          const flightPathIsApplied = key !== "drone" || paddyIntelligence.dronePathApplied === true;
+          setLayerVisible(layer, flightPathIsApplied && (showAnalysisLayers || (showFlightPathLayer && key === "drone")));
         });
       }
     }
