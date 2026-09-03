@@ -400,13 +400,18 @@ test("stage and measurement are per field, and follow the one active-field selec
   await expect(page.locator("#waterMgmtDepthInput")).toHaveValue("18");
 });
 
-test("the reference range can be applied to 目標水位, but only on request", async ({ page }) => {
+test("the reference range pre-fills 目標水位's display, but nothing is saved until the farmer acts", async ({ page }) => {
   await openBasic(page);
   await registerField(page, "圃場1");
   await page.locator("#waterMgmtStageSelect").selectOption("after_transplanting"); // 30-50mm -> 4.0cm midpoint
 
-  // Nothing was written just by picking the stage.
-  await expect(page.locator("#recTargetWaterLevelInput")).toHaveValue("");
+  // Displayed as a starting point, but not yet persisted -- the storage key
+  // itself carries no entry for this field until the farmer actually acts.
+  await expect(page.locator("#recTargetWaterLevelInput")).toHaveValue("4");
+  const fieldId = await page.locator("#basicActiveFieldSelect").inputValue();
+  const storedBeforeApply = await page.evaluate(() => localStorage.getItem("suimonNaviTargetWaterLevelV1"));
+  const parsedBeforeApply = storedBeforeApply ? JSON.parse(storedBeforeApply) : {};
+  expect(Object.prototype.hasOwnProperty.call(parsedBeforeApply, fieldId)).toBe(false);
 
   const applyButton = page.locator("#waterMgmtApplyTargetButton");
   await expect(applyButton).toContainText("4 cm");
@@ -414,6 +419,23 @@ test("the reference range can be applied to 目標水位, but only on request", 
 
   await expect(page.locator("#recTargetWaterLevelInput")).toHaveValue("4");
   await expect(page.locator("#waterMgmtApplyTargetMessage")).toContainText("目標水位を 4 cm に設定しました");
+});
+
+test("once the farmer types their own 目標水位, the stage-based default no longer overwrites it", async ({ page }) => {
+  await openBasic(page);
+  await registerField(page, "圃場1");
+  await page.locator("#waterMgmtStageSelect").selectOption("after_transplanting"); // 30-50mm -> 4.0cm midpoint
+  await expect(page.locator("#recTargetWaterLevelInput")).toHaveValue("4");
+
+  // #recTargetWaterLevelInput lives inside #basicWaterRecordCard, which is
+  // not permanently visible on desktop -- open it before interacting.
+  await page.locator("#basicRecordWaterButton").click();
+  await expect(page.locator("#recTargetWaterLevelInput")).toBeVisible();
+  await page.locator("#recTargetWaterLevelInput").fill("7.5");
+  // Switching to a stage with a different reference range must not clobber
+  // the farmer's own saved value.
+  await page.locator("#waterMgmtStageSelect").selectOption("tillering"); // a different numeric range
+  await expect(page.locator("#recTargetWaterLevelInput")).toHaveValue("7.5");
 });
 
 // ---------------------------------------------------------------------------

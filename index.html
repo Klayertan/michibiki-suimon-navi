@@ -7664,31 +7664,45 @@
       authController?.notifyLocalChange();
     }
 
+    /**
+     * Fills #recTargetWaterLevelInput's DISPLAYED value: the farmer's own
+     * saved target for this field if one exists, otherwise the stage-based
+     * reference midpoint -- the same number 参考値を目標水位に反映 offers to
+     * apply explicitly (see renderWaterManagementCard()) -- so the farmer
+     * sees a sensible starting point instead of a blank field, and can
+     * still freely edit or clear it.
+     *
+     * Never writes to storage itself -- only the input's own "input"
+     * listener (or the apply button) does that -- so this does not "apply"
+     * anything silently; it only changes what is initially shown. Called
+     * both on an active-field switch and on a growth-stage change, since
+     * either can change which reference range applies.
+     */
+    function applyTargetWaterLevelDefault(fieldId) {
+      const targetInput = document.getElementById("recTargetWaterLevelInput");
+      if (!targetInput || !fieldId) {
+        return;
+      }
+      const storedValue = readTargetWaterLevels()[fieldId];
+      if (Number.isFinite(storedValue)) {
+        targetInput.value = storedValue;
+        return;
+      }
+      const field = (fieldAnnotationController?.fields || []).find((candidate) => candidate.id === fieldId);
+      const result = field ? fieldWaterResult(field) : null;
+      const hasNumericTarget = result && Number.isFinite(result.target?.targetMinMm) && Number.isFinite(result.target?.targetMaxMm);
+      targetInput.value = hasNumericTarget
+        ? Math.round((result.target.targetMinMm + result.target.targetMaxMm) / 2) / 10
+        : "";
+    }
+
     function loadTargetWaterLevelForActiveField() {
       const fieldSelect = document.getElementById("basicActiveFieldSelect");
       const targetInput = document.getElementById("recTargetWaterLevelInput");
       if (!fieldSelect || !targetInput) {
         return;
       }
-      const storedValue = readTargetWaterLevels()[fieldSelect.value];
-      if (Number.isFinite(storedValue)) {
-        targetInput.value = storedValue;
-      } else {
-        // No target saved for this field yet: pre-fill the DISPLAYED value
-        // (never written to storage here) with the stage-based reference
-        // midpoint -- the same number 参考値を目標水位に反映 offers to apply
-        // explicitly (see renderWaterManagementCard()) -- so the farmer
-        // sees a sensible starting point instead of a blank field, and can
-        // still freely edit or clear it. Nothing persists until they
-        // actually interact with the input (its "input" listener below) or
-        // press that button, so this is not "applying" anything silently.
-        const field = (fieldAnnotationController?.fields || []).find((candidate) => candidate.id === fieldSelect.value);
-        const result = field ? fieldWaterResult(field) : null;
-        const hasNumericTarget = result && Number.isFinite(result.target?.targetMinMm) && Number.isFinite(result.target?.targetMaxMm);
-        targetInput.value = hasNumericTarget
-          ? Math.round((result.target.targetMinMm + result.target.targetMaxMm) / 2) / 10
-          : "";
-      }
+      applyTargetWaterLevelDefault(fieldSelect.value);
       // Same active-field switch also has to refresh the persisted *current*
       // reading -- otherwise switching from 圃場2 to 圃場1 would leave 圃場2's
       // water level sitting in the input.
@@ -10990,6 +11004,12 @@
       // screen contradicting each other until some other event repaints the
       // gate, which is the exact failure decideGate() was written to end.
       updateDecision();
+      // 目標水位's own reference default depends on the stage too (see
+      // applyTargetWaterLevelDefault()) -- only touches the field when
+      // nothing has been manually saved yet, so this never clobbers a
+      // farmer-entered value.
+      applyTargetWaterLevelDefault(fieldId);
+      updateWaterLevelVerdict();
     });
 
     document.getElementById("waterMgmtDepthInput")?.addEventListener("input", (event) => {
