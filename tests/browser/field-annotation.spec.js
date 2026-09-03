@@ -274,6 +274,23 @@ test("map-click placement works for 水位センサ and 発見", async ({ page }
   const discovery = await page.evaluate(() => window.fieldAnnotationController.waterControlPoints.at(-1));
   expect(discovery.properties.discoveryPhoto.name).toBe("discovery.png");
   expect(discovery.properties.discoveryPhoto.dataUrl).toMatch(/^data:image\/png;base64,/);
+
+  // A farmer can attach or replace a photo right from the marker popup,
+  // without opening the separate selected-feature editor.
+  await page.evaluate(() => {
+    const layer = Object.values(window.fieldAnnotationController.layers.waterPoints._layers).at(-1);
+    layer.openPopup();
+  });
+  await expect(page.locator(".leaflet-popup")).toContainText("写真を変更");
+  await page.locator(".leaflet-popup .discovery-photo-upload-input").setInputFiles({
+    name: "replacement.png",
+    mimeType: "image/png",
+    buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL6UQAAAABJRU5ErkJggg==", "base64")
+  });
+  await expect(page.locator(".leaflet-popup")).toContainText("写真を保存しました");
+  await expect(page.locator(".leaflet-popup .discovery-photo-preview")).toBeVisible();
+  const replacedDiscovery = await page.evaluate(() => window.fieldAnnotationController.waterControlPoints.at(-1));
+  expect(replacedDiscovery.properties.discoveryPhoto.name).toBe("replacement.png");
 });
 
 test("water-management buttons stay disabled with no field, and auto-select the target once exactly one field is registered", async ({ page }) => {

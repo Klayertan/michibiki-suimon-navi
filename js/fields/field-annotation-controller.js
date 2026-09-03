@@ -1949,7 +1949,7 @@ export class FieldAnnotationController {
     });
   }
 
-  /** Leaflet popup content for a water-control-point marker: read-only summary + 編集/削除 actions. */
+  /** Leaflet popup content for a water-control-point marker: read-only summary + actions. */
   buildWaterControlPopup(point) {
     const container = document.createElement("div");
     container.className = "obs-popup";
@@ -1970,16 +1970,71 @@ export class FieldAnnotationController {
       container.append(row);
     });
     const photoDataUrl = internalType === "photo" && safeDiscoveryPhotoDataUrl(point.properties?.discoveryPhoto?.dataUrl);
+    let photoPreview = null;
     if (photoDataUrl) {
-      const image = document.createElement("img");
-      image.className = "discovery-photo-preview";
-      image.alt = point.properties?.discoveryPhoto?.name || "発見時の写真";
-      image.src = photoDataUrl;
-      container.append(image);
+      photoPreview = document.createElement("img");
+      photoPreview.className = "discovery-photo-preview";
+      photoPreview.alt = point.properties?.discoveryPhoto?.name || "発見時の写真";
+      photoPreview.src = photoDataUrl;
+      container.append(photoPreview);
     }
 
     const actions = document.createElement("div");
     actions.className = "obs-popup-actions";
+    if (internalType === "photo") {
+      const uploadInput = document.createElement("input");
+      uploadInput.type = "file";
+      uploadInput.accept = "image/jpeg,image/png,image/webp";
+      uploadInput.setAttribute("capture", "environment");
+      uploadInput.className = "discovery-photo-upload-input";
+      uploadInput.hidden = true;
+      const uploadButton = document.createElement("button");
+      uploadButton.type = "button";
+      uploadButton.className = "panel-button";
+      uploadButton.textContent = photoDataUrl ? "写真を変更" : "写真をアップロード";
+      const uploadStatus = document.createElement("p");
+      uploadStatus.className = "meta";
+      uploadStatus.setAttribute("role", "status");
+      uploadStatus.hidden = true;
+      uploadButton.addEventListener("click", () => uploadInput.click());
+      uploadInput.addEventListener("change", async () => {
+        const file = uploadInput.files?.[0];
+        if (!file) return;
+        uploadButton.disabled = true;
+        uploadStatus.hidden = false;
+        uploadStatus.textContent = "写真を保存中…";
+        try {
+          const photo = await prepareDiscoveryPhoto(file);
+          point.properties ||= {};
+          point.properties.discoveryPhoto = {
+            dataUrl: photo.dataUrl,
+            name: photo.name,
+            attachedAt: new Date().toISOString()
+          };
+          point.properties.updatedAt = new Date().toISOString();
+          if (this.pendingDiscoveryPhoto?.recordId === point.id) {
+            this.pendingDiscoveryPhoto = null;
+          }
+          this.persist();
+          if (!photoPreview) {
+            photoPreview = document.createElement("img");
+            photoPreview.className = "discovery-photo-preview";
+            container.insertBefore(photoPreview, actions);
+          }
+          photoPreview.alt = photo.name || "発見時の写真";
+          photoPreview.src = photo.dataUrl;
+          uploadButton.textContent = "写真を変更";
+          uploadStatus.textContent = "写真を保存しました。";
+        } catch (error) {
+          uploadStatus.textContent = error?.message || "写真を読み込めませんでした。";
+        } finally {
+          uploadButton.disabled = false;
+          uploadInput.value = "";
+        }
+      });
+      actions.append(uploadInput, uploadButton);
+      container.append(uploadStatus);
+    }
     const editButton = document.createElement("button");
     editButton.type = "button";
     editButton.className = "panel-button";
