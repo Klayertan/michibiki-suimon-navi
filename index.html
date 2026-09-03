@@ -4780,7 +4780,6 @@
             </div>
             <div class="kv"><span>圃場</span><strong id="droneFieldName">—</strong></div>
             <div class="kv"><span>面積</span><strong id="droneFieldArea">—</strong></div>
-            <button id="droneShowPointsButton" class="panel-button secondary" type="button">選択中データの測位点を表示</button>
             <p class="meta">この圃場の境界を、ドローンの巡回範囲の基準として使用します（安全マージンの適用は今後実装予定）。地図上の圃場をクリックしても選び直せます。</p>
           </div>
         </section>
@@ -9851,9 +9850,10 @@
         tab.classList.toggle("active", selected);
         tab.setAttribute("aria-selected", String(selected));
       });
-      // "decision" and "survey" have no entry: 選択中データの測位点を表示 moved
-      // to ドローンモード's own field summary (see #droneShowPointsButton), and
-      // the ordinary NMEA uploader was removed from 開発ツール entirely
+      // "decision" and "survey" have no entry: 選択中データの測位点を表示 no
+      // longer has a ドローンモード counterpart (that button, formerly
+      // #droneShowPointsButton, was removed from #droneModeGateCard on
+      // request), and the ordinary NMEA uploader was removed from 開発ツール entirely
       // (see the comment above #basicNmeaInput) -- 判断デモ/QZ1測量 simply have
       // no primary header action left, so the button hides for both. "fields"
       // also has no entry, on request: its per-field data now lives inside
@@ -10970,10 +10970,6 @@
     // also re-highlights the matching polygon on the map, same as clicking it.
     document.getElementById("droneActiveFieldSelect")?.addEventListener("change", (event) => {
       fieldAnnotationController?.setActiveField(event.target.value);
-    });
-    document.getElementById("droneShowPointsButton")?.addEventListener("click", () => {
-      const fieldId = document.getElementById("droneActiveFieldSelect")?.value;
-      showFieldPointsOnMap(fieldId);
     });
     document.getElementById("recTargetWaterLevelInput")?.addEventListener("input", (event) => {
       const fieldId = document.getElementById("basicActiveFieldSelect")?.value;

@@ -221,21 +221,18 @@ test("判断プロファイルを変更してもQZ1/DGNSS測位品質カード�
   await expect(page.locator("#proofSourceBadge")).toHaveText("実測QZ1ログ");
 });
 
-test("選択中の圃場の測位点を表示する操作はドローンモードにだけあり、登録圃場の点を地図に表示する", async ({ page }) => {
+test("判断デモの選択中データ表示ボタンは非表示のままで、ドローンモードの圃場サマリーには測位点表示ボタンがない", async ({ page }) => {
   await registerField(page);
   await openDecisionWorkspace(page);
 
-  // 判断デモ's generic header action is deliberately gone: the operational
-  // action belongs to the drone's selected registered field, not the demo.
+  // 判断デモ's generic header action is deliberately gone: there is no
+  // operational "show these points" action for a demo dataset.
   await expect(page.locator("#workspacePrimaryAction")).toBeHidden();
+  // #droneShowPointsButton was removed from #droneModeGateCard on request
+  // -- that card now shows only the field name/area, no measurement-points
+  // action (see #droneModeGateCard's own markup).
   await page.evaluate(() => switchMode("drone"));
-  await expect(page.locator("#droneShowPointsButton")).toBeVisible();
-  await expect(page.locator("#droneShowPointsButton")).toBeEnabled();
-  await page.locator("#droneShowPointsButton").click();
-
-  // The button must show exactly this registered field's own 5 points, not
-  // the 206-point school sample used only by 判断デモ.
-  await expect(page.locator("#totalPoints")).toHaveText("5");
+  await expect(page.locator("#droneShowPointsButton")).toHaveCount(0);
 });
 
 test("デモには測位点が無いため、判断デモの測位点表示は無効化される", async ({ page }) => {
