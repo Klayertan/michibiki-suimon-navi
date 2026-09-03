@@ -287,6 +287,7 @@ test("map-click placement works for 水位センサ and 発見", async ({ page }
   expect(markerPosition.pane).toBe("fieldAnnotationPoints");
   await page.mouse.click(markerPosition.x, markerPosition.y);
   await expect(page.locator(".leaflet-popup")).toContainText("写真を変更");
+  await expect(page.locator(".leaflet-popup").getByRole("button", { name: "編集" })).toHaveCount(0);
 
   // A farmer can attach or replace a photo right from the marker popup,
   // without opening the separate selected-feature editor.

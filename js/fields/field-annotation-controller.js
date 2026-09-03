@@ -2046,14 +2046,6 @@ export class FieldAnnotationController {
       actions.append(uploadInput, uploadButton);
       container.append(uploadStatus);
     }
-    const editButton = document.createElement("button");
-    editButton.type = "button";
-    editButton.className = "panel-button";
-    editButton.textContent = "編集";
-    editButton.addEventListener("click", () => {
-      this.selectFeature("point", point);
-      this.map.closePopup();
-    });
     const deleteButton = document.createElement("button");
     deleteButton.type = "button";
     deleteButton.className = "panel-button danger";
@@ -2063,7 +2055,18 @@ export class FieldAnnotationController {
       this.selected = { kind: "point", record: point };
       this.deleteSelectedFeature();
     });
-    actions.append(editButton, deleteButton);
+    if (internalType !== "photo") {
+      const editButton = document.createElement("button");
+      editButton.type = "button";
+      editButton.className = "panel-button";
+      editButton.textContent = "編集";
+      editButton.addEventListener("click", () => {
+        this.selectFeature("point", point);
+        this.map.closePopup();
+      });
+      actions.append(editButton);
+    }
+    actions.append(deleteButton);
     container.append(actions);
     return container;
   }
