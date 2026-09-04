@@ -38,6 +38,11 @@
     noFlyZone: { color: "#991b1b", fillColor: "#ef4444", fillOpacity: 0.24, weight: 2, dashArray: "7 5" },
     obstacle: { color: "#334155", fillColor: "#64748b", fillOpacity: 0.26, weight: 2 },
     drone: { color: "#111827", weight: 1.8, opacity: 0.78, dashArray: "5 6" },
+    // The turn-around transit between one capture pass's end and the next
+    // pass's start -- lighter/finer than STYLES.drone so the two read as
+    // distinct without competing, the same way mapping-drone tools usually
+    // separate "capturing" from "repositioning" legs.
+    droneTransit: { color: "#6b7280", weight: 1.2, opacity: 0.55, dashArray: "1 6" },
     droneWarning: { color: "#dc2626", weight: 3.5, opacity: 0.9 },
     grid: { color: "#64748b", weight: 0.7, opacity: 0.24, fillOpacity: 0 },
     drawing: { color: "#2563eb", fillColor: "#93c5fd", fillOpacity: 0.22, weight: 2, dashArray: "4 4" }
@@ -568,18 +573,35 @@
         return;
       }
       if (this.dronePlan.path.length >= 2) {
-        // The plan is stored as consecutive start/end pairs so its metrics
-        // include the aircraft's turns. Drawing that flattened list as one
-        // polyline, however, joins each pair and produces a large rectangular
-        // frame around the paddy. It also sits above water-control markers.
-        // Render each capture pass as a separate, click-through line instead:
-        // the plan remains available, while field points stay easy to tap.
+        // The plan is stored as consecutive start/end pairs, alternating
+        // direction row to row (generateDronePath()'s `reverse` flag), so
+        // each pass's end sits next to the following pass's start -- a
+        // proper boustrophedon/lawnmower turn, not a long jump back across
+        // the field. Rendered as two layers: the capture passes themselves
+        // (STYLES.drone) plus a lighter, finer-dashed transit layer for
+        // just those turns (STYLES.droneTransit), so the whole plan reads
+        // as one continuous flight path on request while the capture
+        // passes stay individually click-through -- field points
+        // underneath stay easy to tap.
         const capturePasses = [];
+        const transitSegments = [];
         for (let index = 0; index + 1 < this.dronePlan.path.length; index += 2) {
           capturePasses.push([this.dronePlan.path[index], this.dronePlan.path[index + 1]]);
+          if (index + 3 < this.dronePlan.path.length) {
+            transitSegments.push([this.dronePlan.path[index + 1], this.dronePlan.path[index + 2]]);
+          }
         }
+        // Capture passes are added to the layer group FIRST -- they are
+        // the primary layer tests/other code reach for (the first child of
+        // this.layers.drone). The two never overlap geometrically (transit
+        // segments only touch pass endpoints), so which one paints on top
+        // has no visual consequence either way.
         L.polyline(capturePasses, { ...STYLES.drone, interactive: false })
           .addTo(this.layers.drone);
+        if (transitSegments.length > 0) {
+          L.polyline(transitSegments, { ...STYLES.droneTransit, interactive: false })
+            .addTo(this.layers.drone);
+        }
       }
       this.dronePlan.warningSegments.forEach((segment, index) => {
         L.polyline(segment, STYLES.droneWarning)
