@@ -39,10 +39,15 @@
     obstacle: { color: "#334155", fillColor: "#64748b", fillOpacity: 0.26, weight: 2 },
     drone: { color: "#111827", weight: 1.8, opacity: 0.78, dashArray: "5 6" },
     // The turn-around transit between one capture pass's end and the next
-    // pass's start -- lighter/finer than STYLES.drone so the two read as
-    // distinct without competing, the same way mapping-drone tools usually
-    // separate "capturing" from "repositioning" legs.
-    droneTransit: { color: "#6b7280", weight: 1.2, opacity: 0.55, dashArray: "1 6" },
+    // pass's start. Deliberately SOLID, not dashed: most transits are only
+    // a few meters long (one line-spacing hop), which on screen is often
+    // just a handful of pixels -- a dash pattern needs enough rendered
+    // length to complete even one dash+gap cycle, so on a short segment it
+    // can silently render as nothing at all (this is exactly what
+    // happened with an earlier "1 6" dashArray here -- present in the DOM,
+    // invisible on screen). A solid line has no such minimum length.
+    // Distinguished from STYLES.drone by color/weight instead.
+    droneTransit: { color: "#2563eb", weight: 1.6, opacity: 0.85 },
     droneWarning: { color: "#dc2626", weight: 3.5, opacity: 0.9 },
     grid: { color: "#64748b", weight: 0.7, opacity: 0.24, fillOpacity: 0 },
     drawing: { color: "#2563eb", fillColor: "#93c5fd", fillOpacity: 0.22, weight: 2, dashArray: "4 4" }
