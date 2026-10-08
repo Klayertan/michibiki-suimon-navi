@@ -209,5 +209,10 @@ class ProfileOut(BaseModel):
 
 
 class HealthResponse(BaseModel):
+    # Deliberately just these two fields. This endpoint is reachable by anyone
+    # who can reach the server, so it names the service (so a monitor can tell
+    # it is talking to the right thing) but does not say whether the process is
+    # running in "development" or "production" — that is information an
+    # attacker can use and a health check does not need.
     status: str = "ok"
-    environment: str
+    service: str = "sui-sui-navi-api"
