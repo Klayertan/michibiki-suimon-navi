@@ -107,18 +107,31 @@ variable table), so the cookie is shared between the frontend host
 (`suisuinavi.sakura.ne.jp`) and the API host
 (`api.suisuinavi.sakura.ne.jp`) as same-site siblings.
 
-**Open question, honestly flagged:** whether `sakura.ne.jp` is itself
-registered on the [Public Suffix List](https://publicsuffix.org/) affects
-whether `.suisuinavi.sakura.ne.jp` (four labels) is accepted as a cookie
-domain by strict browsers — a PSL-registered suffix means
-`suisuinavi.sakura.ne.jp` is the effective "site," and a cookie scoped one
-level above a farmer's own registrable domain is exactly what the PSL
-mechanism exists to reject (it's the same rule that stops a cookie being
-set for all of `.com`). This was **not verified against the real PSL
-entry** in this task, since that requires checking Mozilla's actual public
-suffix data for `sakura.ne.jp` — not something to assert without looking it
-up. If the cookie is silently rejected in production despite matching the
-config here, this is the first thing to check; the fallback is
+**Public Suffix List — checked 2026-10-08.** `sakura.ne.jp` **is** listed on
+the [Public Suffix List](https://publicsuffix.org/) (private section, an entry
+submitted by SAKURA Internet). That makes `suisuinavi.sakura.ne.jp` the
+registrable domain — its own "site", like a `*.github.io` project. Two
+consequences, one good and one to watch:
+
+- *Good:* `Domain=.suisuinavi.sakura.ne.jp` is a **legitimate** cookie scope
+  (the cookie is set on the registrable domain, not on the suffix itself, which
+  is what the PSL forbids), and `api.suisuinavi.sakura.ne.jp` would be
+  same-site with `suisuinavi.sakura.ne.jp`. The worry originally written
+  here — that this scope would be rejected — is therefore not supported by
+  the PSL.
+- *Watch:* any **other** `*.sakura.ne.jp` name (for example a VPS's default
+  hostname, whose format is not verified here) belongs to a *different* site.
+  A frontend on `suisuinavi.sakura.ne.jp` talking to such a host is
+  cross-site: `SameSite=Lax` cookies are not sent on its `fetch()` calls and
+  Safari blocks third-party cookies. Cookie login would then fail,
+  particularly on iPhone. The API must be reached under
+  `*.suisuinavi.sakura.ne.jp`, or the frontend must be served from the same
+  origin as the API.
+
+What remains **unverified** is whether `api.suisuinavi.sakura.ne.jp` can be
+created at all (that depends on the Rental Server's DNS controls). If the
+cookie is silently rejected in production despite matching the config here,
+check this section first; the fallback is
 `SUISUI_CLOUD_SESSION_COOKIE_SAMESITE=none` with `apiBaseUrl` and the
 frontend origin kept as *separate* same-site-incompatible hosts each
 carrying their own cookie, which changes the architecture (no shared
