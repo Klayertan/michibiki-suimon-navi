@@ -280,15 +280,144 @@ nothing listens yet (Caddy comes later); `nc` cannot tell "filtered" from
 
 ---
 
-## Still to do
+## Step 9 — Let setup run without typing the sudo password (and a mistake)
 
-| # | Step | Needs |
+**Attempted.** `sudo` on the server asks for the admin password, which must not
+pass through anyone but the author. Plan: allow `ubuntu` to use `sudo` without a
+password *for the duration of the setup*, and remove that again at the end.
+
+**Mistake [verified].** The author pasted the commands into the wrong terminal
+tab: twice they ran on the **Mac** instead of the server. Consequences, all
+found and fixed: (a) `passwd` ran for the Mac user and **changed the Mac login
+password** (it prints a keychain warning after a successful change); (b) a
+stray `/etc/sudoers.d/90-setup-nopasswd` was created on the Mac (it named a
+user that does not exist there, so it did nothing) and was deleted. The Mac
+password revert is a separate, still-open item.
+**Fix.** Every later server step was launched in its **own dedicated terminal
+tab with the command already typed** and routed through the server connection,
+so the author only types a password when that tab asks for it.
+**Lesson for the article:** several terminals look identical. Make the prompt
+say where you are (`ubuntu@suisuinavi-api` vs `sky@…`) before typing anything.
+
+**Result [verified].** `sudo -n true` succeeds on the server; the file passes
+`visudo -c`.
+
+---
+
+## Step 10 — Update Ubuntu, reboot
+
+`apt-get update` then `apt-get upgrade`: **276 packages** upgraded on a
+just-created image; Ubuntu then reported "System restart required". Rebooted
+(back and answering SSH in about 23 s). The running kernel stayed
+`6.8.0-62-generic` (no newer one was installed); the reboot was for upgraded
+system libraries. 5 packages remain upgradable (held back).
+
+*Note for the article:* a brand-new server image is already out of date — the
+first job on any new server is updating it.
+
+---
+
+## Step 11 — Install Docker (official repository, key checked)
+
+Added Docker's apt repository and checked the downloaded signing key's
+fingerprint against the one Docker publishes: `9DC8 5822 9FC7 DD38 854A E2D8
+8D81 803C 0EBF CD88` — **match [verified]**. Installed **Docker 29.9.0** and
+**Compose v5.6.0**; the Docker service is enabled at boot.
+`ubuntu` was deliberately **not** added to the `docker` group (that group is
+effectively root); commands use `sudo docker …`.
+
+---
+
+## Step 12 — Copy the code, create the config, start the stack
+
+**Code.** Copied with `rsync` from the Mac, **not** `git clone`: the branch
+with `docker-compose.vps.yml` and the health change is only local and nothing
+is pushed to GitHub without being asked. (When the branch is merged, replace
+this with `git pull` on the server.)
+
+**Config.** `.env` created **on the server**, secrets generated there with
+`openssl rand` (never displayed, never on the Mac or in the repo), mode `600`:
+production mode, **registration closed**, max 10 users, allowed origin
+`https://suisuinavi.sakura.ne.jp`.
+
+**Start.** `sudo docker compose -f docker-compose.yml -f docker-compose.vps.yml up -d --build`
+→ three containers (`db`, `api`, `caddy`), database and API **healthy**; the
+migration ran against the new database. Only Caddy is published on all
+interfaces (port 80); the API (8000) and PostgreSQL (5432) are bound to
+`127.0.0.1`. Restart policy `unless-stopped` on all three.
+
+---
+
+## Step 13 — The test that counts, from the Mac
+
+```bash
+curl http://<SERVER_IP>/api/health
+{"status":"ok","service":"sui-sui-navi-api"}      # HTTP 200, 0.15 s  [verified]
+```
+
+| Check | Result [verified] |
+|---|---|
+| `/docs`, `/openapi.json` | 404 (disabled in production) |
+| `/api/fields` without login | 401 |
+| `POST /api/auth/register` | 403 — registration closed |
+| TCP 8000, TCP 5432 from the Internet | **time out after 5 s** (silent drop) |
+
+**Why the timeout matters.** Those two ports are bound to loopback, so even with
+no firewall a connection would be *refused* immediately. A *timeout* means the
+packet never arrived — the Sakura packet filter dropped it. This proves the
+firewall works, which step 8 could not.
+
+**Public listeners [verified, `ss -ltnp`].** Only `:22` (sshd) and `:80`
+(Docker's proxy for Caddy). `:8000` and `:5432` are `127.0.0.1` only.
+
+**Resources [verified, idle]**: containers Caddy 53 MiB + API 64 MiB + PostgreSQL
+34 MiB ≈ 150 MiB; whole system 592 MiB used of 1.9 GiB; disk 4.1 GB of 20 GB.
+A 1 GB plan would very probably have been enough — not tried.
+
+---
+
+## Step 14 — Does it survive a reboot?
+
+Rebooted the server with `systemctl reboot` and polled `/api/health` from the
+Mac every 3 s: no answer for ~24 s, then
+`{"status":"ok","service":"sui-sui-navi-api"}` again **27 s after the request,
+with nobody logged in [verified]**. Containers came back `healthy`; the
+migration state (`0001_initial`) was intact in the database volume.
+
+The API's own access log showed the **real client address** (not Caddy's
+container address) — the `FORWARDED_ALLOW_IPS` fix from step 3 working in
+production **[verified]**. (The address is the author's home IP; never publish it.)
+
+**This is the point of the article:** the Python service now runs without the
+Mac, restarts itself after a power cycle, and is reachable from anywhere.
+
+*Not done:* the planned "run it by hand, close the terminal, watch it die" demo
+(the reboot test shows the same thing from the other side). Still worth a
+screenshot pair if the article wants the contrast.
+
+---
+
+## Still to do (server is live and billing)
+
+| # | Item | Notes |
 |---|---|---|
-| 9 | First SSH login with the key; change the admin password; `apt update && upgrade` | Author types the key passphrase |
-| 10 | "Run it by hand, close the terminal, watch it die" demo | Server |
-| 11 | Install Docker, clone, `.env` (production, registration closed), `compose -f … -f docker-compose.vps.yml up -d` | Server |
-| 12 | `curl` from the Mac; open port 8000/5432 check; reboot the server and confirm it comes back | Server |
-| 13 | Try `api.suisuinavi.sakura.ne.jp` → the server IP, then HTTPS | Rental Server DNS panel |
+| a | **Remove passwordless sudo** on the server: `sudo rm /etc/sudoers.d/90-setup-nopasswd` | Setup-only loosening |
+| b | **Change the server admin password** (`passwd`, in the dedicated server tab) | It was visible in a Sakura dialog |
+| c | **Revert (or keep) the Mac login password** changed by mistake | Keychain still has the old one |
+| d | Optional: passphrase for the SSH key (`ssh-keygen -p -f ~/.ssh/sakura_cloud_ed25519`) | Key currently has none |
+| e | HTTPS: `api.suisuinavi.sakura.ne.jp` → server IP, then edit `deploy/Caddyfile`, publish 443, open 443 in the packet filter | Article 3; needs DNS control |
+| f | Backups: nightly `pg_dump` | Before any real user data |
+| g | **Delete the server (and its disk/IP) when finished**, or decide to keep paying | Billing runs until deleted |
+
+## Screenshots
+
+Captured, stored outside the repo (`~/Pictures/SuiSuiNavi-blog/article1/`, account
+ID and IP cropped out): 01 plan · 02 Ubuntu 24.04.2 archive · 03 packet filter
+rules · 04 server created · 05 `/api/health` JSON in the browser.
+Still to take by hand (terminal, **hide the IP**): first SSH login · `docker compose ps`
+all healthy · `curl` from the Mac · `free -h` / `docker stats` · the reboot polling
+output (steps 13–14). Never capture the Sakura "operation completed" dialog (it
+prints the admin password).
 
 ## Facts still to check
 
@@ -301,5 +430,5 @@ nothing listens yet (Caddy comes later); `nc` cannot tell "filtered" from
   `docs/AUTH_ARCHITECTURE.md` §4). **[unverified]**
 - Can the Rental Server panel point a subdomain of its initial domain at an
   external IP? **[unverified]**
-- Real memory and CPU on the server (`free -h`, `docker stats`).
-- Does the stack come back on its own after `sudo reboot`?
+- The rate limiter with two real clients behind Caddy (the mechanism is
+  verified, the limit itself is not).
