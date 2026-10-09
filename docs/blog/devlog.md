@@ -411,9 +411,14 @@ screenshot pair if the article wants the contrast.
 
 ## Screenshots
 
-Captured, stored outside the repo (`~/Pictures/SuiSuiNavi-blog/article1/`, account
-ID and IP cropped out): 01 plan · 02 Ubuntu 24.04.2 archive · 03 packet filter
-rules · 04 server created · 05 `/api/health` JSON in the browser.
+Captured (11), stored outside the repo in `~/Pictures/SuiSuiNavi-blog/article1/`, account ID and IP
+cropped out, and uploaded to the WordPress media library (IDs 64–74, mapped in `article-1-media.json`):
+01 plan · 02 Ubuntu 24.04.2 archive · 03 packet filter rules · 04 server created · 05 `/api/health` JSON
+in the browser · 06 server detail · 07 NIC + packet filter in the form · 08 hostname / public key /
+"no SSH password login" (**uses a throwaway demo key, not the real one**) · 09–10 Swagger UI from a
+*development* copy on the Mac (production hides `/docs`) · 11 production `/docs` = 404.
+Uploaded media files are reachable by URL even while the post is a draft — they were checked for IPs,
+IDs and passwords first.
 Still to take by hand (terminal, **hide the IP**): first SSH login · `docker compose ps`
 all healthy · `curl` from the Mac · `free -h` / `docker stats` · the reboot polling
 output (steps 13–14). Never capture the Sakura "operation completed" dialog (it

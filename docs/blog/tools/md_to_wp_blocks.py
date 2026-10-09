@@ -7,12 +7,14 @@ connector cannot reach, and pasting raw Markdown into the block editor loses
 tables and code blocks. Paste this script's output into the editor's
 "Code editor" (⋮ → コードエディター) instead and every block is created at once.
 
-Usage:  md_to_wp_blocks.py article.md  >  article.wp.html
+Usage:  md_to_wp_blocks.py article.md [media.json]  >  article.wp.html
         (the first '# ' line is the post title: it is printed to stderr and
          NOT included in the content)
 
 Supported: ## / ### headings, paragraphs, **bold**, `code`, [text](url),
 > quotes, - / 1. lists, | tables |, ``` fenced code, --- rule,
+![alt](media:FILE.png) images (id + url looked up in media.json, i.e. files already
+uploaded to the WordPress media library),
 ::: memo ... ::: boxes, and 【画像：...】 placeholder lines (highlighted).
 """
 
@@ -40,6 +42,22 @@ def inline(text: str) -> str:
         text,
     )
     return re.sub(r"\u0000(\d+)\u0000", lambda m: codes[int(m.group(1))], text)
+
+
+MEDIA: dict = {}
+
+
+def image_block(alt: str, fname: str) -> str:
+    if fname not in MEDIA:
+        raise SystemExit(f"image {fname!r} is not in the media map")
+    m = MEDIA[fname]
+    a = html.escape(alt, quote=True)
+    return (
+        f'<!-- wp:image {{"id":{m["id"]},"sizeSlug":"large","linkDestination":"none"}} -->\n'
+        f'<figure class="wp-block-image size-large"><img src="{html.escape(m["url"], quote=True)}" '
+        f'alt="{a}" class="wp-image-{m["id"]}"/><figcaption class="wp-element-caption">{html.escape(alt)}</figcaption></figure>\n'
+        "<!-- /wp:image -->"
+    )
 
 
 def para(text: str) -> str:
@@ -98,7 +116,7 @@ def parse(lines: list[str]) -> tuple[str, list[str]]:
         buf = []
         j = start
         while j < len(lines) and lines[j].strip() and not re.match(
-            r"^(#{1,3} |> |- |\d+\. |```|\||---$|:::)", lines[j]
+            r"^(#{1,3} |> |- |\d+\. |```|\||---$|:::|!\[)", lines[j]
         ):
             buf.append(lines[j].rstrip())
             j += 1
@@ -134,6 +152,9 @@ def parse(lines: list[str]) -> tuple[str, list[str]]:
                 + "\n</div>\n<!-- /wp:group -->"
             )
             i = j + 1
+        elif re.match(r"^!\[.*\]\(media:.+\)\s*$", line):
+            m = re.match(r"^!\[(.*)\]\(media:(.+?)\)\s*$", line)
+            blocks.append(image_block(m.group(1), m.group(2))); i += 1
         elif line.startswith("> "):
             j = i
             q = []
@@ -172,8 +193,13 @@ def convert(md: str) -> tuple[str, str]:
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
+    if len(sys.argv) not in (2, 3):
         sys.exit(__doc__)
+    if len(sys.argv) == 3:
+        import json
+
+        with open(sys.argv[2], encoding="utf-8") as fh:
+            MEDIA.update(json.load(fh))
     with open(sys.argv[1], encoding="utf-8") as fh:
         post_title, content = convert(fh.read())
     print(f"TITLE: {post_title}", file=sys.stderr)

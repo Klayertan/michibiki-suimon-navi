@@ -1,0 +1,46 @@
+{
+  "01-server-plan-1core-2gb.png": {
+    "id": 64,
+    "url": "https://sakurakai.sakuraweb.com/michibiki/wp-content/uploads/2026/10/01-server-plan-1core-2gb.png"
+  },
+  "02-choose-ubuntu-24.04.2-archive.png": {
+    "id": 65,
+    "url": "https://sakurakai.sakuraweb.com/michibiki/wp-content/uploads/2026/10/02-choose-ubuntu-24.04.2-archive.png"
+  },
+  "03-packet-filter-rules-ssh-http.png": {
+    "id": 66,
+    "url": "https://sakurakai.sakuraweb.com/michibiki/wp-content/uploads/2026/10/03-packet-filter-rules-ssh-http.png"
+  },
+  "04-server-created-power-on.png": {
+    "id": 67,
+    "url": "https://sakurakai.sakuraweb.com/michibiki/wp-content/uploads/2026/10/04-server-created-power-on.png"
+  },
+  "05-health-json-in-browser.png": {
+    "id": 68,
+    "url": "https://sakurakai.sakuraweb.com/michibiki/wp-content/uploads/2026/10/05-health-json-in-browser.png"
+  },
+  "06-server-detail-info.png": {
+    "id": 69,
+    "url": "https://sakurakai.sakuraweb.com/michibiki/wp-content/uploads/2026/10/06-server-detail-info.png"
+  },
+  "07-form-nic-and-packet-filter.png": {
+    "id": 70,
+    "url": "https://sakurakai.sakuraweb.com/michibiki/wp-content/uploads/2026/10/07-form-nic-and-packet-filter.png"
+  },
+  "08-form-hostname-publickey-no-password-ssh.png": {
+    "id": 71,
+    "url": "https://sakurakai.sakuraweb.com/michibiki/wp-content/uploads/2026/10/08-form-hostname-publickey-no-password-ssh.png"
+  },
+  "09-swagger-ui-endpoint-list-dev.png": {
+    "id": 72,
+    "url": "https://sakurakai.sakuraweb.com/michibiki/wp-content/uploads/2026/10/09-swagger-ui-endpoint-list-dev.png"
+  },
+  "10-swagger-ui-health-response-dev.png": {
+    "id": 73,
+    "url": "https://sakurakai.sakuraweb.com/michibiki/wp-content/uploads/2026/10/10-swagger-ui-health-response-dev.png"
+  },
+  "11-production-docs-404.png": {
+    "id": 74,
+    "url": "https://sakurakai.sakuraweb.com/michibiki/wp-content/uploads/2026/10/11-production-docs-404.png"
+  }
+}
