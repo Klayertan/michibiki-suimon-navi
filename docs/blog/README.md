@@ -1,7 +1,10 @@
 # Sakura Ambassador blog — working notes
 
 Raw material for the Sakura Internet Ambassador article series on moving
-SuiSuiNavi from a static prototype to a Python-backed service on a Sakura VPS.
+SuiSuiNavi from a static prototype to a Python-backed service on Sakura
+infrastructure. (Planned as a Sakura VPS; Article 1 actually runs on a **Sakura
+Cloud server**, because the author's coupons apply to that panel — see
+`devlog.md` step 4. The article title will need to say さくらのクラウド.)
 These are **engineering notes, not the articles**: they record what was tried,
 what broke and what the evidence was, so the published articles can be honest.
 

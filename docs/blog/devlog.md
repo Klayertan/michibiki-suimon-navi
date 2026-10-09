@@ -157,29 +157,149 @@ VPS the Sakura packet filter — outside the VM — is the firewall that matters
 
 ---
 
-## Still to do (needs the real VPS)
+## Step 4 — Decide where it runs: a Sakura Cloud server, not a VPS
+
+**Attempted.** Find the cheapest way to get a real Sakura server.
+
+**Why.** Paying for a VPS was not wanted. Sakura VPS has a 2-week free trial
+(card required) **[documented]**, but the author's Sakura coupons were said (by
+someone at Sakura; **[unverified]** by me) to work for services in the *Sakura
+Cloud* control panel. A search result also said Cloud coupons do not apply to
+VPS or Rental Server **[documented, one source]**.
+
+**Decision.** Use a **Sakura Cloud server** in the Tokyo 2nd Zone (it is the
+panel the coupons belong to). The Ubuntu + Docker + Caddy setup from steps 1–3
+is unchanged; only the order screens differ.
+
+| | Sakura VPS 2 GB | Sakura Cloud 1 core / 2 GB |
+|---|---|---|
+| Price | ¥1,738/month **[documented]** | ¥16/hour, ¥159/day, **¥3,190/month cap** (the form's own estimate) |
+| Notes | 3 vCPU, 100 GB | 20 GB SSD chosen; whether disk/IP are billed on top is **[unverified]** |
+
+Cloud costs more than a VPS of similar size — the coupon is what makes it free.
+
+---
+
+## Step 5 — Create an SSH key on the Mac
+
+**Attempted.** `ssh-keygen -t ed25519 -C "sakura-cloud" -f ~/.ssh/sakura_cloud_ed25519`
+(typed by the author in the terminal so the passphrase never passes through
+anyone else).
+
+**Why.** Key-based login instead of a password: the private key never leaves
+the Mac, and the server only stores the public half.
+
+**Result [verified].** Key pair created. Problem: `~/.ssh/` did not exist at all
+on this Mac, so this was the first key ever made here — `ssh-keygen` created
+the folder.
+
+---
+
+## Step 6 — Firewall before server (Sakura "packet filter")
+
+**Attempted.** Create a packet filter from Sakura's preset "filter unneeded
+ports (Linux)" and attach it when creating the server.
+
+**Why.** On Sakura Cloud's shared network a new server is directly on the
+Internet. The filter runs *outside* the VM, so even a misconfigured server (or
+Docker, which bypasses `ufw`) cannot expose a port the filter blocks.
+
+**What the filter must do [verified, from the panel].**
+- It is **stateless**: replies to the server's own outgoing connections are
+  separate packets and must be allowed explicitly (rule: TCP/UDP destination
+  ports 32768–61000), otherwise `apt` and `docker pull` fail.
+- "If a packet matches no rule it is allowed" — so the last rule must be
+  `ip deny`.
+
+**Final rules [verified].** 1 SSH 22 · 2 HTTP 80 · 3 NTP (UDP source 123) ·
+4 DHCP (UDP 68) · 5 ICMP · 6–7 reply traffic (TCP/UDP 32768–61000) · 8 IP
+fragments · 9 `ip` deny. Removed from the preset: ports 25 (SMTP) and 110
+(POP3) — no mail server here. SSH and NTP sources were set to `0.0.0.0/0`
+(any): locking SSH to the home IP would break whenever it changes, so SSH is
+protected by key-only login instead.
+
+**Problem.** The Sakura session expired in the middle of editing. The page
+hung, and after logging in again the saved filter **still had the original 11
+rules** — the deletions and the *Apply* had been silently lost. Only
+re-opening the filter and counting the rules revealed it.
+**Fix.** Redid the edits and re-checked: rules (9), no pending-apply banner.
+**Lesson for the article:** after saving a firewall change, reload the page and
+look at what was actually saved.
+
+---
+
+## Step 7 — Create the server
+
+**Settings [verified from the form and the API response].** Tokyo 2nd Zone ·
+1 core / 2 GB · SSD 20 GB · Ubuntu Server 24.04.2 LTS · internet connection
+(1 shared IP, 100 Mbps best effort) · the packet filter from step 6 · hostname
+`suisuinavi-api` · SSH public key · **SSH password login disabled** · "install
+usacloud" and "update packages" off · no startup script.
+
+**Problems encountered.**
+1. **A checkbox that did not stick.** "Do not allow SSH login with password
+   authentication" looked ticked after my first click but was not. It was caught
+   only by scrolling through the whole form before pressing Create, and the
+   server's creation response confirmed `DisablePWAuth: true`.
+   *Lesson:* verify a security setting from the result, not from the click.
+2. **The panel prints the admin password in plain text.** After creation, one
+   of Sakura's own result dialogs shows the request/response JSON including the
+   password that was typed. **Never screenshot that dialog**, and clear any
+   screenshot taken while it is open. (One such capture was deleted.) Because
+   the password was visible on screen in a working session, treat it as
+   exposed and change it after first login (`passwd`).
+3. **Two Chrome browsers were connected** to the same account (this Mac and a
+   Windows machine) and the automation asked which to use rather than guessing.
+4. A platform notice was active in the panel (a Sakura fault notice about
+   dedicated and Red Hat services, 2026-10-09). Unrelated to Ubuntu on Cloud
+   **[unverified]**.
+
+**Timing [verified].** About 2–3 minutes from pressing Create until the server
+was powered on; most of it copying the 20 GB Ubuntu image to the new disk.
+
+**Billing.** Starts at creation and **continues until the server is deleted**,
+including while it is powered off (disk and IP) **[unverified for the powered-off
+case — check before relying on it]**.
+
+---
+
+## Step 8 — First checks from the Mac (no login yet)
+
+```bash
+ping -c 2 <SERVER_IP>                 # replies, ~13 ms
+nc -z -G 4 <SERVER_IP> 22             # open
+nc <SERVER_IP> 22 </dev/null | head -1   # SSH-2.0-OpenSSH_9.6p1 Ubuntu-3ubuntu13.12
+nc -z <SERVER_IP> 80 / 8000 / 5432    # no connection
+```
+
+**Result [verified].** ICMP allowed, SSH answers with an Ubuntu 24.04 OpenSSH
+banner, and 80 / 8000 / 5432 give no connection. Port 80 is closed only because
+nothing listens yet (Caddy comes later); `nc` cannot tell "filtered" from
+"refused", so port 8000 and 5432 being blocked by the filter specifically is
+**not yet proven** — it will be checked once the containers are running.
+
+---
+
+## Still to do
 
 | # | Step | Needs |
 |---|---|---|
-| 4 | Create the VPS (2 GB plan, Ubuntu) | **You** — account login and payment |
-| 5 | Generate an SSH key on the Mac | No `~/.ssh/*.pub` exists yet **[verified]** |
-| 6 | First login, non-root user, key-only SSH, packet filter 22/80 | VPS |
-| 7 | "Run it by hand, close the terminal, watch it die" demo | VPS |
-| 8 | Install Docker, clone, `.env`, `compose up -d` | VPS |
-| 9 | `curl` from the Mac; reboot the VPS; confirm it comes back | VPS |
-| 10 | Try `api.suisuinavi.sakura.ne.jp` → VPS IP, then HTTPS | Rental Server DNS panel |
+| 9 | First SSH login with the key; change the admin password; `apt update && upgrade` | Author types the key passphrase |
+| 10 | "Run it by hand, close the terminal, watch it die" demo | Server |
+| 11 | Install Docker, clone, `.env` (production, registration closed), `compose -f … -f docker-compose.vps.yml up -d` | Server |
+| 12 | `curl` from the Mac; open port 8000/5432 check; reboot the server and confirm it comes back | Server |
+| 13 | Try `api.suisuinavi.sakura.ne.jp` → the server IP, then HTTPS | Rental Server DNS panel |
 
-## Facts to check on the real VPS (not yet known)
+## Facts still to check
 
-- 2 GB plan: ¥1,738/month, 3 vCPU, 100 GB, 3-month minimum, 2-week trial for
-  card payments **[documented — summarised from the official page; confirm on
-  the order screen]**
-- Is Ubuntu 24.04 in the OS list? **[unverified]** (Sakura's startup-script news
-  lists it; the plain OS list was not seen)
-- What is the VPS's default hostname format? Which site is it on, relative to
-  `suisuinavi.sakura.ne.jp`? **[unverified]** — decides whether cookie login can
-  work against it (see `docs/AUTH_ARCHITECTURE.md` §4)
+- Is the 20 GB disk / the public IP billed separately from the ¥3,190 estimate,
+  and what is billed while the server is powered off? **[unverified]**
+- Does the coupon actually cover it, and what is its balance / expiry?
+  **[unverified]**
+- The default hostname / reverse DNS of a Cloud server, and whether it is on the
+  same "site" as `suisuinavi.sakura.ne.jp` (affects cookie login, see
+  `docs/AUTH_ARCHITECTURE.md` §4). **[unverified]**
 - Can the Rental Server panel point a subdomain of its initial domain at an
   external IP? **[unverified]**
-- Real memory and CPU on the VPS (`free -h`, `docker stats`)
+- Real memory and CPU on the server (`free -h`, `docker stats`).
 - Does the stack come back on its own after `sudo reboot`?

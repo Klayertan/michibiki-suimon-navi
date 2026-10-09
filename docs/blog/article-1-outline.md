@@ -1,6 +1,11 @@
 # Article 1 outline
 
 **Title:** さくらのVPSでPythonサーバーを構築してみた
+**Platform changed 2026-10-09:** the server is a *Sakura Cloud* server (Tokyo 2nd
+Zone), not a VPS — suggested title **さくらのクラウドでPythonサーバーを構築してみた**
+(the author decides). Wherever this outline says "VPS", read "Cloud server".
+Screenshots 1–4 below are already captured in
+`~/Pictures/SuiSuiNavi-blog/article1/` (outside the repo, IP and account ID cropped out).
 **Reader:** knows some Python, has never deployed a server.
 **Voice:** an engineering student building something, hitting problems,
 writing down what worked. Not an advertisement.
