@@ -17,6 +17,8 @@ separate.
 |---|---|
 | [`devlog.md`](devlog.md) | Step-by-step log: what was attempted, why, the command, expected vs actual, the problem, the fix |
 | [`article-1-outline.md`](article-1-outline.md) | Outline, screenshot list and open checks for Article 1 |
+| [`article-1-draft-ja.md`](article-1-draft-ja.md) | Article 1 draft (Japanese), for the WordPress blog |
+| [`tools/md_to_wp_blocks.py`](tools/md_to_wp_blocks.py) | Converts a draft to WordPress block HTML (paste into the Code editor) |
 
 ## Series plan
 
