@@ -401,9 +401,9 @@ screenshot pair if the article wants the contrast.
 
 | # | Item | Notes |
 |---|---|---|
-| a | **Remove passwordless sudo** on the server: `sudo rm /etc/sudoers.d/90-setup-nopasswd` | Setup-only loosening |
-| b | **Change the server admin password** (`passwd`, in the dedicated server tab) | It was visible in a Sakura dialog |
-| c | **Revert (or keep) the Mac login password** changed by mistake | Keychain still has the old one |
+| a | ~~Remove passwordless sudo on the server~~ **DONE** — file removed, `sudo -n true` now blocked [verified] | Setup-only loosening |
+| b | ~~Change the server admin password~~ **DONE** — `passwd: password updated successfully` [verified]; the first try was rejected as too short | It was visible in a Sakura dialog |
+| c | ~~Revert the Mac login password~~ **DONE** — changed back in a dedicated tab (same keychain warning as after the mistake); that the *right* password was restored cannot be checked from here | If macOS later asks for a keychain password, use the original |
 | d | Optional: passphrase for the SSH key (`ssh-keygen -p -f ~/.ssh/sakura_cloud_ed25519`) | Key currently has none |
 | e | HTTPS: `api.suisuinavi.sakura.ne.jp` → server IP, then edit `deploy/Caddyfile`, publish 443, open 443 in the packet filter | Article 3; needs DNS control |
 | f | Backups: nightly `pg_dump` | Before any real user data |
