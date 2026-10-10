@@ -178,6 +178,13 @@ is unchanged; only the order screens differ.
 
 Cloud costs more than a VPS of similar size — the coupon is what makes it free.
 
+**Correction (later the same day).** The author then stated that their coupons work for
+*everything* at Sakura, not only the Cloud panel (author-stated; I have not verified it, and my
+earlier "Cloud-only" reading came from a single search snippet). So the coupon is **not** what
+separates Cloud from VPS, and a VPS would have been covered too. The article therefore does not give
+the coupon as the reason; it says Cloud was chosen for the build-it-yourself panel (server, disk,
+network and packet filter as separate parts) — wording proposed by me, for the author to confirm.
+
 ---
 
 ## Step 5 — Create an SSH key on the Mac
