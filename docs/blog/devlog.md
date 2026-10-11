@@ -488,5 +488,5 @@ Browsers cache the old *permanent* redirect: test in a private window or add a q
 **500** instead of 404: after the rewrite to `/suisuinavi/…` the WordPress fallback rule sends it to `/index.php`, which
 the host rule rewrites again → loop. Proposed fix (4 lines inside the same block, not applied yet):
 `RewriteCond HOST…` + `RewriteCond %{REQUEST_FILENAME} !-f` + `!-d` + `RewriteRule ^ - [R=404,L]`.
-Also: `suisuinavi-app.zip` is still in `~/www/suisuinavi/` (public, harmless, to be deleted).
-Screenshots: `~/Pictures/SuiSuiNavi-blog/app-host-fix/` 01–13 (09 is a dialog that was never confirmed).
+`suisuinavi-app.zip` was deleted afterwards (URL → 404; app and blog still 200).
+Screenshots: `~/Pictures/SuiSuiNavi-blog/app-host-fix/` 01–14 (09 is a dialog that was never confirmed).
