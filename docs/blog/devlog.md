@@ -432,9 +432,13 @@ in the browser · 06 server detail · 07 NIC + packet filter in the form · 08 h
 original terminal window had been closed; the article caption says so. Media ID 81.
 13 step-4 `ping` / `nc` results with the IP replaced by `<サーバーのIP>` (a replay of the real commands through a masking script;
 the first version leaked the IP through `nc`'s stderr message and was caught before any screenshot was taken). Media ID 84.
+14 first SSH login (fingerprint question → `yes` → prompt): a **replay** against a throw-away `known_hosts` file via a masking
+script that refuses to print if any IP survives; both IPs (server, the Mac's public IP in `Last login`) are replaced and the
+host-key fingerprint is cut to its first 6 characters (host keys are searchable on scanner sites). The caption and the
+image footer say it is a replay. The Mac prompt line was cropped off. Media ID 88.
 Uploaded media files are reachable by URL even while the post is a draft — they were checked for IPs,
 IDs and passwords first.
-Still to take by hand (terminal, **hide the IP**): first SSH login · `docker compose ps`
+Still to take by hand (terminal, **hide the IP**): `docker compose ps`
 all healthy · `curl` from the Mac · `free -h` / `docker stats` · the reboot polling
 output (steps 13–14). Never capture the Sakura "operation completed" dialog (it
 prints the admin password).
