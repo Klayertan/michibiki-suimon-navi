@@ -84,7 +84,6 @@
 | Docker / Docker Compose | アプリを「部品ごとの箱（コンテナ）」で動かす仕組み。複数の箱をまとめて起動・再起動できる |
 | リバースプロキシ（Caddy） | 外からの接続を最初に受けて、裏側のアプリに渡す受付係。のちにHTTPSの処理もここで行う |
 | FastAPI / Uvicorn | FastAPIはPythonのWebAPIを書くための道具、UvicornはそのPythonプログラムを実際に動かして待ち受けるサーバーソフト |
-| API／JSON | プログラムどうしが「このURLにこう頼むと、こう答える」という約束でやり取りする窓口がAPI。そのときのデータの書き方がJSON（{"status":"ok"} のような形） |
 | ヘルスチェック | 「生きてる？」と聞くだけのAPI。今回は `/api/health` |
 | localhost と インターネット | `localhost` は「自分自身」。自分のMacの `localhost` に出したものは、他人からは見えない |
 
