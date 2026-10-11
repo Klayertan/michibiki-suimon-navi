@@ -22,10 +22,11 @@ separate.
 
 ## Series plan
 
-1. **さくらのVPSでPythonサーバーを構築してみた** — why a server, VPS, SSH, Docker, first `/api/health`. *In progress.*
-2. FastAPIで農業・水位データを受け取るAPIを作ってみた — measurements API, validation, database.
-3. Sui-Sui-Naviをインターネットから使えるWebアプリにしてみた — domain, DNS, HTTPS, CORS, firewall.
-4. 農業IoTデータをさくらのVPSに蓄積・可視化してみた — history, graphs, map.
+1. **さくらのクラウドでPythonサーバーを構築してみた** — why a server, SSH, Docker, first `/api/health`. *Draft ready (WordPress, unpublished).*
+2. **スイスイナビの画面をさくらのレンタルサーバで公開する** — the app's own address silently redirected to the blog; shared document root, `.htaccess` host mapping, `www/suisuinavi/`, the 404/500 loop. *Material ready: `devlog.md` step 15 and `~/Pictures/SuiSuiNavi-blog/app-host-fix/` (author's decision 2026-10-11: this is Article 2, not folded into Article 3).*
+3. FastAPIで農業・水位データを受け取るAPIを作ってみた — measurements API, validation, database.
+4. Sui-Sui-Naviをインターネットから使えるWebアプリにしてみた — domain, DNS, HTTPS, CORS, firewall (the app on `suisuinavi.sakura.ne.jp` calling `api.…`).
+5. 農業IoTデータをさくらのクラウドに蓄積・可視化してみた — history, graphs, map.
 
 GPU/AI is deliberately a separate topic and is not part of this series.
 
