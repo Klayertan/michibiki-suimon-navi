@@ -46,5 +46,9 @@
   "12-ssh-keygen-empty-passphrase-demo.png": {
     "id": 81,
     "url": "https://sakurakai.sakuraweb.com/michibiki/wp-content/uploads/2026/10/12-ssh-keygen-empty-passphrase-demo.png"
+  },
+  "13-step4-ping-nc-ip-masked.png": {
+    "id": 84,
+    "url": "https://sakurakai.sakuraweb.com/michibiki/wp-content/uploads/2026/10/13-step4-ping-nc-ip-masked.png"
   }
 }

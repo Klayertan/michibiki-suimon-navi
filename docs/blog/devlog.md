@@ -426,6 +426,8 @@ in the browser · 06 server detail · 07 NIC + packet filter in the form · 08 h
 *development* copy on the Mac (production hides `/docs`) · 11 production `/docs` = 404.
 12 `ssh-keygen` with empty passphrase — a **recreation** with a throwaway key (`/tmp/demo_key`, deleted) because the
 original terminal window had been closed; the article caption says so. Media ID 81.
+13 step-4 `ping` / `nc` results with the IP replaced by `<サーバーのIP>` (a replay of the real commands through a masking script;
+the first version leaked the IP through `nc`'s stderr message and was caught before any screenshot was taken). Media ID 84.
 Uploaded media files are reachable by URL even while the post is a draft — they were checked for IPs,
 IDs and passwords first.
 Still to take by hand (terminal, **hide the IP**): first SSH login · `docker compose ps`
