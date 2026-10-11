@@ -264,9 +264,13 @@ usacloud" and "update packages" off · no startup script.
 **Timing [verified].** About 2–3 minutes from pressing Create until the server
 was powered on; most of it copying the 20 GB Ubuntu image to the new disk.
 
-**Billing.** Starts at creation and **continues until the server is deleted**,
-including while it is powered off (disk and IP) **[unverified for the powered-off
-case — check before relying on it]**.
+**Billing.** Starts when the server is created and powered on. **[documented]** The official manual
+(<https://manual.sakura.ad.jp/cloud/payment/server-charge.html>) says the *server* charge (CPU/memory)
+stops when the server is stopped, while the *disk* is billed until it is deleted (a 2017 announcement
+says the same). **Correction:** an earlier version of these notes and of the article draft said
+billing continues after a stop until deletion — that overstated it. Global IP, shared segment/switch
+and packet filter are **not mentioned on that page [unverified]**. To be sure nothing keeps billing,
+delete the server **and** its disk.
 
 ---
 
@@ -414,7 +418,7 @@ screenshot pair if the article wants the contrast.
 | d | Optional: passphrase for the SSH key (`ssh-keygen -p -f ~/.ssh/sakura_cloud_ed25519`) | Key currently has none |
 | e | HTTPS: `api.suisuinavi.sakura.ne.jp` → server IP, then edit `deploy/Caddyfile`, publish 443, open 443 in the packet filter | Article 3; needs DNS control |
 | f | Backups: nightly `pg_dump` | Before any real user data |
-| g | **Delete the server (and its disk/IP) when finished**, or decide to keep paying | Billing runs until deleted |
+| g | **Delete the server and its disk when finished**, or decide to keep paying | Disk bills until deleted; server bills only while running |
 
 ## Screenshots
 
@@ -437,8 +441,9 @@ prints the admin password).
 
 ## Facts still to check
 
-- Is the 20 GB disk / the public IP billed separately from the ¥3,190 estimate,
-  and what is billed while the server is powered off? **[unverified]**
+- Is the 20 GB disk billed on top of the ¥3,190 estimate, and are the public IP / packet filter
+  billed while the server is powered off? (Server stops billing when stopped and disk bills until
+  deleted — **[documented]**; IP/switch/packet filter **[unverified]**.)
 - Does the coupon actually cover it, and what is its balance / expiry?
   **[unverified]**
 - The default hostname / reverse DNS of a Cloud server, and whether it is on the
