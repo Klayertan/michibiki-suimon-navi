@@ -1,0 +1,42 @@
+{
+  "a2-01-domain-list-both-www.jpg": {
+    "id": 93,
+    "url": "https://sakurakai.sakuraweb.com/michibiki/wp-content/uploads/2026/10/a2-01-domain-list-both-www.jpg"
+  },
+  "a2-02-www-folder-before.jpg": {
+    "id": 94,
+    "url": "https://sakurakai.sakuraweb.com/michibiki/wp-content/uploads/2026/10/a2-02-www-folder-before.jpg"
+  },
+  "a2-03-htaccess-old-redirect.jpg": {
+    "id": 95,
+    "url": "https://sakurakai.sakuraweb.com/michibiki/wp-content/uploads/2026/10/a2-03-htaccess-old-redirect.jpg"
+  },
+  "a2-04-htaccess-backup.jpg": {
+    "id": 96,
+    "url": "https://sakurakai.sakuraweb.com/michibiki/wp-content/uploads/2026/10/a2-04-htaccess-backup.jpg"
+  },
+  "a2-05-app-folder-created.jpg": {
+    "id": 97,
+    "url": "https://sakurakai.sakuraweb.com/michibiki/wp-content/uploads/2026/10/a2-05-app-folder-created.jpg"
+  },
+  "a2-06-app-files-unpacked.jpg": {
+    "id": 98,
+    "url": "https://sakurakai.sakuraweb.com/michibiki/wp-content/uploads/2026/10/a2-06-app-files-unpacked.jpg"
+  },
+  "a2-07-htaccess-first-version.jpg": {
+    "id": 99,
+    "url": "https://sakurakai.sakuraweb.com/michibiki/wp-content/uploads/2026/10/a2-07-htaccess-first-version.jpg"
+  },
+  "a2-08-htaccess-with-404-rule.jpg": {
+    "id": 100,
+    "url": "https://sakurakai.sakuraweb.com/michibiki/wp-content/uploads/2026/10/a2-08-htaccess-with-404-rule.jpg"
+  },
+  "a2-09-app-live.jpg": {
+    "id": 101,
+    "url": "https://sakurakai.sakuraweb.com/michibiki/wp-content/uploads/2026/10/a2-09-app-live.jpg"
+  },
+  "a2-10-zip-deleted.jpg": {
+    "id": 102,
+    "url": "https://sakurakai.sakuraweb.com/michibiki/wp-content/uploads/2026/10/a2-10-zip-deleted.jpg"
+  }
+}
