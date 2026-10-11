@@ -11,7 +11,8 @@ Usage:  md_to_wp_blocks.py article.md [media.json]  >  article.wp.html
         (the first '# ' line is the post title: it is printed to stderr and
          NOT included in the content)
 
-Supported: ## / ### headings, paragraphs, **bold**, `code`, [text](url),
+Supported: ## / ### headings, paragraphs, **bold**, `code`, [text](url) and in-page [text](#id)
+(paragraph target: end the paragraph with ` {#id}`),
 > quotes, - / 1. lists, | tables |, ``` fenced code, --- rule,
 ![alt](media:FILE.png) images (id + url looked up in media.json, i.e. files already
 uploaded to the WordPress media library),
@@ -37,7 +38,7 @@ def inline(text: str) -> str:
     text = html.escape(text, quote=False)
     text = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", text)
     text = re.sub(
-        r"\[([^\]]+)\]\((https?://[^)\s]+)\)",
+        r"\[([^\]]+)\]\(((?:https?://|#)[^)\s]+)\)",
         lambda m: f'<a href="{html.escape(m.group(2), quote=True)}">{m.group(1)}</a>',
         text,
     )
@@ -61,10 +62,15 @@ def image_block(alt: str, fname: str) -> str:
 
 
 def para(text: str) -> str:
+    anchor = ""
+    m = re.search(r"\s*\{#([A-Za-z0-9_-]+)\}\s*$", text)
+    if m:  # "... text {#some-id}" -> <p id="some-id"> (target for [link](#some-id))
+        anchor = f' id="{m.group(1)}"'
+        text = text[: m.start()]
     body = "<br>".join(inline(line) for line in text.split("\n"))
     if text.startswith("【画像"):
         body = f"<mark>{body}</mark>"
-    return f"<!-- wp:paragraph -->\n<p>{body}</p>\n<!-- /wp:paragraph -->"
+    return f"<!-- wp:paragraph -->\n<p{anchor}>{body}</p>\n<!-- /wp:paragraph -->"
 
 
 def heading(level: int, text: str) -> str:
