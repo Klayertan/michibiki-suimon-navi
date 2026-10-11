@@ -424,6 +424,8 @@ cropped out, and uploaded to the WordPress media library (IDs 64–74, mapped in
 in the browser · 06 server detail · 07 NIC + packet filter in the form · 08 hostname / public key /
 "no SSH password login" (**uses a throwaway demo key, not the real one**) · 09–10 Swagger UI from a
 *development* copy on the Mac (production hides `/docs`) · 11 production `/docs` = 404.
+12 `ssh-keygen` with empty passphrase — a **recreation** with a throwaway key (`/tmp/demo_key`, deleted) because the
+original terminal window had been closed; the article caption says so. Media ID 81.
 Uploaded media files are reachable by URL even while the post is a draft — they were checked for IPs,
 IDs and passwords first.
 Still to take by hand (terminal, **hide the IP**): first SSH login · `docker compose ps`

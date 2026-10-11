@@ -42,5 +42,9 @@
   "11-production-docs-404.png": {
     "id": 74,
     "url": "https://sakurakai.sakuraweb.com/michibiki/wp-content/uploads/2026/10/11-production-docs-404.png"
+  },
+  "12-ssh-keygen-empty-passphrase-demo.png": {
+    "id": 81,
+    "url": "https://sakurakai.sakuraweb.com/michibiki/wp-content/uploads/2026/10/12-ssh-keygen-empty-passphrase-demo.png"
   }
 }
