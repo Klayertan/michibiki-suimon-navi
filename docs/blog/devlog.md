@@ -460,23 +460,33 @@ prints the admin password).
 
 ---
 
-## Step 15 — the app's own address redirects to the blog (found 2026-10-11) — IN PROGRESS
+## Step 15 — the app's own address redirected to the blog; fixed (2026-10-11)
 
-**Symptom [verified].** `suisuinavi.sakura.ne.jp/` (README: "production") answers `301` to
-`sakurakai.sakuraweb.com/`, including `/index.html` and `/js/app.js`. The app is only reachable on GitHub Pages.
+**Symptom [verified].** `suisuinavi.sakura.ne.jp/` (README: "production") answered `301` to
+`sakurakai.sakuraweb.com/`, including `/index.html` and `/js/app.js`. The app was only reachable on GitHub Pages.
 
 **Cause [verified in the Sakura control panel, read-only].**
 - Both domains use the same document root `~/www/` (ドメイン/SSL list).
-- `~/www/.htaccess` has a block `old-host redirect 2026-09-12` (`RewriteCond HTTP_HOST suisuinavi.sakura.ne.jp` →
-  `301` to the blog host). The WordPress "home" URL is the host root, its core files are in `~/www/michibiki/`.
-- `~/www/` contains only `index.php`, `.htaccess`, `michibiki/`. **No app files.** The GitHub Actions deploy last
+- `~/www/.htaccess` had a block `old-host redirect 2026-09-12` (`RewriteCond HTTP_HOST suisuinavi.sakura.ne.jp` →
+  `301` to the blog host). WordPress "home" is the host root; its core files are in `~/www/michibiki/`.
+- `~/www/` held only `index.php`, `.htaccess`, `michibiki/`. **No app files.** The GitHub Actions deploy last
   succeeded on 2026-09-06 (10 runs, public API); the files were gone after the blog restructure of 2026-09-11.
 
-**Plan.** Give the app its own folder `~/www/suisuinavi/`; in `.htaccess` keep `/michibiki…` on the old host redirecting
-to the blog and map every other request on that host to `suisuinavi/`; point the deploy workflow at the new folder
-(branch `fix/sakura-app-subfolder`, local only). Browsers cache the permanent redirect — test with `curl` or a private window.
+**Fix [verified with curl and a browser].**
+1. `.htaccess` copied to `.htaccess.bak-20261011` (restore = copy it back over `.htaccess`).
+2. Folder `~/www/suisuinavi/` created; `suisuinavi-app.zip` (built with `git archive origin/main`, public files only)
+   uploaded and unpacked there by the author (the assistant's own unpack click was refused by the permission system).
+3. `.htaccess` block replaced (saved by the author): on the host `suisuinavi.sakura.ne.jp`, `/michibiki…` still
+   `301`s to the blog, everything else is rewritten to `/suisuinavi/…`. The blog host is untouched.
+4. Deploy workflow + docs point at `www/suisuinavi/` — branch `fix/sakura-app-subfolder` (local, **not pushed**).
 
-**Done so far.** `.htaccess` copied to `.htaccess.bak-20261011` · folder `suisuinavi/` created · `suisuinavi-app.zip`
-(built with `git archive origin/main`, 97 entries, public files only) uploaded into it.
-**Not done (waiting for the author's explicit OK):** unzip on the server, `.htaccess` edit, the first live test.
-Screenshots: `~/Pictures/SuiSuiNavi-blog/app-host-fix/` (01–08 real; 09 is the extract dialog, never confirmed).
+**Result [verified].** `suisuinavi.sakura.ne.jp/` → 200, title スイスイナビ, 517 KB, no console errors; css/config/data
+files 200; `/michibiki/…` → 301 to the blog; blog home, wp-login, REST, `?cat=` unchanged; backup file → 403.
+Browsers cache the old *permanent* redirect: test in a private window or add a query string.
+
+**Open [verified defect].** Any URL that does not exist on the app host (e.g. `/robots.txt`, `/favicon.ico`) returns
+**500** instead of 404: after the rewrite to `/suisuinavi/…` the WordPress fallback rule sends it to `/index.php`, which
+the host rule rewrites again → loop. Proposed fix (4 lines inside the same block, not applied yet):
+`RewriteCond HOST…` + `RewriteCond %{REQUEST_FILENAME} !-f` + `!-d` + `RewriteRule ^ - [R=404,L]`.
+Also: `suisuinavi-app.zip` is still in `~/www/suisuinavi/` (public, harmless, to be deleted).
+Screenshots: `~/Pictures/SuiSuiNavi-blog/app-host-fix/` 01–13 (09 is a dialog that was never confirmed).
