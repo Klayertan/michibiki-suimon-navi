@@ -457,3 +457,26 @@ prints the admin password).
   external IP? **[unverified]**
 - The rate limiter with two real clients behind Caddy (the mechanism is
   verified, the limit itself is not).
+
+---
+
+## Step 15 — the app's own address redirects to the blog (found 2026-10-11) — IN PROGRESS
+
+**Symptom [verified].** `suisuinavi.sakura.ne.jp/` (README: "production") answers `301` to
+`sakurakai.sakuraweb.com/`, including `/index.html` and `/js/app.js`. The app is only reachable on GitHub Pages.
+
+**Cause [verified in the Sakura control panel, read-only].**
+- Both domains use the same document root `~/www/` (ドメイン/SSL list).
+- `~/www/.htaccess` has a block `old-host redirect 2026-09-12` (`RewriteCond HTTP_HOST suisuinavi.sakura.ne.jp` →
+  `301` to the blog host). The WordPress "home" URL is the host root, its core files are in `~/www/michibiki/`.
+- `~/www/` contains only `index.php`, `.htaccess`, `michibiki/`. **No app files.** The GitHub Actions deploy last
+  succeeded on 2026-09-06 (10 runs, public API); the files were gone after the blog restructure of 2026-09-11.
+
+**Plan.** Give the app its own folder `~/www/suisuinavi/`; in `.htaccess` keep `/michibiki…` on the old host redirecting
+to the blog and map every other request on that host to `suisuinavi/`; point the deploy workflow at the new folder
+(branch `fix/sakura-app-subfolder`, local only). Browsers cache the permanent redirect — test with `curl` or a private window.
+
+**Done so far.** `.htaccess` copied to `.htaccess.bak-20261011` · folder `suisuinavi/` created · `suisuinavi-app.zip`
+(built with `git archive origin/main`, 97 entries, public files only) uploaded into it.
+**Not done (waiting for the author's explicit OK):** unzip on the server, `.htaccess` edit, the first live test.
+Screenshots: `~/Pictures/SuiSuiNavi-blog/app-host-fix/` (01–08 real; 09 is the extract dialog, never confirmed).
