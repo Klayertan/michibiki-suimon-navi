@@ -66,6 +66,8 @@ The Jetson needs a regulated supply. Its barrel jack accepts a range that a 4S p
 | Battery position | **Underneath**, on the two rails. |
 | Jetson position | **On top** of the body. |
 | Camera direction | **Straight down.** |
+| Camera position | **Directly under the battery tray**, on the centre line, for balance (changed from the front of the tray). The 200 mm legs keep it clear in normal landings; the tray's crush ribs reach below the glass for crashes. |
+| QZ1 position | **On a mast on the Jetson hoop**, at the end away from the drone's own GPS mast (option b of two offered). |
 | Printers | Bambu Lab A1 mini (180 × 180 × 180 mm bed) and Flashforge Adventurer 5M Pro (220 × 220 × 220 mm bed). |
 | Material | **PETG only.** No TPU for now. |
 
@@ -90,14 +92,16 @@ Read from the manufacturers' CAD files on 2026-10-12. The full table is in `hard
 | X500 V2 frame | Holybro `x500v2-frame.step` (docs.holybro.com) | Rails 60 mm apart, centred 13 mm below the bottom plate. Rails are 10 mm published but 9.4 mm in the model. Free M3 holes in the top plate at (±50, ±37) mm. |
 | Jetson Orin Nano developer kit | NVIDIA STEP model (Jetson Download Center) | Board 100 × 79 mm, four M2.5 holes on an 86 × 58 mm rectangle. |
 | Zeee 4S 3300 mAh | Seller listings | About 132 × 44 × 29 mm. **Not measured.** |
-| RealSense D435 | From memory of Intel's datasheet | About 90 × 25 × 25 mm, two M3 threads 45 mm apart. **Not confirmed.** |
+| RealSense D435 | Intel product page; Intel community answer for the threads | 90 × 25 × 25 mm, two M3 threads 45 mm apart, 3 mm deep. Thread depth not read from the datasheet itself. |
+| QZ1 | QZSS spec sheet | 49.8 × 83.5 × 18 mm, about 65 g. |
+| Landing gear | Measured by KAI | About 200 mm from the bottom of the legs to the body. |
 
 ## 7. Order of work
 
 1. ~~Read the dimensions from the published CAD files.~~ Done.
-2. ~~Model the parts.~~ First draft done: battery tray, camera pod, Jetson deck, Jetson hoop.
+2. ~~Model the parts.~~ Second draft done: battery tray with the camera underneath, Jetson deck, Jetson hoop, QZ1 mast. The first draft's camera pod is dropped.
 3. Check the real parts against the two unconfirmed rows in §6a, and check that the four top-plate holes are free on the real drone.
 4. ~~Print a hook test piece and try it on the rails.~~ Done: the 10 mm piece fits.
 5. Print the battery tray. Load it with a **dummy weight** of the same mass and drop-test from 1 m, then 2 m, then 3 m, onto grass and then onto a hard floor. **Never drop-test with a real LiPo.**
-6. Print the camera pod, deck and hoop. Test them the same way with dummy weights.
+6. Print the deck, hoop and QZ1 mast. Test them the same way with dummy weights, and drop-test the tray with a dummy camera of about 72 g in the bay as well.
 7. Fit everything, weigh the drone, check the centre of gravity, then do a tethered or very low hover before any real flight.

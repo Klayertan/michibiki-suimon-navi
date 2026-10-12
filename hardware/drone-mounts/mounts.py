@@ -6,7 +6,7 @@ Needs CadQuery 2.x (pip install cadquery).
 Every number that comes from a real part is in the PARAMETERS block, with its
 source. Change a parameter and re-run; do not edit the exported files.
 
-Coordinates used for the under-slung parts (tray, camera pod):
+Coordinates used for the under-slung part (tray, with the camera under it):
     x  along the rails, + toward the platform board (the GPS mast end)
     y  across the drone
     z  up, z = 0 at the centre line of the two rails
@@ -36,9 +36,14 @@ JET_HOLE_OFF = (4.0, 17.0)            # first hole from the PCB corner
 JET_TOP_ABOVE_PCB = 28.3              # fan top above the PCB underside + 1.57
 STANDOFF_H = 35.0                     # bought M3 standoffs under the deck
 
-# RealSense D435. From memory of Intel's datasheet. CHECK before printing.
-CAM_L, CAM_D, CAM_H = 90.0, 25.0, 25.0   # length, depth, height (lens axis)
+# RealSense D435. Size from Intel's product page (ark.intel.com, 128255).
+# Thread depth from an Intel community answer citing the D400 datasheet.
+CAM_L, CAM_D, CAM_H = 90.0, 25.0, 25.0   # length, height, depth (lens axis)
 CAM_M3_SPACING = 45.0                    # two M3 threads on the back
+CAM_M3_DEPTH = 3.0                       # never screw deeper than this
+
+# QZ1 GNSS receiver. From the QZSS spec sheet (qzss.go.jp, qz1.pdf).
+QZ1_L, QZ1_W, QZ1_H = 83.5, 49.8, 18.0   # about 65 g, own battery, micro-USB
 
 # Print / structure
 WALL = 2.4
@@ -51,14 +56,20 @@ HOOK_X = (-21.3, 34.7)   # hook centres along the tray. The only stretch of
                          # rail clear of the hangers, the arm bolts and the
                          # block on the side of the body (see check_fit.py)
 STRAP_X = (-50.0, 5.0)   # strap tunnels, clear of the hooks
-CRUSH_H = 20.0           # sacrificial crush layer under the tray
-CRUSH_WALL = 0.8         # two 0.4 mm perimeters
-CRUSH_RIBS = 4           # fewer ribs = softer crush layer
+CRUSH_WALL = 0.8         # two 0.4 mm perimeters; thinner = softer crush layer
 SOLE = 0.8
 DECK_T = 3.0
 BOSS_H = 6.0
 HOOP_CLEAR = 8.0         # hoop underside above the Jetson fan
-GLASS_SETBACK = 12.0     # camera glass above the bottom of the skid bars
+GLASS_SETBACK = 12.0     # camera glass above the bottom of the tray sole
+CAM_BEAM_H = 5.6         # beams the camera hangs from; the straps pass over it
+CAM_BEAM_X = (-CAM_M3_SPACING / 2, CAM_M3_SPACING / 2)
+CAM_SCREW = 10.0         # M3 x 10 through floor and beam into the camera
+FOV_MARGIN = 12.0        # sole window past each camera end (87 deg depth FOV)
+QZ1_X = -70.0            # QZ1 centre, deck coords; the GPS mast is at +x
+QZ1_MAST_H = 50.0        # top of the hoop ring to the underside of the cradle
+QZ1_MAST_Y = (-40.0, 30.0)
+QZ1_SCREW_Y = (-25.0, 15.0)   # M3 from under the hoop ring into the mast
 
 OUT = Path(__file__).parent / "exports"
 
@@ -91,8 +102,13 @@ X_REAR, X_FRONT = -L_OUT / 2, L_OUT / 2
 WALL_TOP = -11.0                       # stays under the frame's rail hangers
 FLOOR_TOP = WALL_TOP - H_IN
 FLOOR_BOT = FLOOR_TOP - FLOOR
-SOLE_BOT = FLOOR_BOT - CRUSH_H - SOLE
-POD_HOLES = [(16.0, -22.0), (-16.0, -22.0), (0.0, -46.0)]   # (y, z)
+GLASS_Z = FLOOR_BOT - CAM_BEAM_H - CAM_H   # camera hangs under the floor
+SOLE_BOT = GLASS_Z - GLASS_SETBACK
+CRUSH_H = FLOOR_BOT - SOLE - SOLE_BOT      # follows from the camera
+BAY_Y = CAM_D / 2 + 1.0                    # camera bay half-width
+RIB_Y = [-(W_OUT - CRUSH_WALL) / 2, -BAY_Y - CRUSH_WALL / 2,
+         BAY_Y + CRUSH_WALL / 2, (W_OUT - CRUSH_WALL) / 2]
+assert CAM_SCREW - (FLOOR + CAM_BEAM_H) <= CAM_M3_DEPTH - 0.4
 
 
 def hook(yc, xc, rc=None):
@@ -135,14 +151,20 @@ def battery_tray():
     t = box(X_REAR, X_FRONT, -W_OUT / 2, W_OUT / 2, FLOOR_BOT, WALL_TOP)
     t = t.cut(box(X_REAR - 1, X_FRONT - WALL, -W_IN / 2, W_IN / 2,
                   FLOOR_TOP, WALL_TOP + 1))
-    # crush layer: thin lengthwise ribs closed by a thin sole
-    span = W_OUT - CRUSH_WALL
-    for i in range(CRUSH_RIBS):
-        y = -span / 2 + i * span / (CRUSH_RIBS - 1)
+    # crush layer: thin lengthwise ribs closed by a thin sole. The two middle
+    # ribs are the walls of the camera bay.
+    for y in RIB_Y:
         t = t.union(box(X_REAR, X_FRONT, y - CRUSH_WALL / 2, y + CRUSH_WALL / 2,
                         FLOOR_BOT - CRUSH_H, FLOOR_BOT + 0.01))
     t = t.union(box(X_REAR, X_FRONT, -W_OUT / 2, W_OUT / 2,
                     SOLE_BOT, FLOOR_BOT - CRUSH_H + 0.01))
+    # window in the sole under the camera, wide enough for the depth FOV
+    wx = CAM_L / 2 + FOV_MARGIN
+    t = t.cut(box(-wx, wx, -BAY_Y, BAY_Y, SOLE_BOT - 1, FLOOR_BOT - CRUSH_H + 0.5))
+    # two beams bridging the bay; the camera's back screws to them
+    for x in CAM_BEAM_X:
+        t = t.union(box(x - 4, x + 4, -BAY_Y - 0.1, BAY_Y + 0.1,
+                        FLOOR_BOT - CAM_BEAM_H, FLOOR_BOT + 0.01))
     for x in STRAP_X:                                      # strap tunnels
         t = t.cut(box(x - 12, x + 12, -W_OUT / 2 - 1, W_OUT / 2 + 1,
                       FLOOR_BOT - 4.0, FLOOR_BOT))
@@ -156,36 +178,15 @@ def battery_tray():
     for xc in HOOK_X:                  # zip-tie holes that lock tray to rail
         t = t.cut(cyl_y(1.8, -W_OUT / 2 - 1, W_OUT / 2 + 1,
                         xc + HOOK_W / 2 + 4, WALL_TOP - 5))
-    for y, z in POD_HOLES:
-        t = t.cut(cyl_x(1.7, X_FRONT - WALL - 1, X_FRONT + 1, y, z))
+    for x in CAM_BEAM_X:               # camera screws, from inside the tray
+        t = t.cut(cyl_z(1.7, FLOOR_BOT - CAM_BEAM_H - 1, FLOOR_TOP + 1, x, 0))
     return t
 
 
-POD_BACK = 4.0
-POD_HALF = CAM_L / 2 + 5.0
-CAM_POCKET = CAM_D + 1.0
-BAR_BOT = SOLE_BOT + 8.0               # the tray sole touches the ground first
-GLASS_Z = BAR_BOT + GLASS_SETBACK
-ROOF_BOT = GLASS_Z + CAM_H
-ROOF_TOP = ROOF_BOT + 3.0
-POD_TOP = -16.0                        # stays under the frame's platform board
-
-
-def camera_pod():
-    xb = X_FRONT
-    xf = xb + POD_BACK + CAM_POCKET
-    p = box(xb, xb + POD_BACK, -POD_HALF, POD_HALF, BAR_BOT, POD_TOP)
-    p = p.union(box(xf, xf + POD_BACK, -POD_HALF, POD_HALF, BAR_BOT, ROOF_TOP))
-    p = p.union(box(xb, xf + POD_BACK, -POD_HALF, POD_HALF, ROOF_BOT, ROOF_TOP))
-    xc = xb + POD_BACK + CAM_POCKET / 2
-    for y in (-CAM_M3_SPACING / 2, CAM_M3_SPACING / 2):
-        p = p.cut(cyl_z(1.7, ROOF_BOT - 1, ROOF_TOP + 1, xc, y))
-    for y, z in POD_HOLES:
-        p = p.cut(cyl_x(1.7, xb - 1, xb + POD_BACK + 1, y, z))
-        nut = (cq.Workplane("YZ").polygon(6, 6.5).extrude(2.7)
-               .translate((xb + POD_BACK - 2.6, y, z)))
-        p = p.cut(nut)
-    return p
+def camera_dummy():
+    """The D435 where it hangs, for clash checks only. Not printed."""
+    return box(-CAM_L / 2, CAM_L / 2, -CAM_D / 2, CAM_D / 2,
+               GLASS_Z, GLASS_Z + CAM_H)
 
 
 # Jetson deck, local coords: origin at the centre of the Jetson hole pattern,
@@ -194,6 +195,9 @@ DECK_X = 64.0
 DECK_Y0, DECK_Y1 = -59.0, 48.0
 HOOP_LEGS = [(59.0, -54.0), (-59.0, -54.0), (59.0, 43.0), (-59.0, 43.0)]
 HOOP_H = BOSS_H + 1.6 + JET_TOP_ABOVE_PCB + HOOP_CLEAR
+RING_T = 5.0
+RING_TOP = DECK_T + HOOP_H + RING_T
+RING_X = (-63.0, -55.0)          # the hoop ring's band at the -x end
 
 
 def jetson_deck():
@@ -215,20 +219,56 @@ def jetson_deck():
 def jetson_hoop():
     """Roll hoop. Modelled as mounted; print it upside down (ring on the bed)."""
     z0, z1 = DECK_T, DECK_T + HOOP_H
-    ring = box(-63, 63, -58, 47, z1, z1 + 5.0).edges("|Z").fillet(6.0)
+    ring = box(-63, 63, -58, 47, z1, z1 + RING_T).edges("|Z").fillet(6.0)
     ring = ring.cut(box(-55, 55, -50, 39, z1 - 1, z1 + 6).edges("|Z").fillet(3.0))
     h = ring
     for x, y in HOOP_LEGS:
         h = h.union(box(x - 4, x + 4, y - 4, y + 4, z0, z1 + 0.01))
         h = h.cut(cyl_z(1.3, z0 - 1, z0 + 12, x, y))
+    xm = sum(RING_X) / 2
+    for y in QZ1_SCREW_Y:              # clearance holes for the QZ1 mast
+        h = h.cut(cyl_z(1.7, z1 - 1, RING_TOP + 1, xm, y))
     return h
+
+
+def qz1_mast():
+    """Mast and cradle for the QZ1, on the hoop ring at the end away from the
+    drone's own GPS mast. Modelled as mounted, deck coords. Print it standing
+    on one of its end faces (y), so every layer is the side profile and it
+    needs no supports.
+
+    The QZ1 lies face up on a foam pad and is held by two hook-and-loop straps
+    through the slots. Both short ends are open, so its micro-USB port can be
+    reached whichever end it is on.
+    """
+    y0, y1 = QZ1_MAST_Y
+    xm = sum(RING_X) / 2
+    z_cradle = RING_TOP + QZ1_MAST_H
+    m = box(RING_X[0], RING_X[1], y0, y1, RING_TOP, z_cradle + 0.01)      # web
+    hx = QZ1_W / 2 + 7.0
+    m = m.union(box(QZ1_X - hx, QZ1_X + hx, y0, y1, z_cradle, z_cradle + 3.0))
+    # fillet-like brace between web and cradle on the inboard side
+    brace = (cq.Workplane("XZ")
+             .polyline([(RING_X[1] - 0.01, z_cradle - 18.0),
+                        (RING_X[1] - 0.01, z_cradle + 0.01),
+                        (RING_X[1] + 14.0, z_cradle + 0.01)]).close()
+             .extrude(-(y1 - y0)).translate((0, y0, 0)))
+    brace_out = brace.mirror("YZ", (xm, 0, 0))
+    m = m.union(brace).union(brace_out)
+    for x in (QZ1_X - QZ1_W / 2 - 3.0, QZ1_X + QZ1_W / 2 + 3.0):  # strap slots
+        for y in ((y0 + 4.0, y0 + 24.0), (y1 - 24.0, y1 - 4.0)):
+            m = m.cut(box(x - 1.5, x + 1.5, y[0], y[1],
+                          z_cradle - 1, z_cradle + 4))
+    for y in QZ1_SCREW_Y:              # M3 self-tapping pilot holes
+        m = m.cut(cyl_z(1.3, RING_TOP - 1, RING_TOP + 14, xm, y))
+    return m
 
 
 PARTS = {
     "hook_test_10.0mm": hook_test,
     "hook_test_9.4mm": lambda: hook_test(9.4),
     "battery_tray": battery_tray,
-    "camera_pod": camera_pod,
+    "qz1_mast": qz1_mast,
     "jetson_deck": jetson_deck,
     "jetson_hoop": jetson_hoop,
 }
