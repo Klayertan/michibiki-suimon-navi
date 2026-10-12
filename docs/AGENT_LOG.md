@@ -22,3 +22,11 @@ The running record of what changed in this project and why. Every agent appends 
 - **Verified:** Not verified. The plan is design guidance. Sizes and weights in it are estimates marked "(measure)". Nothing is modelled or printed.
 - **Open / next:** KAI to answer the questions in §6 of the plan (one or two packs in flight, mounting position, camera direction, printer and materials) and supply measurements. Then model the battery tray first. A handoff note for the teammate's AI exists as `DRONE_WORK_HANDOFF.md`, outside the repo so far.
 - **State of the branches, for orientation:** `main` does not contain the water-sensor work. That is on `feature/qz1-floating-water-level` (unmerged, about 20k lines, includes a Cloudflare hosting migration). `feature/vps-article1` holds blog articles. `feature/jetson-ground-station` and `feature/mavlink-integration` are already contained in `main`.
+
+## 2026-10-12 — Mount decisions recorded; handoff branch merged
+- **Agent:** Claude Code (Opus 5.5)
+- **Branch:** `docs/agent-handoff`, fast-forwarded into `main` and merged into `feature/vps-article1` (KAI asked for the merge)
+- **What changed:** `docs/DRONE_PAYLOAD_MOUNT_PLAN.md` §6 now holds KAI's decisions in place of open questions, and a new §6a lists where each dimension comes from.
+- **Why:** KAI answered the open questions: one pack in flight, battery underneath on the rails, Jetson on top, camera straight down, PETG only, printers are a Bambu Lab A1 mini and a Flashforge Adventurer 5M Pro. KAI also asked for dimensions to come from published CAD instead of hand measurement.
+- **Verified:** Not verified. Docs only. The published dimensions in §6a come from vendor pages and seller listings, not from the real parts.
+- **Open / next:** Rail spacing, plate hole patterns and the Jetson hole pattern are still unknown. They need the Holybro and NVIDIA STEP files. No CAD exists yet. CadQuery 2.5.2 was installed in a temporary environment for this, not in the repo. Nothing is pushed.
