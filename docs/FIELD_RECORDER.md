@@ -101,6 +101,25 @@ in session metadata but never actually persisted.
 - Estimated image-storage usage for the active session is displayed
   separately from the browser-wide storage estimate.
 
+## Recorded-NMEA window (記録を確認)
+
+The **記録を確認** button, next to 記録終了, opens a window on the saved
+recordings. Pick a session (newest first) and:
+
+| Action | What it does |
+|---|---|
+| View | Summary (lines, size, valid fixes vs no fix, UTC span, checksum failures, green/orange/red fix quality) and the first 40 / last 20 lines of the log. A long session never floods the page. |
+| ダウンロード (.nmea) | The same file as 生ログ (.nmea): CRLF-terminated, one complete sentence per line. |
+| 地図に反映 | Loads the session's raw NMEA through the same path as an uploaded NMEA file (`applyNmeaText`), so points, boundary tools and assurance all follow. **The points currently on the map are replaced.** Disabled when the session has no valid GGA fix. |
+| 削除 | Two taps: the first arms it ("本当に削除する"), the second deletes the session from IndexedDB. Disarms itself after 6 s. A session that is still recording or paused cannot be deleted. |
+
+All three actions read from IndexedDB, never only from memory, and the
+write queue is flushed first, so what you see, download and apply is the same
+text. Pure logic: `js/recording/nmea-session-viewer.js`; window wiring:
+`RecordingSessionController` (`openNmeaViewer`, `applyViewerSessionToMap`,
+`handleViewerDeleteClick`). Tests: `tests/unit/nmea-session-viewer.test.js`,
+`tests/browser/nmea-viewer.spec.js`.
+
 ## Recommended workflow
 
 1. Connect QZ1 (USB or Bluetooth SPP) — this only opens the serial link.

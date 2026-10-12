@@ -29,6 +29,18 @@ import {
   verifyNmeaChecksum
 } from "./recording-core.js";
 import { QuotaExceededStorageError, RecordingStore } from "./recording-store.js";
+import {
+  buildNmeaText,
+  canDeleteSession,
+  compareSessionsNewestFirst,
+  describeSession,
+  mapApplySourceLabel,
+  nmeaLinesFromRecords,
+  previewLines,
+  previewToText,
+  summarizeNmea
+} from "./nmea-session-viewer.js";
+import { QUALITY_LEVELS } from "../gnss/gnss-quality.js";
 
 const ELEMENT_IDS = [
   "recPanel", "recRecordingStateLabel", "recConnectionNote", "recSessionIdLabel",
@@ -43,8 +55,14 @@ const ELEMENT_IDS = [
   "recObsTypeSelect", "recObsWaterLevelInput", "recObsNoteInput", "recObsImageInput",
   "recRecordPositionButton", "recObsMessage", "recObsHistoryContainer",
   "recExportRawButton", "recExportFixesCsvButton", "recExportSessionJsonButton",
-  "recExportObservationsCsvButton", "recExportObservationsJsonButton"
+  "recExportObservationsCsvButton", "recExportObservationsJsonButton",
+  "recViewNmeaButton", "recNmeaDialog", "recNmeaSessionSelect", "recNmeaSummary",
+  "recNmeaPreview", "recNmeaMessage", "recNmeaApplyButton", "recNmeaDownloadButton",
+  "recNmeaDeleteButton"
 ];
+
+// A first tap on 削除 only arms it; the second tap within this window deletes.
+const VIEWER_DELETE_ARM_MS = 6000;
 
 const FIELD_MODE_STORAGE_KEY = "suimonNaviFieldMode";
 
@@ -53,6 +71,9 @@ export class RecordingSessionController {
     this.store = options.store || new RecordingStore();
     this.getActiveField = options.getActiveField || (() => null);
     this.getSelectedGridCellId = options.getSelectedGridCellId || (() => null);
+    // (text, label) => { applied, pointCount }: puts NMEA text on the map the
+    // same way an uploaded file does. Supplied by index.html.
+    this.applyNmeaToMap = options.applyNmeaToMap || null;
     this.thresholds = { ...DEFAULT_DIAGNOSTIC_THRESHOLDS_MS, ...(options.thresholds || {}) };
     this.fixStaleMs = options.fixStaleMs ?? DEFAULT_FIX_STALE_MS;
     this.flushIntervalMs = options.flushIntervalMs ?? 1000;
@@ -97,6 +118,8 @@ export class RecordingSessionController {
     this.pendingObservationImage = null;
     this.sessionImageBytes = 0;
     this.fieldMode = false;
+
+    this.viewer = { sessions: [], deleteArmed: false, deleteTimer: null, renderToken: 0 };
 
     this.elements = {};
     this.tickTimer = null;
@@ -143,6 +166,12 @@ export class RecordingSessionController {
     el.recExportSessionJsonButton?.addEventListener("click", () => this.exportCompleteSessionJson());
     el.recExportObservationsCsvButton?.addEventListener("click", () => this.exportObservationsCsv());
     el.recExportObservationsJsonButton?.addEventListener("click", () => this.exportObservationsJson());
+    el.recViewNmeaButton?.addEventListener("click", () => this.openNmeaViewer());
+    el.recNmeaSessionSelect?.addEventListener("change", () => this.renderNmeaViewer());
+    el.recNmeaApplyButton?.addEventListener("click", () => this.applyViewerSessionToMap());
+    el.recNmeaDownloadButton?.addEventListener("click", () => this.downloadViewerSession());
+    el.recNmeaDeleteButton?.addEventListener("click", () => this.handleViewerDeleteClick());
+    el.recNmeaDialog?.addEventListener("close", () => this.disarmViewerDelete());
     el.recRecoveryContainer?.addEventListener("click", (event) => this.handleRecoveryClick(event));
     el.recObsHistoryContainer?.addEventListener("click", (event) => this.handleObservationHistoryClick(event));
   }
@@ -431,7 +460,7 @@ export class RecordingSessionController {
     const nowIso = new Date().toISOString();
     await this.persistStatus("stopped", { endedAt: nowIso });
     this.releaseWakeLock();
-    this.setMessage("記録を終了しました。書き出しを行うか、新しい記録を開始できます。");
+    this.setMessage("記録を終了しました。「記録を確認」で内容を見て、ダウンロード・地図への反映・削除ができます。");
     await this.refreshRecoveryList();
     this.render();
   }
@@ -520,8 +549,8 @@ export class RecordingSessionController {
     this.render();
   }
 
-  async deleteSession(sessionId) {
-    if (!window.confirm(`セッション ${sessionId} を削除しますか？記録済みデータは失われます。`)) {
+  async deleteSession(sessionId, { skipConfirm = false } = {}) {
+    if (!skipConfirm && !window.confirm(`セッション ${sessionId} を削除しますか？記録済みデータは失われます。`)) {
       return;
     }
     await this.store.deleteSession(sessionId);
@@ -549,6 +578,211 @@ export class RecordingSessionController {
       this.finishSession(sessionId);
     } else if (action === "delete") {
       this.deleteSession(sessionId);
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Recorded-NMEA window: view / download / apply to map / delete
+  // -------------------------------------------------------------------------
+
+  viewerSessionId() {
+    return this.elements.recNmeaSessionSelect?.value || null;
+  }
+
+  viewerSession() {
+    const sessionId = this.viewerSessionId();
+    return this.viewer.sessions.find((entry) => entry.session.sessionId === sessionId)?.session || null;
+  }
+
+  setViewerMessage(message) {
+    if (this.elements.recNmeaMessage) {
+      this.elements.recNmeaMessage.textContent = message || "";
+    }
+  }
+
+  /** Reloads the session list; returns false when nothing has been recorded yet. */
+  async refreshViewerSessions(preferredSessionId = null) {
+    const select = this.elements.recNmeaSessionSelect;
+    const sessions = (await this.store.listSessions()).sort(compareSessionsNewestFirst);
+    const counts = await Promise.all(sessions.map((session) => this.store.countRawLines(session.sessionId)));
+    this.viewer.sessions = sessions.map((session, index) => ({ session, lineCount: counts[index] }));
+    if (!select) {
+      return sessions.length > 0;
+    }
+    const previous = preferredSessionId || select.value;
+    select.replaceChildren(...this.viewer.sessions.map(({ session, lineCount }) =>
+      new Option(describeSession(session, lineCount), session.sessionId)));
+    if (previous && sessions.some((session) => session.sessionId === previous)) {
+      select.value = previous;
+    }
+    return sessions.length > 0;
+  }
+
+  async openNmeaViewer(preferredSessionId = null) {
+    const dialog = this.elements.recNmeaDialog;
+    if (!dialog) {
+      return;
+    }
+    try {
+      // What is on screen must include the sentences still in the write queue.
+      if (this.activeSessionId) {
+        await this.flushPending();
+      }
+      const hasSessions = await this.refreshViewerSessions(preferredSessionId || this.activeSessionId);
+      if (!hasSessions) {
+        this.setMessage("確認できる記録がまだありません。「記録開始」で記録すると、ここから確認できます。");
+        return;
+      }
+      this.setViewerMessage("");
+      if (!dialog.open) {
+        dialog.showModal();
+      }
+      await this.renderNmeaViewer();
+    } catch (error) {
+      this.setMessage(`記録を開けませんでした: ${error.message}`);
+    }
+  }
+
+  async renderNmeaViewer() {
+    const el = this.elements;
+    const sessionId = this.viewerSessionId();
+    this.disarmViewerDelete();
+    this.setViewerMessage("");
+    if (!sessionId) {
+      return;
+    }
+    const token = ++this.viewer.renderToken;
+    const records = await this.store.getRawLines(sessionId);
+    if (token !== this.viewer.renderToken) {
+      return; // a newer selection superseded this one
+    }
+    const lines = nmeaLinesFromRecords(records);
+    const summary = summarizeNmea(lines);
+    this.renderViewerSummary(summary);
+    el.recNmeaPreview.textContent = lines.length > 0
+      ? previewToText(previewLines(lines))
+      : "このセッションにはNMEAの行がありません。";
+    el.recNmeaDownloadButton.disabled = lines.length === 0;
+    el.recNmeaApplyButton.disabled = summary.validFixes === 0 || !this.applyNmeaToMap;
+    if (lines.length > 0 && summary.validFixes === 0) {
+      this.setViewerMessage("有効な測位（GGAのfix）がないため、地図には反映できません。");
+    }
+  }
+
+  renderViewerSummary(summary) {
+    const grid = this.elements.recNmeaSummary;
+    if (!grid) {
+      return;
+    }
+    grid.replaceChildren();
+    const row = (label, value) => {
+      const item = document.createElement("div");
+      item.className = "kv";
+      const labelNode = document.createElement("span");
+      labelNode.textContent = label;
+      const valueNode = document.createElement("strong");
+      valueNode.textContent = value;
+      item.append(labelNode, valueNode);
+      grid.append(item);
+      return item;
+    };
+    row("行数 / サイズ", `${summary.totalLines.toLocaleString("ja-JP")} 行 / ${formatBytes(summary.bytes)}`);
+    row("有効な測位 / 測位なし", `${summary.validFixes.toLocaleString("ja-JP")} / ${summary.noFix.toLocaleString("ja-JP")}`);
+    row("受信時刻 (UTC)", summary.firstUtc ? `${summary.firstUtc} 〜 ${summary.lastUtc}` : "—");
+    row("チェックサム不一致", String(summary.checksumInvalid));
+    row("主な文", summary.sentenceTypes.slice(0, 5).map(([type, count]) => `${type} ${count}`).join(" ・ ") || "—");
+
+    // Same green / orange / red grading as the live signal badge and the map.
+    const quality = row("測位の質", "");
+    quality.classList.add("nmea-summary-quality");
+    const value = quality.querySelector("strong");
+    for (const level of ["good", "fair", "poor"]) {
+      const dot = document.createElement("span");
+      dot.className = "nmea-dot";
+      dot.style.color = QUALITY_LEVELS[level].color;
+      dot.textContent = "●";
+      value.append(dot, ` ${QUALITY_LEVELS[level].label} ${summary.quality[level].toLocaleString("ja-JP")}　`);
+    }
+  }
+
+  async downloadViewerSession() {
+    const sessionId = this.viewerSessionId();
+    if (!sessionId) {
+      return;
+    }
+    try {
+      await this.exportRawNmea(sessionId);
+      this.setViewerMessage("NMEAファイルをダウンロードしました。");
+    } catch (error) {
+      this.setViewerMessage(`ダウンロードできませんでした: ${error.message}`);
+    }
+  }
+
+  async applyViewerSessionToMap() {
+    const session = this.viewerSession();
+    if (!session || !this.applyNmeaToMap) {
+      return;
+    }
+    try {
+      if (session.sessionId === this.activeSessionId) {
+        await this.flushPending();
+      }
+      const text = buildNmeaText(await this.store.getRawLines(session.sessionId));
+      const result = this.applyNmeaToMap(text, mapApplySourceLabel(session));
+      if (!result?.applied) {
+        this.setViewerMessage("地図に反映できませんでした。有効なGGA文が見つかりません。");
+        return;
+      }
+      this.elements.recNmeaDialog?.close();
+      this.setMessage(`記録 ${session.sessionId} の測位 ${result.pointCount.toLocaleString("ja-JP")} 点を地図に反映しました。`);
+    } catch (error) {
+      this.setViewerMessage(`地図に反映できませんでした: ${error.message}`);
+    }
+  }
+
+  armViewerDelete() {
+    const button = this.elements.recNmeaDeleteButton;
+    this.viewer.deleteArmed = true;
+    if (button) {
+      button.textContent = "本当に削除する（元に戻せません）";
+    }
+    clearTimeout(this.viewer.deleteTimer);
+    this.viewer.deleteTimer = setTimeout(() => this.disarmViewerDelete(), VIEWER_DELETE_ARM_MS);
+  }
+
+  disarmViewerDelete() {
+    clearTimeout(this.viewer.deleteTimer);
+    this.viewer.deleteTimer = null;
+    this.viewer.deleteArmed = false;
+    if (this.elements.recNmeaDeleteButton) {
+      this.elements.recNmeaDeleteButton.textContent = "削除";
+    }
+  }
+
+  async handleViewerDeleteClick() {
+    const session = this.viewerSession();
+    const verdict = canDeleteSession(session, this.activeSessionId, this.recordingState);
+    if (!verdict.allowed) {
+      this.setViewerMessage(verdict.reason);
+      return;
+    }
+    if (!this.viewer.deleteArmed) {
+      this.armViewerDelete();
+      this.setViewerMessage("もう一度「本当に削除する」を押すと、この記録を完全に削除します。");
+      return;
+    }
+    this.disarmViewerDelete();
+    try {
+      await this.deleteSession(session.sessionId, { skipConfirm: true });
+      const hasSessions = await this.refreshViewerSessions();
+      if (!hasSessions) {
+        this.elements.recNmeaDialog?.close();
+        return;
+      }
+      await this.renderNmeaViewer();
+      this.setViewerMessage(`記録 ${session.sessionId} を削除しました。`);
+    } catch (error) {
+      this.setViewerMessage(`削除できませんでした: ${error.message}`);
     }
   }
 

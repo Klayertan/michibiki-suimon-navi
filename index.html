@@ -12,6 +12,7 @@
   <link rel="stylesheet" href="css/vegetation-intelligence.css">
   <link rel="stylesheet" href="css/recording.css">
   <link rel="stylesheet" href="css/gnss-live.css">
+  <link rel="stylesheet" href="css/nmea-viewer.css">
   <link rel="stylesheet" href="css/field-annotation.css">
   <link rel="stylesheet" href="css/stage1-basic.css">
   <link rel="stylesheet" href="css/auth.css">
@@ -4713,9 +4714,35 @@
               <button id="recPauseButton" class="panel-button" type="button" disabled>一時停止</button>
               <button id="recResumeButton" class="panel-button" type="button" disabled>記録再開</button>
               <button id="recStopButton" class="panel-button danger" type="button" disabled>記録終了</button>
+              <button id="recViewNmeaButton" class="panel-button" type="button">記録を確認</button>
             </div>
             <p id="recMessage" class="meta" role="status" aria-live="polite"></p>
             <div id="recDiagnosticBanner" class="rec-diagnostic-banner" role="status" aria-live="polite" hidden></div>
+
+            <!-- Recorded NMEA window: look at a saved recording, then download
+                 it, put it on the map, or delete it. Driven by
+                 js/recording/recording-controller.js. -->
+            <dialog id="recNmeaDialog" class="nmea-dialog" aria-labelledby="recNmeaTitle">
+              <form method="dialog" class="nmea-dialog-head">
+                <h3 id="recNmeaTitle">記録したNMEA</h3>
+                <button id="recNmeaCloseButton" class="panel-button" value="close" aria-label="閉じる">閉じる</button>
+              </form>
+              <div class="nmea-dialog-body">
+                <label class="nmea-session-row" for="recNmeaSessionSelect">
+                  <span>記録セッション</span>
+                  <select id="recNmeaSessionSelect"></select>
+                </label>
+                <div id="recNmeaSummary" class="nmea-summary" aria-live="polite"></div>
+                <pre id="recNmeaPreview" class="nmea-preview" tabindex="0" aria-label="NMEAログの先頭と末尾"></pre>
+                <p id="recNmeaMessage" class="meta nmea-message" role="status" aria-live="polite"></p>
+                <p class="meta">「地図に反映」を押すと、いま地図にある測位点はこの記録の内容に置き換わります。</p>
+              </div>
+              <div class="nmea-dialog-actions">
+                <button id="recNmeaApplyButton" class="panel-button primary" type="button">地図に反映</button>
+                <button id="recNmeaDownloadButton" class="panel-button" type="button">ダウンロード (.nmea)</button>
+                <button id="recNmeaDeleteButton" class="panel-button danger" type="button">削除</button>
+              </div>
+            </dialog>
           </section>
 
           <!-- Live GNSS: updates as soon as fixes arrive over the connection,
@@ -11958,7 +11985,13 @@
         const { RecordingSessionController } = await import("./js/recording/recording-controller.js");
         recordingController = new RecordingSessionController({
           getActiveField: currentActiveField,
-          getSelectedGridCellId: () => vegetationController?.selectedCellId || null
+          getSelectedGridCellId: () => vegetationController?.selectedCellId || null,
+          // "地図に反映" in the recorded-NMEA window: same path as an uploaded
+          // NMEA file, so points, boundary tools and assurance all follow.
+          applyNmeaToMap: (text, label) => {
+            const applied = applyNmeaText(text, label);
+            return { applied, pointCount: parsedPoints.length };
+          }
         });
         await recordingController.mount();
         window.recordingController = recordingController;
