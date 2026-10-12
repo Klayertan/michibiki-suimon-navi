@@ -1,6 +1,6 @@
 # Drone payload mounts — 3D-print plan
 
-**Status:** plan only, 2026-10-12. Nothing is modelled, printed or tested yet.
+**Status:** plan with decisions recorded, 2026-10-12. Nothing is modelled, printed or tested yet.
 **Goal (KAI):** 3D-printed mounts for the Holybro X500 V2 that hold the batteries, the Intel RealSense and the Jetson Orin Nano Super, and protect them in a fall from 3 m. Arms and propellers are allowed to break, because spares are on hand.
 
 > Every dimension and weight marked **(measure)** is from memory or an estimate. Measure the real part with calipers and a scale before modelling. Do not model from the numbers in this file.
@@ -58,17 +58,41 @@ Weigh the real drone. Hover throttle above about 60 % leaves little margin for w
 
 The Jetson needs a regulated supply. Its barrel jack accepts a range that a 4S pack sits inside **(check the range in NVIDIA's documentation)**, but pack voltage sags and spikes under motor load, so feed it through a step-down regulator (BEC) rated for at least 5 A, not straight from the pack. The mount needs a place for that regulator.
 
-## 6. Open questions for KAI
+## 6. Decisions (KAI, 2026-10-12)
 
-1. **One pack or two in flight?** Two packs in parallel means a wider tray and about 2.4 kg. One pack with a swap is lighter.
-2. **Where does the battery go?** On the X500 V2 the pack normally hangs on the two rails under the body. Does the Jetson go on the same rails, or on top?
-3. **Camera direction.** Straight down for the paddy survey, or tilted forward?
-4. **Printer and materials.** Which printer and bed size, and is TPU available?
-5. **Measurements needed before modelling:** rail diameter and spacing, free rail length, battery length × width × height, Jetson hole pattern, ground clearance under the body with the landing gear fitted.
+| Question | Decision |
+|---|---|
+| Packs in flight | **One** 4S 3300 mAh pack, to save weight. The second pack is a swap. |
+| Battery position | **Underneath**, on the two rails. |
+| Jetson position | **On top** of the body. |
+| Camera direction | **Straight down.** |
+| Printers | Bambu Lab A1 mini (180 × 180 × 180 mm bed) and Flashforge Adventurer 5M Pro (220 × 220 × 220 mm bed). |
+| Material | **PETG only.** No TPU for now. |
+
+**What PETG-only changes.** PETG is stiff, so a 1 mm PETG layer or liner gives almost no protection: stopping in 1 mm from a 3 m fall is about 3,000 g. The soft layer in §3.2 is therefore replaced by two things:
+
+- **Printed crush structures.** Sacrificial bumpers under the battery tray with thin walls (0.8–1.2 mm) in a honeycomb or rib pattern, 15–25 mm tall, that buckle on impact. They are bolted on and reprinted after a crash.
+- **A foam liner that is not printed.** 5–10 mm of EVA or sponge foam inside the battery tray and under the Jetson. The pockets are modelled with room for it.
+
+**Consequences of the Jetson on top.**
+
+- It is the first thing to hit if the drone lands upside down, so it needs a roll hoop that stands taller than the fan.
+- It raises the centre of gravity. The battery underneath partly offsets this.
+- **USB 3 is a known source of radio noise near GNSS frequencies.** Keep the Jetson and its USB 3 cable as far as possible from the Pixhawk GPS mast and the QZ1, and check satellite counts with the camera running before trusting any survey.
+- The camera cable has to run from the top deck to the camera underneath, clear of the propellers, with strain relief at both ends.
+
+## 6a. Dimension sources
+
+| Part | Source | State |
+|---|---|---|
+| X500 V2 frame | Holybro publishes `x500v2-frame.step` (about 23 MB) on its documentation site. Published figures: body plates 144 × 144 × 2 mm, 28 mm between plates, rails 10 mm diameter × 250 mm, landing gear 215 mm tall. | **Rail spacing and plate hole patterns must be read from the STEP file.** Not yet downloaded. |
+| Zeee 4S 3300 mAh | Seller listings: about 131–132 × 43–44 × 29 mm. | Check against the real pack. Packs swell with age. |
+| Jetson Orin Nano Super developer kit | NVIDIA: 100 × 79 × 21 mm. A STEP model is on the Jetson Download Center. | **Mounting-hole pattern not confirmed.** |
+| RealSense D435 | Intel datasheet: about 90 × 25 × 25 mm, two M3 on the back 45 mm apart. | Confirm from the datasheet before modelling. |
 
 ## 7. Suggested order of work
 
-1. Measure (§6.5) and weigh.
+1. Read the dimensions from the published STEP files (§6a), check the critical ones against the real parts with a ruler, and weigh the drone.
 2. Model one part first: the battery tray. It carries the highest risk.
 3. Print it, load it with a **dummy weight** of the same mass, and drop-test from 1 m, then 2 m, then 3 m onto grass and then onto a hard floor. **Never drop-test with a real LiPo.**
 4. Model the Jetson cradle and the camera guard the same way, tested with dummy weights.
