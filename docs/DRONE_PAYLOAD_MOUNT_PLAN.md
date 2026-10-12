@@ -97,7 +97,7 @@ Read from the manufacturers' CAD files on 2026-10-12. The full table is in `hard
 1. ~~Read the dimensions from the published CAD files.~~ Done.
 2. ~~Model the parts.~~ First draft done: battery tray, camera pod, Jetson deck, Jetson hoop.
 3. Check the real parts against the two unconfirmed rows in §6a, and check that the four top-plate holes are free on the real drone.
-4. Print a 15 mm slice of one tray hook first and test it on a rail. It costs minutes and proves the rail diameter and the snap fit.
+4. ~~Print a hook test piece and try it on the rails.~~ Done: the 10 mm piece fits.
 5. Print the battery tray. Load it with a **dummy weight** of the same mass and drop-test from 1 m, then 2 m, then 3 m, onto grass and then onto a hard floor. **Never drop-test with a real LiPo.**
 6. Print the camera pod, deck and hoop. Test them the same way with dummy weights.
 7. Fit everything, weigh the drone, check the centre of gravity, then do a tethered or very low hover before any real flight.

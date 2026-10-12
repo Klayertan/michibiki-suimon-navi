@@ -13,7 +13,9 @@ Four printed parts that hold and protect the battery, the RealSense D435 and the
 
 All four fit a 180 × 180 mm bed. STL copies are next to the STEP files.
 
-## Print this first: the hook test
+## The hook test (done: the 10 mm piece fits)
+
+KAI printed both pieces on 2026-10-12 and the 10 mm one fits the real rails. `RAIL_DIA = 10.0` is correct and the tray needs no change. The rest of this section is kept for anyone repeating the test.
 
 `exports/hook_test_10.0mm.step` and `exports/hook_test_9.4mm.step` are the two hooks of one tray cross-section on a plain bar, 27 × 79 × 14 mm, about 17 g each. They exist because Holybro publishes the rails as 10 mm but models them as 9.4 mm. The 9.4 mm piece has a hole through its bar so the two cannot be mixed up.
 
@@ -47,7 +49,7 @@ python mounts.py
 |---|---|---|
 | Rail spacing | 60 mm centre to centre | Holybro `x500v2-frame.step` |
 | Rail centre below the bottom plate | 13 mm | Holybro STEP |
-| Rail diameter | 10 mm published, 9.4 mm in the STEP | Hooks are cut for 10 mm with 0.3 mm clearance |
+| Rail diameter | 10 mm | Published value, **confirmed by the printed hook test on 2026-10-12**. Holybro's STEP models 9.4 mm, which is wrong for the real rails. Hooks are cut for 10 mm with 0.3 mm clearance. |
 | Top-plate M3 holes used | (±50, ±37) mm from the plate centre | Holybro STEP |
 | Jetson mounting holes | 86 × 58 mm, M2.5 | NVIDIA developer kit STEP |
 | Jetson board | 100 × 79 mm, fan top 28 mm above the board | NVIDIA STEP |
@@ -123,7 +125,7 @@ So the deck covers the Pixhawk from above and leaves all four sides open. KAI co
 - The four top-plate holes may already be in use on your build. Check before printing the deck.
 - 35 mm standoffs assume the Pixhawk and its cables fit under the deck. Change `STANDOFF_H` if not.
 - The tray sits 6.7 mm behind the frame centre, because the platform board is in the way at the front. It cannot move along the rails, so balance the drone with the Jetson position and check the centre of gravity.
-- The hooks are 56 mm apart on a 139 mm tray, so the ends overhang. The snap fit is 0.3 mm on a 10 mm rail. If your rails measure 9.4 mm, as in Holybro's model, set `RAIL_DIA = 9.4`.
+- The hooks are 56 mm apart on a 139 mm tray, so the ends overhang.
 - The hook mouths rely on the zip ties to stay closed in a sideways hit.
 - The landing-gear skids will appear at the edges of the camera picture.
 - The Jetson's USB 3 port can disturb GNSS reception. See the plan.
