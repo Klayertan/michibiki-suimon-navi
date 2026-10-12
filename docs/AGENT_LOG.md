@@ -46,3 +46,11 @@ The running record of what changed in this project and why. Every agent appends 
 - **Why:** KAI asked for a small test print before the full tray. Two sizes, because Holybro publishes 10 mm rails but models 9.4 mm.
 - **Verified:** Both export as single solids, 14 mm tall lying flat. Shape checked in a rendered view. The four existing parts are unchanged. Not printed.
 - **Open / next:** KAI to print both and report which fits. If it is the 9.4 mm one, set `RAIL_DIA = 9.4`, re-run `mounts.py`, and re-run `check_fit.py`.
+
+## 2026-10-12 — Requirement: Pixhawk 6C ports must stay clear
+- **Agent:** Claude Code (Opus 5.5)
+- **Branch:** `docs/agent-handoff`, fast-forwarded into `main` and merged into `feature/vps-article1`
+- **What changed:** New "Pixhawk 6C under the deck" section in `hardware/drone-mounts/README.md`. No geometry changed.
+- **Why:** KAI said the Pixhawk 6C is mounted with the Jetson and its ports must not be blocked.
+- **Verified:** By arithmetic only, from the published 84.8 × 44 × 12.4 mm case size and the deck post positions: posts are outside the case, all four sides are open, about 19 mm above. Not verified: the direction the 6C connectors face, and the real board with cables.
+- **Open / next:** KAI to confirm whether the Pixhawk stays on the top plate under the deck, and which way its connectors face. Also pushed earlier today: `main` up to `c1dc5fe`. This commit is not pushed.

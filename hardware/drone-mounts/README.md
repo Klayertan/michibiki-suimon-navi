@@ -104,6 +104,20 @@ PETG, 0.2 mm layers, 0.4 mm nozzle. Print the hooks slowly: they carry the batte
 4. **Camera pod.** Screw the camera into the roof, then bolt the pod to the front wall of the tray. The nuts sit in the hexagonal pockets on the camera side.
 5. **Deck.** Fit the standoffs to the top plate, screw the hoop to the deck from underneath, screw the deck to the standoffs, then fit the Jetson through the hoop.
 
+## Pixhawk 6C under the deck
+
+KAI's requirement: the Pixhawk 6C sits with the Jetson and none of its ports may be blocked. In this design the Pixhawk stays on the top plate, at the centre, and the Jetson deck stands over it on four posts.
+
+| Check | Numbers |
+|---|---|
+| Pixhawk 6C size | 84.8 × 44 × 12.4 mm, 59 g (PX4 documentation) |
+| Posts | At (±50, ±37) mm. With the Pixhawk's long side along the rails its case reaches ±42.4 × ±22 mm, so every post is outside it. |
+| Long sides | 15 mm from case to post line, and open for the full 85 mm between posts |
+| Short ends | 68 mm of open width between posts |
+| Above | About 19 mm from the top of the Pixhawk (on a 3 mm foam pad) to the underside of the deck |
+
+So the deck covers the Pixhawk from above and leaves all four sides open. **Not confirmed:** which way the 6C's connectors face. This works if they face sideways. If any plug in from the top, 19 mm may not be enough: raise `STANDOFF_H`. Not checked against the real board or its cables.
+
 ## Known limits
 
 - The four top-plate holes may already be in use on your build. Check before printing the deck.
