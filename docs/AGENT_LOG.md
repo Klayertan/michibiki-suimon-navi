@@ -38,3 +38,11 @@ The running record of what changed in this project and why. Every agent appends 
 - **Why:** KAI asked for the mounts with protection, in PETG, with dimensions taken from published CAD. KAI approved downloading Holybro's `x500v2-frame.step` and NVIDIA's Jetson developer kit STEP model. Neither file is in the repo.
 - **Verified:** `check_fit.py` against Holybro's frame model: no clash for any part when installed, and none along the tray's 14 mm slide-on path. Three earlier hook layouts failed this check and were changed. Each part exports as a single solid. **Not verified:** nothing is printed or fitted. Battery and RealSense sizes are unconfirmed. The crush-layer figures in the README are a rough calculation. The check only knows about parts in Holybro's model, so the Pixhawk, wiring and KAI's own additions are not covered.
 - **Open / next:** KAI to confirm the battery and D435 sizes and that the top-plate holes at (±50, ±37) mm are free, then print a hook test slice before the full tray. To change a size, edit the parameters in `mounts.py` and re-run it; never edit the exported files. CadQuery is not a repo dependency: `pip install cadquery`.
+
+## 2026-10-12 — Hook fit-test pieces added
+- **Agent:** Claude Code (Opus 5.5)
+- **Branch:** `docs/agent-handoff`, fast-forwarded into `main` and merged into `feature/vps-article1`
+- **What changed:** `hardware/drone-mounts/mounts.py` gained `hook_test()` and `hook()` takes an optional rail radius. New exports `hook_test_10.0mm` and `hook_test_9.4mm` (STEP and STL). README section on how to use them.
+- **Why:** KAI asked for a small test print before the full tray. Two sizes, because Holybro publishes 10 mm rails but models 9.4 mm.
+- **Verified:** Both export as single solids, 14 mm tall lying flat. Shape checked in a rendered view. The four existing parts are unchanged. Not printed.
+- **Open / next:** KAI to print both and report which fits. If it is the 9.4 mm one, set `RAIL_DIA = 9.4`, re-run `mounts.py`, and re-run `check_fit.py`.
