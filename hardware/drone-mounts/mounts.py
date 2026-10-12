@@ -1,6 +1,6 @@
 """Parametric payload mounts for the Holybro X500 V2 (PETG).
 
-Run:  python mounts.py            -> writes STEP + STL into ./out
+Run:  python mounts.py            -> writes STEP + STL into ./exports
 Needs CadQuery 2.x (pip install cadquery).
 
 Every number that comes from a real part is in the PARAMETERS block, with its
@@ -60,7 +60,7 @@ BOSS_H = 6.0
 HOOP_CLEAR = 8.0         # hoop underside above the Jetson fan
 GLASS_SETBACK = 12.0     # camera glass above the bottom of the skid bars
 
-OUT = Path(__file__).parent / "out"
+OUT = Path(__file__).parent / "exports"
 
 
 def box(x0, x1, y0, y1, z0, z1):
