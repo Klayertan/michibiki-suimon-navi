@@ -116,7 +116,7 @@ KAI's requirement: the Pixhawk 6C sits with the Jetson and none of its ports may
 | Short ends | 68 mm of open width between posts |
 | Above | About 19 mm from the top of the Pixhawk (on a 3 mm foam pad) to the underside of the deck |
 
-So the deck covers the Pixhawk from above and leaves all four sides open. **Not confirmed:** which way the 6C's connectors face. This works if they face sideways. If any plug in from the top, 19 mm may not be enough: raise `STANDOFF_H`. Not checked against the real board or its cables.
+So the deck covers the Pixhawk from above and leaves all four sides open. KAI confirmed on 2026-10-12 that the Pixhawk stays on the top plate and that its connectors face sideways, so no change to the deck is needed. Still not checked against the real board with its cables plugged in. If a plug or cable bend needs more height, raise `STANDOFF_H`.
 
 ## Known limits
 
