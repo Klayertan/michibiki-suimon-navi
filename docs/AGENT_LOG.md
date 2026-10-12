@@ -54,3 +54,11 @@ The running record of what changed in this project and why. Every agent appends 
 - **Why:** KAI said the Pixhawk 6C is mounted with the Jetson and its ports must not be blocked.
 - **Verified:** By arithmetic only, from the published 84.8 × 44 × 12.4 mm case size and the deck post positions: posts are outside the case, all four sides are open, about 19 mm above. Not verified: the direction the 6C connectors face, and the real board with cables.
 - **Open / next:** KAI to confirm whether the Pixhawk stays on the top plate under the deck, and which way its connectors face. Also pushed earlier today: `main` up to `c1dc5fe`. This commit is not pushed.
+
+## 2026-10-12 — Pixhawk 6C position confirmed
+- **Agent:** Claude Code (Opus 5.5)
+- **Branch:** `docs/agent-handoff`, fast-forwarded into `main` and merged into `feature/vps-article1`
+- **What changed:** One paragraph in `hardware/drone-mounts/README.md`. No geometry changed.
+- **Why:** KAI confirmed the Pixhawk 6C stays on the top plate under the Jetson deck and that its connectors face sideways. The deck design stands as it is.
+- **Verified:** Nothing new. Still not checked on the real board with cables.
+- **Open / next:** KAI is printing the two hook test pieces and will report which rail size fits. Not pushed.
