@@ -490,3 +490,31 @@ the host rule rewrites again → loop. Proposed fix (4 lines inside the same blo
 `RewriteCond HOST…` + `RewriteCond %{REQUEST_FILENAME} !-f` + `!-d` + `RewriteRule ^ - [R=404,L]`.
 `suisuinavi-app.zip` was deleted afterwards (URL → 404; app and blog still 200).
 Screenshots: `~/Pictures/SuiSuiNavi-blog/app-host-fix/` 01–14 (09 is a dialog that was never confirmed).
+
+## Step 16 — automatic deploy re-enabled and run once, on the right folder (2026-10-12)
+
+**Found before running [verified].** `deploy-sakura.yml` on `main` still synced into `/home/suisuinavi/www/` (the
+document root shared by the blog host and the app host). Step 15's fix (`www/suisuinavi/`) existed only on a local
+branch, `fix/sakura-app-subfolder`, never pushed; that branch was not in the checkout used here. The workflow was
+`disabled_manually` (last run 2026-09-06, 10 runs). Enabling it would have made the next push to `main` put
+`index.html` beside the blog's `index.php`. What that does to the blog home page was **not tested** (the run was
+avoided, not observed).
+
+**Fix [verified].** Recreated as `fix/sakura-app-subfolder` (`fa41fc0`): `REMOTE_BASE` is now
+`/home/suisuinavi/www/suisuinavi`, a new `SITE_ROOT=/home/suisuinavi/www` is used only for the `michibiki/` guard and
+the post-deploy check, and the guard aborts (it never creates the target folder) when `REMOTE_BASE` is missing.
+Workflow file parses as YAML; 523 unit tests pass locally; the SSH steps themselves could not be tested without the
+secrets.
+
+**Run [verified, public Actions API].** The workflow was enabled by the author in the GitHub UI. Fast-forwarding
+`main` to `fa41fc0` ran *Deploy to Sakura*: conclusion `success`, every step `success` (unit tests, SSH key,
+known_hosts, guard, sync `data/` `config/` `css/` `js/`, sync `index.html`, `michibiki/` check).
+
+**Result [verified with curl].** `suisuinavi.sakura.ne.jp/` 200, now contains the new UI ids; the four new
+JS/CSS files return 200. Blog home `sakurakai.sakuraweb.com/` 200 and **55,249 bytes before and after**.
+`suisuinavi.sakura.ne.jp/michibiki/` is 404 (the blog's page) both before and after: unchanged. Before the run, only
+the app page and the blog home were captured; the new assets were not requested beforehand.
+
+**Open.** Playwright browser tests are not part of the deploy gate (13 known failures exist independent of this
+work). No rollback was exercised. Screenshots not taken.
+

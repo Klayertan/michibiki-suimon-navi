@@ -20,6 +20,7 @@ separate.
 | [`article-1-draft-ja.md`](article-1-draft-ja.md) | Article 1 draft (Japanese), for the WordPress blog |
 | [`article-2-draft-ja.md`](article-2-draft-ja.md) | Article 2 draft (Japanese): the app's own address redirected to the blog; WordPress draft post 103 (unpublished); images in `article-2-media.json` |
 | [`article-extra-ads-draft-ja.md`](article-extra-ads-draft-ja.md) | 番外編 draft (Japanese): adding an ad slot to the app; WordPress draft post 121 (unpublished); images in `article-extra-ads-media.json`. The 結果 section is a 【要追記】 until AdSense answers |
+| [`article-extra-deploy-draft-ja.md`](article-extra-deploy-draft-ja.md) | 番外編 draft (Japanese): publishing SuiSuiNavi to the rental server automatically with GitHub Actions (tests first, safety checks, the shared-folder pitfall, a real run). Not yet in WordPress; no images yet. Facts: `devlog.md` Step 16 |
 | [`tools/md_to_wp_blocks.py`](tools/md_to_wp_blocks.py) | Converts a draft to WordPress block HTML (paste into the Code editor) |
 
 ## Series plan
