@@ -13,6 +13,25 @@ Four printed parts that hold and protect the battery, the RealSense D435 and the
 
 All four fit a 180 × 180 mm bed. STL copies are next to the STEP files.
 
+## Print this first: the hook test
+
+`exports/hook_test_10.0mm.step` and `exports/hook_test_9.4mm.step` are the two hooks of one tray cross-section on a plain bar, 27 × 79 × 14 mm, about 17 g each. They exist because Holybro publishes the rails as 10 mm but models them as 9.4 mm. The 9.4 mm piece has a hole through its bar so the two cannot be mixed up.
+
+Print both flat, as exported, with no supports. Then, on the drone:
+
+1. Hold the piece under the rails with the bar underneath and the hook mouths level with the rails.
+2. Push it sideways. Both rails should snap in with a firm push and sit without rattling.
+3. Pull down on it. It should not come off.
+
+| What happens | What it means |
+|---|---|
+| One size snaps on firmly | Use that rail diameter. If it is the 9.4 mm piece, set `RAIL_DIA = 9.4` in `mounts.py` and re-run before printing the tray. |
+| Both are loose | Lower `RAIL_CLEAR` (0.3) in steps of 0.1. |
+| Neither goes on, or the arms whiten or crack | Raise `RAIL_CLEAR`. |
+| One rail fits but the other does not line up | The rails are not 60 mm apart. Measure and change `RAIL_SPACING`. |
+
+The test piece is printed with its layers the other way from the real tray, so it tells you about fit and nothing about strength.
+
 ## Change a size
 
 Do not edit the exported files. Edit the `PARAMETERS` block at the top of `mounts.py` and re-run:

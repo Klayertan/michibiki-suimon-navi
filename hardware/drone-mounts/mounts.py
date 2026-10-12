@@ -95,22 +95,40 @@ SOLE_BOT = FLOOR_BOT - CRUSH_H - SOLE
 POD_HOLES = [(16.0, -22.0), (-16.0, -22.0), (0.0, -46.0)]   # (y, z)
 
 
-def hook(yc, xc):
+def hook(yc, xc, rc=None):
     """C-hook that slides sideways onto a rail and carries the tray.
 
     Built with its mouth toward +y, then mirrored so the mouth faces -y. The
     frame is not mirror-symmetric: a part bolted to one side of the body blocks
     the tray from sliding on from that side (found with check_fit.py).
     """
-    y0, y1 = yc - RC - HOOK_T, yc + RC + HOOK_ARM
-    zt = RC + HOOK_T
+    rc = RC if rc is None else rc
+    y0, y1 = yc - rc - HOOK_T, yc + rc + HOOK_ARM
+    zt = rc + HOOK_T
     x0, x1 = xc - HOOK_W / 2, xc + HOOK_W / 2
     h = box(x0, x1, y0, y1, -zt, zt)
     h = h.union(box(x0, x1, y0, y1, WALL_TOP - 0.5, -zt + 0.01))      # web
-    h = h.cut(cyl_x(RC, x0 - 1, x1 + 1, yc, 0))
-    # mouth 0.3 mm narrower than a 10 mm rail, so the rail snaps in
-    h = h.cut(box(x0 - 1, x1 + 1, yc, y1 + 1, -RC + 0.45, RC - 0.45))
+    h = h.cut(cyl_x(rc, x0 - 1, x1 + 1, yc, 0))
+    # mouth 0.3 mm narrower than the rail, so the rail snaps in
+    h = h.cut(box(x0 - 1, x1 + 1, yc, y1 + 1, -rc + 0.45, rc - 0.45))
     return h.mirror("XZ")
+
+
+def hook_test(rail_dia=RAIL_DIA):
+    """Fit test: the two hooks of one tray cross-section on a plain bar.
+
+    Checks the rail diameter, the snap fit and the rail spacing in a short
+    print. Exported lying flat, so it needs no supports. The layers run the
+    other way from the real tray, so it says nothing about strength.
+    """
+    rc = rail_dia / 2 + RAIL_CLEAR
+    half = RAIL_SPACING / 2 + rc + HOOK_T
+    t = box(-HOOK_W / 2, HOOK_W / 2, -half, half, WALL_TOP - 6.5, WALL_TOP - 0.4)
+    for yc in (-RAIL_SPACING / 2, RAIL_SPACING / 2):
+        t = t.union(hook(yc, 0.0, rc))
+    if rail_dia < RAIL_DIA:        # a hole in the bar marks the smaller size
+        t = t.cut(cyl_x(2.0, -HOOK_W, HOOK_W, 0, WALL_TOP - 3.5))
+    return t.rotate((0, 0, 0), (0, 1, 0), 90)
 
 
 def battery_tray():
@@ -207,6 +225,8 @@ def jetson_hoop():
 
 
 PARTS = {
+    "hook_test_10.0mm": hook_test,
+    "hook_test_9.4mm": lambda: hook_test(9.4),
     "battery_tray": battery_tray,
     "camera_pod": camera_pod,
     "jetson_deck": jetson_deck,
@@ -221,6 +241,6 @@ if __name__ == "__main__":
         bb = solid.BoundingBox()
         cq.exporters.export(part, str(OUT / f"{name}.step"))
         cq.exporters.export(part, str(OUT / f"{name}.stl"), tolerance=0.05)
-        print(f"{name:13s} {bb.xlen:6.1f} x {bb.ylen:6.1f} x {bb.zlen:6.1f} mm"
+        print(f"{name:17s} {bb.xlen:6.1f} x {bb.ylen:6.1f} x {bb.zlen:6.1f} mm"
               f"  solids={len(part.solids().vals())}"
               f"  solid PETG mass={solid.Volume() * 1.27 / 1000:5.0f} g")
