@@ -30,3 +30,11 @@ The running record of what changed in this project and why. Every agent appends 
 - **Why:** KAI answered the open questions: one pack in flight, battery underneath on the rails, Jetson on top, camera straight down, PETG only, printers are a Bambu Lab A1 mini and a Flashforge Adventurer 5M Pro. KAI also asked for dimensions to come from published CAD instead of hand measurement.
 - **Verified:** Not verified. Docs only. The published dimensions in §6a come from vendor pages and seller listings, not from the real parts.
 - **Open / next:** Rail spacing, plate hole patterns and the Jetson hole pattern are still unknown. They need the Holybro and NVIDIA STEP files. No CAD exists yet. CadQuery 2.5.2 was installed in a temporary environment for this, not in the repo. Nothing is pushed.
+
+## 2026-10-12 — First CAD draft of the drone payload mounts
+- **Agent:** Claude Code (Opus 5.5)
+- **Branch:** `docs/agent-handoff`, fast-forwarded into `main` and merged into `feature/vps-article1`
+- **What changed:** New folder `hardware/drone-mounts/`: `mounts.py` (parametric CadQuery source), `check_fit.py`, a README, and exported STEP and STL files for four PETG parts (battery tray, camera pod, Jetson deck, Jetson hoop). `docs/DRONE_PAYLOAD_MOUNT_PLAN.md` updated to match.
+- **Why:** KAI asked for the mounts with protection, in PETG, with dimensions taken from published CAD. KAI approved downloading Holybro's `x500v2-frame.step` and NVIDIA's Jetson developer kit STEP model. Neither file is in the repo.
+- **Verified:** `check_fit.py` against Holybro's frame model: no clash for any part when installed, and none along the tray's 14 mm slide-on path. Three earlier hook layouts failed this check and were changed. Each part exports as a single solid. **Not verified:** nothing is printed or fitted. Battery and RealSense sizes are unconfirmed. The crush-layer figures in the README are a rough calculation. The check only knows about parts in Holybro's model, so the Pixhawk, wiring and KAI's own additions are not covered.
+- **Open / next:** KAI to confirm the battery and D435 sizes and that the top-plate holes at (±50, ±37) mm are free, then print a hook test slice before the full tray. To change a size, edit the parameters in `mounts.py` and re-run it; never edit the exported files. CadQuery is not a repo dependency: `pip install cadquery`.
