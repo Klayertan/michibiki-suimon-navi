@@ -78,3 +78,11 @@ The running record of what changed in this project and why. Every agent appends 
 - **Why:** Session moved from the desktop app to the cloud; the cloud stop hook asks for untracked files to be committed and pushed.
 - **Verified:** `git status` clean after commit. No code changed, so no tests run.
 - **Open / next:** Same as the previous entry: print and drop-test the battery tray, measure the battery and D435. KAI still to send the handoff file to the friend.
+
+## 2026-10-12 — Camera moved under the tray; QZ1 mast added
+- **Agent:** Claude Code (Opus 5.5)
+- **Branch:** `feature/vps-article1-8ihyy7` (restarted from `main` after PR #5 merged)
+- **What changed:** `hardware/drone-mounts/mounts.py`: tray now carries the D435 in a bay under its floor (crush layer 20 → 42 mm, sole window for the FOV); `camera_pod` removed; new `qz1_mast`; hoop gained two mast holes. `check_fit.py`, README and `docs/DRONE_PAYLOAD_MOUNT_PLAN.md` updated. Exports regenerated.
+- **Why:** KAI decided the camera goes directly under the tray, for balance, and chose the QZ1 mast at the end away from the GPS mast (option b). KAI measured the legs at about 200 mm to the body. QZ1 and D435 sizes taken from published specs at KAI's request.
+- **Verified:** Every part exports as one solid. Parts checked against each other in CadQuery: camera clear of the tray, no tray in the depth or RGB field of view, mast/hoop/deck/Jetson/QZ1 do not overlap. **Not run:** `check_fit.py` against Holybro's frame, because docs.holybro.com is blocked from the cloud session. Nothing printed. Taller crush ribs not re-estimated or tested.
+- **Open / next:** Run `check_fit.py` on the desktop before printing. Do not print any tray exported before this change. Check the D435 thread depth (M3 × 10 goes 2 mm in) and the QZ1 cradle against the props on the real drone.

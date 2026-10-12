@@ -26,9 +26,10 @@ def place_top(part):     # deck coords -> frame coords; top plate top is Y=32
 
 placed = {
     "battery_tray": place_under(m.battery_tray()),
-    "camera_pod": place_under(m.camera_pod()),
+    "camera (D435 under the tray)": place_under(m.camera_dummy()),
     "jetson_deck": place_top(m.jetson_deck()),
     "jetson_hoop": place_top(m.jetson_hoop()),
+    "qz1_mast": place_top(m.qz1_mast()),
 }
 ok = True
 for name, part in placed.items():
