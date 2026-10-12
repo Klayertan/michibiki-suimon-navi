@@ -6,10 +6,10 @@ Four printed parts that hold and protect the battery, the RealSense D435 and the
 
 | Part | File | Size (mm) | Where it goes |
 |---|---|---|---|
-| Battery tray | `out/battery_tray.step` | 139 × 78 × 85 | Hangs from the two rails under the body. Replaces the stock battery board. |
-| Camera pod | `out/camera_pod.step` | 34 × 100 × 51 | Bolts to the front wall of the tray. Camera looks straight down. |
-| Jetson deck | `out/jetson_deck.step` | 128 × 107 × 9 | On four M3 standoffs above the top plate. |
-| Jetson hoop | `out/jetson_hoop.step` | 126 × 105 × 49 | Roll hoop over the Jetson. Screws to the deck. |
+| Battery tray | `exports/battery_tray.step` | 139 × 78 × 85 | Hangs from the two rails under the body. Replaces the stock battery board. |
+| Camera pod | `exports/camera_pod.step` | 34 × 100 × 51 | Bolts to the front wall of the tray. Camera looks straight down. |
+| Jetson deck | `exports/jetson_deck.step` | 128 × 107 × 9 | On four M3 standoffs above the top plate. |
+| Jetson hoop | `exports/jetson_hoop.step` | 126 × 105 × 49 | Roll hoop over the Jetson. Screws to the deck. |
 
 All four fit a 180 × 180 mm bed. STL copies are next to the STEP files.
 
