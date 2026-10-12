@@ -30,8 +30,11 @@ On every push to `main` (and on manual trigger), GitHub Actions
 1. Runs the fast unit tests (`npm test`, Node's built-in test runner over
    `tests/unit/*.test.js` — no build, no browser). If they fail, the job stops
    and nothing is deployed.
-2. Only then, `rsync`s over SSH into `/home/suisuinavi/www/` on the Sakura
-   server: `data/`, `config/`, `css/`, `js/`, and finally `index.html`.
+2. Only then, `rsync`s over SSH into `/home/suisuinavi/www/suisuinavi/` on the
+   Sakura server: `data/`, `config/`, `css/`, `js/`, and finally `index.html`.
+   `~/www/` itself is the document root shared with the blog; the app has its
+   own subfolder, which the `.htaccess` in `~/www/` maps the app host onto, so
+   nothing is ever synced into `~/www/` directly.
 
 Playwright browser tests (`npm run test:browser`) and the Python backend
 tests (`npm run test:backend`) are **not** run by this workflow — they cover
@@ -131,7 +134,8 @@ provisions credentials on the real production server.
    into `main`).
 2. GitHub Actions runs the `test` job (`npm test`).
 3. If tests pass, the `deploy` job rsyncs `data/`, `config/`, `css/`, `js/`,
-   then `index.html` to `/home/suisuinavi/www/` on Sakura.
+   then `index.html` to `/home/suisuinavi/www/suisuinavi/` on Sakura. That
+   folder must already exist; the workflow aborts rather than creating it.
 4. Check the **Actions** tab in GitHub for the run's status/logs.
 
 ## Manual Trigger
@@ -167,8 +171,9 @@ served at <https://suisuinavi.sakura.ne.jp/michibiki/>. This deployment
 pipeline:
 
 - Never lists, syncs, or deletes anything under `michibiki/`.
-- Never runs a root-level `rsync --delete` against `/home/suisuinavi/www/`.
-- Aborts before touching anything if `michibiki/` isn't found at deploy
+- Never runs a root-level `rsync --delete` against `/home/suisuinavi/www/`
+  (every sync targets `www/suisuinavi/`).
+- Aborts before touching anything if `www/michibiki/` isn't found at deploy
   time (wrong host/path guard), and fails loudly after deployment if it's
   gone (it never should be).
 

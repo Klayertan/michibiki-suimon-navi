@@ -15,7 +15,13 @@ on:
   workflow_dispatch: {}
 
 env:
-  REMOTE_BASE: /home/suisuinavi/www
+  # ~/www/ is the document root SHARED by the blog host and the app host (see
+  # docs/blog/article-2-draft-ja.md). The app lives in its own subfolder and
+  # the .htaccess in ~/www/ maps the app host onto it, so files must never be
+  # synced into ~/www/ itself: an index.html there would sit beside the blog's
+  # index.php.
+  SITE_ROOT: /home/suisuinavi/www
+  REMOTE_BASE: /home/suisuinavi/www/suisuinavi
 
 concurrency:
   group: sakura-deploy
@@ -76,11 +82,11 @@ jobs:
           ssh -p "$SAKURA_PORT" -o StrictHostKeyChecking=yes "$SAKURA_USER@$SAKURA_HOST" bash -s <<EOF
           set -euo pipefail
           if [ ! -d "$REMOTE_BASE" ]; then
-            echo "Remote base $REMOTE_BASE does not exist on the server. Aborting." >&2
+            echo "Remote base $REMOTE_BASE does not exist on the server. Aborting (it is never created here)." >&2
             exit 1
           fi
-          if [ ! -d "$REMOTE_BASE/michibiki" ]; then
-            echo "$REMOTE_BASE/michibiki not found. This looks like the wrong path or host -- refusing to deploy to avoid an unsafe rsync." >&2
+          if [ ! -d "$SITE_ROOT/michibiki" ]; then
+            echo "$SITE_ROOT/michibiki not found. This looks like the wrong path or host -- refusing to deploy to avoid an unsafe rsync." >&2
             exit 1
           fi
           EOF
@@ -146,8 +152,8 @@ jobs:
         run: |
           set -euo pipefail
           ssh -p "$SAKURA_PORT" -o StrictHostKeyChecking=yes "$SAKURA_USER@$SAKURA_HOST" bash -s <<EOF
-          if [ ! -d "$REMOTE_BASE/michibiki" ]; then
-            echo "CRITICAL: $REMOTE_BASE/michibiki is missing after deployment!" >&2
+          if [ ! -d "$SITE_ROOT/michibiki" ]; then
+            echo "CRITICAL: $SITE_ROOT/michibiki is missing after deployment!" >&2
             exit 1
           fi
           EOF
