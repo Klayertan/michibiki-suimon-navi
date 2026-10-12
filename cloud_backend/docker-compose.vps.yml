@@ -1,0 +1,57 @@
+# Overlay for running the cloud API on a single VPS, behind Caddy.
+#
+# Used together with the base file — the base file is unchanged and still works
+# on its own for local development:
+#
+#   local development :  docker compose up --build
+#   on the VPS        :  docker compose -f docker-compose.yml -f docker-compose.vps.yml up -d --build
+#
+# What this adds: one `caddy` service, and the one setting the API needs to
+# know it is sitting behind a proxy.
+#
+# FIREWALL WARNING (read before trusting `ufw`): ports published by Docker are
+# wired in by Docker's own iptables rules, which are evaluated BEFORE ufw's.
+# So `ufw deny 80` does NOT stop the port published below. The real gatekeeper
+# on a Sakura VPS is the packet filter in the Sakura control panel (it runs
+# outside the VM, so Docker cannot bypass it). Open only 22 and 80 there (and
+# 443 once HTTPS is set up). The base file already publishes the API and
+# PostgreSQL on 127.0.0.1 only — loopback, unreachable from outside.
+
+services:
+  api:
+    environment:
+      # Why this is needed: the API rate-limits logins per client IP. Behind a
+      # proxy, the TCP connection comes from Caddy, so without this every
+      # visitor would share Caddy's IP and one person's failed logins would lock
+      # everybody out. Uvicorn reads the real address from X-Forwarded-For, but
+      # by default only trusts that header from 127.0.0.1 — and Caddy is another
+      # container, not 127.0.0.1.
+      #
+      # "*" is acceptable here because the only way to reach the API port from
+      # outside the VM is through Caddy (the API's published port is
+      # loopback-only), and Caddy replaces X-Forwarded-For with the address it
+      # actually saw rather than trusting what a client sent. If the API port
+      # were ever published publicly, this setting would let anyone spoof their
+      # IP — do not do that.
+      FORWARDED_ALLOW_IPS: "*"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      # Article 1: HTTP only. Add "443:443" together with a real hostname in
+      # deploy/Caddyfile when HTTPS is set up.
+      - "${CADDY_HTTP_PORT:-80}:80"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      # Certificates and Caddy's state. Persisted so a container rebuild does
+      # not re-request certificates (Let's Encrypt rate-limits that).
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:

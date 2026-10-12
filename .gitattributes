@@ -11,3 +11,6 @@
 *.jpg binary
 *.jpeg binary
 *.gif binary
+
+# Append-only agent log: keep entries from both sides of a merge.
+docs/AGENT_LOG.md merge=union

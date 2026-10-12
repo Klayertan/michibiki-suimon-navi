@@ -102,6 +102,8 @@ cloud_backend/
   migrations/              Alembic (see §7)
   tests/                   pytest suite (see §10)
   Dockerfile, docker-compose.yml, .env.example   local/VM run (see §8)
+  docker-compose.vps.yml, deploy/Caddyfile        single-VPS overlay: adds the
+                           Caddy reverse proxy (see SAKURA_CLOUD_DEPLOYMENT.md §4)
   requirements.txt, requirements-dev.txt
 ```
 
@@ -273,14 +275,27 @@ real network beyond `127.0.0.1`. See
 [SAKURA_CLOUD_DEPLOYMENT.md](SAKURA_CLOUD_DEPLOYMENT.md) for exactly what a
 human needs to create before this tier can be attempted.
 
-### 10.2 Docker Compose integration — written, NOT executed
+### 10.2 Docker Compose integration — verified locally (macOS), not yet on a VPS
 
-No Docker was available in this session's environment (`docker`/`docker
-compose` are not installed on this machine). `Dockerfile` and
-`docker-compose.yml` were written to a known-good, standard pattern
-(non-root user, single Uvicorn worker, Postgres health-checked before the
-API starts, migrations run automatically) but **never actually built or
-run**. This is the single largest unverified piece of this work.
+*As first written:* no Docker was available in the original development
+environment, so `Dockerfile` and `docker-compose.yml` were written to a
+standard pattern (non-root user, single Uvicorn worker, Postgres
+health-checked before the API starts, migrations run automatically) but never
+built or run.
+
+**Update 2026-10-08 (macOS, Docker Desktop 29.8, Python 3.12 image):**
+- `docker build` succeeds (357 MB image).
+- `docker compose up` starts PostgreSQL 16 and the API; `alembic upgrade
+  head` applies `0001_initial` against the real database and creates all seven
+  tables plus `alembic_version`.
+- `GET /api/health` returns 200. Idle memory with Caddy in front
+  (`docker-compose.vps.yml`): API ≈ 62 MiB, Caddy ≈ 15 MiB, PostgreSQL ≈ 82 MiB.
+- Production mode (`SUISUI_CLOUD_ENVIRONMENT=production`) behind Caddy:
+  `/docs` and `/openapi.json` return 404, registration returns 403 when closed,
+  and an unauthenticated `GET /api/fields` returns 401.
+
+Still **not** verified: anything on a real Sakura VPS (§10.1), and
+persistence/restart behaviour across a VPS reboot.
 
 ### 10.3 Real browser against the real API, real PostgreSQL substituted with SQLite — verified
 
@@ -316,12 +331,17 @@ by setting `SUISUI_CLOUD_TEST_DATABASE_URL` — this is exactly what CI's
 `integration` job does (§9), the only place the PostgreSQL-specific named
 `ON CONFLICT ON CONSTRAINT` path (and the registration cap's
 `pg_advisory_xact_lock` — see [AUTH_ARCHITECTURE.md](AUTH_ARCHITECTURE.md)
-§11) is exercised for real. Locally, only the SQLite tier was actually run
-and observed passing (107 passed, 1 skipped — the one skip is
+§11) is exercised for real. As first written, only the SQLite tier had been
+run (107 passed, 1 skipped — the one skip is
 `test_registration_limit_concurrency.py`'s PostgreSQL-only test, skipping
-itself cleanly with an explicit reason) — the PostgreSQL tier has not been
-executed anywhere yet, since it requires either Docker (unavailable) or the
-CI run this task was told not to trigger by pushing.
+itself cleanly with an explicit reason).
+
+**Update 2026-10-08:** the PostgreSQL tier was run locally against the
+`postgres:16-alpine` container: **108 passed, 0 skipped** (including the
+PostgreSQL-only concurrency test). After the `/api/health` contract change
+(`{"status":"ok","service":"sui-sui-navi-api"}`, three health tests) the
+current counts are **SQLite: 109 passed, 1 skipped** and **PostgreSQL: 110
+passed, 0 skipped**.
 
 ### 10.5 Frontend unit tests — verified
 
