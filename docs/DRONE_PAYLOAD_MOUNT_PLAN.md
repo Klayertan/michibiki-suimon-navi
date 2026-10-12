@@ -1,6 +1,6 @@
 # Drone payload mounts — 3D-print plan
 
-**Status:** plan with decisions recorded, 2026-10-12. Nothing is modelled, printed or tested yet.
+**Status:** first CAD draft exists, 2026-10-12, in [`hardware/drone-mounts/`](../hardware/drone-mounts/README.md). It was checked against Holybro's frame model on screen. Nothing is printed, fitted or drop-tested yet.
 **Goal (KAI):** 3D-printed mounts for the Holybro X500 V2 that hold the batteries, the Intel RealSense and the Jetson Orin Nano Super, and protect them in a fall from 3 m. Arms and propellers are allowed to break, because spares are on hand.
 
 > Every dimension and weight marked **(measure)** is from memory or an estimate. Measure the real part with calipers and a scale before modelling. Do not model from the numbers in this file.
@@ -83,17 +83,21 @@ The Jetson needs a regulated supply. Its barrel jack accepts a range that a 4S p
 
 ## 6a. Dimension sources
 
-| Part | Source | State |
+Read from the manufacturers' CAD files on 2026-10-12. The full table is in `hardware/drone-mounts/README.md`.
+
+| Part | Source | Result |
 |---|---|---|
-| X500 V2 frame | Holybro publishes `x500v2-frame.step` (about 23 MB) on its documentation site. Published figures: body plates 144 × 144 × 2 mm, 28 mm between plates, rails 10 mm diameter × 250 mm, landing gear 215 mm tall. | **Rail spacing and plate hole patterns must be read from the STEP file.** Not yet downloaded. |
-| Zeee 4S 3300 mAh | Seller listings: about 131–132 × 43–44 × 29 mm. | Check against the real pack. Packs swell with age. |
-| Jetson Orin Nano Super developer kit | NVIDIA: 100 × 79 × 21 mm. A STEP model is on the Jetson Download Center. | **Mounting-hole pattern not confirmed.** |
-| RealSense D435 | Intel datasheet: about 90 × 25 × 25 mm, two M3 on the back 45 mm apart. | Confirm from the datasheet before modelling. |
+| X500 V2 frame | Holybro `x500v2-frame.step` (docs.holybro.com) | Rails 60 mm apart, centred 13 mm below the bottom plate. Rails are 10 mm published but 9.4 mm in the model. Free M3 holes in the top plate at (±50, ±37) mm. |
+| Jetson Orin Nano developer kit | NVIDIA STEP model (Jetson Download Center) | Board 100 × 79 mm, four M2.5 holes on an 86 × 58 mm rectangle. |
+| Zeee 4S 3300 mAh | Seller listings | About 132 × 44 × 29 mm. **Not measured.** |
+| RealSense D435 | From memory of Intel's datasheet | About 90 × 25 × 25 mm, two M3 threads 45 mm apart. **Not confirmed.** |
 
-## 7. Suggested order of work
+## 7. Order of work
 
-1. Read the dimensions from the published STEP files (§6a), check the critical ones against the real parts with a ruler, and weigh the drone.
-2. Model one part first: the battery tray. It carries the highest risk.
-3. Print it, load it with a **dummy weight** of the same mass, and drop-test from 1 m, then 2 m, then 3 m onto grass and then onto a hard floor. **Never drop-test with a real LiPo.**
-4. Model the Jetson cradle and the camera guard the same way, tested with dummy weights.
-5. Fit everything, weigh, check the centre of gravity, then do a tethered or very low hover before any real flight.
+1. ~~Read the dimensions from the published CAD files.~~ Done.
+2. ~~Model the parts.~~ First draft done: battery tray, camera pod, Jetson deck, Jetson hoop.
+3. Check the real parts against the two unconfirmed rows in §6a, and check that the four top-plate holes are free on the real drone.
+4. Print a 15 mm slice of one tray hook first and test it on a rail. It costs minutes and proves the rail diameter and the snap fit.
+5. Print the battery tray. Load it with a **dummy weight** of the same mass and drop-test from 1 m, then 2 m, then 3 m, onto grass and then onto a hard floor. **Never drop-test with a real LiPo.**
+6. Print the camera pod, deck and hoop. Test them the same way with dummy weights.
+7. Fit everything, weigh the drone, check the centre of gravity, then do a tethered or very low hover before any real flight.
