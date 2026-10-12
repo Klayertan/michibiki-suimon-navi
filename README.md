@@ -110,6 +110,7 @@ flowchart TD
 | Android QZ1接続（RFCOMMブリッジ / localhost WebSocket） | 🚧 実装済み・実機未検証（[手順](docs/ANDROID_QZ1_CONNECTION.md)） |
 | BLE探索・QZ1LE用端末内プロファイル | 🚧 実装済み・実機未検証（[詳細](docs/QZ1LE_CONNECTIVITY.md)） |
 | iPhone/iPad向けQZ1LE接続（GNSS Analyzer経由） | ✅ 実装済み（案内表示のみ、直接接続は不可） |
+| 現在地マーカー（向きの扇形）とGNSS信号パネル（緑/橙/赤・スカイプロット・C/N0） | ✅ 実装済み・実機未検証（[詳細](docs/GNSS_LIVE_VIEW.md)） |
 | GNSS観測からの圃場境界作成 | ✅ 実装済み |
 | 圃場面積の算出 | ✅ 実装済み |
 | 水位の手入力記録（出典・時刻つき） | ✅ 実装済み |
@@ -141,6 +142,7 @@ flowchart TD
 | [`docs/PADDY_WATER_MANAGEMENT.md`](./docs/PADDY_WATER_MANAGEMENT.md) | 水管理モデルの詳細、生育ステージ表、計算、永続化 |
 | [`docs/RESEARCH_REFERENCES.md`](./docs/RESEARCH_REFERENCES.md) | 研究・技術資料の書誌情報、出典の確認状況、本プロジェクトでの解釈と限界 |
 | [`docs/SATELLITE_ASSURANCE.md`](./docs/SATELLITE_ASSURANCE.md) | Satellite Assuranceの計算根拠・データモデル |
+| [`docs/GNSS_LIVE_VIEW.md`](./docs/GNSS_LIVE_VIEW.md) | 現在地マーカー（向き表示）とGNSS信号パネル（良好=緑・スカイプロット・C/N0）の仕様・色の基準 |
 | [`docs/LEAFLET_TECHNIQUES.md`](./docs/LEAFLET_TECHNIQUES.md) | 地図実装の技術メモ |
 | [`docs/MAVLINK_OPERATOR_GUIDE.md`](./docs/MAVLINK_OPERATOR_GUIDE.md) | ドローン連携の運用手順・安全制限 |
 | [`docs/SAKURA_CLOUD_BACKEND.md`](./docs/SAKURA_CLOUD_BACKEND.md) | `cloud_backend/`（自前アカウント/圃場API）の構成・DBスキーマ・検証状況 |

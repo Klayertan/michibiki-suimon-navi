@@ -11,6 +11,7 @@
   <link rel="stylesheet" href="css/paddy-intelligence.css">
   <link rel="stylesheet" href="css/vegetation-intelligence.css">
   <link rel="stylesheet" href="css/recording.css">
+  <link rel="stylesheet" href="css/gnss-live.css">
   <link rel="stylesheet" href="css/field-annotation.css">
   <link rel="stylesheet" href="css/stage1-basic.css">
   <link rel="stylesheet" href="css/auth.css">
@@ -4731,6 +4732,10 @@
               <div class="metric"><span>HDOP</span><strong id="recHdopLabel">—</strong></div>
               <div class="metric"><span>最新Fixの経過</span><strong id="recLastFixAge">—</strong></div>
             </div>
+            <!-- GNSS Analyzer-style signal view: badge turns green when the
+                 signal is good, plus sky plot and per-satellite C/N0 bars.
+                 Rendered by js/gnss/gnss-signal-view.js. -->
+            <div id="gnssSignalPanel" aria-live="polite"></div>
           </section>
 
           <!-- Storage: everything that persists or exports this session's
@@ -5831,6 +5836,18 @@
     let liveLocationLayer = L.layerGroup().addTo(map);
     let liveLocationWatchId = null;
     let hasCenteredOnLiveLocation = false;
+    // GNSS live view (loaded lazily with the other modules): satellite tracker,
+    // signal panel, fix-quality classifier, heading helpers and marker markup.
+    // Everything that uses it tolerates null so the page works before it loads.
+    let gnssLive = null;
+    let liveMarker = null;
+    let liveCompassDegrees = null;
+    let liveCompassListening = false;
+    let liveCompassLastUpdateMs = 0;
+    let liveSource = "phone";
+    let lastLiveMotion = null;
+    let lastQz1PositionMs = 0;
+    const LIVE_QZ1_PRIORITY_MS = 5000;
     let lastSkippedCount = 0;
     let lastIgnoredCount = 0;
     let fieldData = DEFAULT_FIELD;
@@ -8808,7 +8825,9 @@
         className,
         radius: (tagged ? 6 : 4) + (emphasised ? 1 : 0),
         color: FEATURE_COLORS[point.feature],
-        fillColor: point.augmented ? "#15803d" : "#d97706",
+        // Green / orange / red by reported fix quality + geometry (HDOP,
+        // satellites), same grading as the live signal badge.
+        fillColor: gnssLive ? gnssLive.classifyFix(point).color : (point.augmented ? "#15803d" : "#d97706"),
         fillOpacity: emphasised ? 0.85 : 0.4,
         opacity: emphasised ? 0.95 : 0.45,
         weight: tagged ? 3 : (emphasised ? 2 : 1)
@@ -9147,6 +9166,10 @@
       locateButton.textContent = "📍 現在地を停止";
       locateButton.classList.add("active");
 
+      // Must start inside this click handler: iOS only shows its motion /
+      // compass permission prompt from a user gesture.
+      startLiveCompass();
+
       liveLocationWatchId = navigator.geolocation.watchPosition(
         (position) => {
           const lat = Number(position.coords.latitude);
@@ -9155,8 +9178,18 @@
           if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
             return;
           }
+          // A live QZ1 fix is the better position source: while it is
+          // streaming, the phone's own GPS does not move the blue dot.
+          if (Date.now() - lastQz1PositionMs < LIVE_QZ1_PRIORITY_MS) {
+            return;
+          }
 
-          renderLiveLocation(lat, lon, accuracy);
+          renderLiveLocation(lat, lon, accuracy, "phone", {
+            // Geolocation reports null (not NaN) when it has no heading/speed,
+            // and Number(null) would turn that into a false "heading 0".
+            courseDegrees: position.coords.heading ?? null,
+            speedMs: position.coords.speed ?? null
+          });
         },
         () => {
           showGpsMessage("現在地を取得できません — HTTPS（またはlocalhost）と位置情報の許可が必要です。");
@@ -9176,13 +9209,92 @@
         liveLocationWatchId = null;
       }
 
+      stopLiveCompass();
+      liveMarker = null;
+      lastLiveMotion = null;
       locateButton.textContent = "📍 現在地を表示";
       locateButton.classList.remove("active");
       liveLocationLayer.clearLayers();
     }
 
-    function renderLiveLocation(lat, lon, accuracy) {
+    // Facing for the blue marker: direction of travel while moving, the phone
+    // compass when standing still, no cone when neither is known.
+    function currentLiveHeading() {
+      if (!gnssLive) {
+        return null;
+      }
+      let motion = lastLiveMotion;
+      if (liveSource === "qz1") {
+        const snapshot = gnssLive.tracker.snapshot();
+        motion = { courseDegrees: snapshot.course, speedMs: gnssLive.knotsToMs(snapshot.speedKnots) };
+      }
+      return gnssLive.resolveHeading({
+        courseDegrees: motion?.courseDegrees,
+        speedMs: motion?.speedMs,
+        compassDegrees: liveCompassDegrees
+      });
+    }
+
+    function refreshLiveHeading() {
+      if (!liveMarker || !gnssLive) {
+        return;
+      }
+      gnssLive.setLocationMarkerHeading(liveMarker.getElement(), currentLiveHeading()?.degrees ?? null);
+    }
+
+    function handleLiveOrientation(event) {
+      if (!gnssLive) {
+        return;
+      }
+      const now = Date.now();
+      if (now - liveCompassLastUpdateMs < 100) {
+        return;
+      }
+      const raw = gnssLive.compassHeadingFromEvent(event, globalThis.screen?.orientation?.angle || 0);
+      if (raw === null) {
+        return;
+      }
+      liveCompassLastUpdateMs = now;
+      liveCompassDegrees = gnssLive.smoothHeading(liveCompassDegrees, raw);
+      refreshLiveHeading();
+    }
+
+    function startLiveCompass() {
+      if (liveCompassListening || typeof window === "undefined" || typeof DeviceOrientationEvent === "undefined") {
+        return;
+      }
+      const attach = () => {
+        // Android Chrome only reports an absolute (north-referenced) heading
+        // on deviceorientationabsolute; iOS reports it on deviceorientation
+        // as webkitCompassHeading.
+        window.addEventListener("deviceorientationabsolute", handleLiveOrientation, true);
+        window.addEventListener("deviceorientation", handleLiveOrientation, true);
+        liveCompassListening = true;
+      };
+      if (typeof DeviceOrientationEvent.requestPermission === "function") {
+        DeviceOrientationEvent.requestPermission().then((state) => {
+          if (state === "granted" && liveLocationWatchId !== null) {
+            attach();
+          }
+        }).catch(() => {});
+        return;
+      }
+      attach();
+    }
+
+    function stopLiveCompass() {
+      if (liveCompassListening) {
+        window.removeEventListener("deviceorientationabsolute", handleLiveOrientation, true);
+        window.removeEventListener("deviceorientation", handleLiveOrientation, true);
+        liveCompassListening = false;
+      }
+      liveCompassDegrees = null;
+    }
+
+    function renderLiveLocation(lat, lon, accuracy, source = "phone", motion = null) {
       liveLocationLayer.clearLayers();
+      liveSource = source;
+      lastLiveMotion = motion;
 
       if (Number.isFinite(accuracy)) {
         L.circle([lat, lon], {
@@ -9195,16 +9307,33 @@
         }).addTo(liveLocationLayer);
       }
 
-      L.circleMarker([lat, lon], {
-        radius: 8,
-        color: "#ffffff",
-        fillColor: "#1d4ed8",
-        fillOpacity: 1,
-        opacity: 1,
-        weight: 3
-      })
-        .bindTooltip("現在地", { direction: "top", offset: [0, -8] })
-        .addTo(liveLocationLayer);
+      const heading = currentLiveHeading();
+      const sourceLabel = source === "qz1" ? "QZ1" : "スマホGPS";
+      if (gnssLive) {
+        liveMarker = L.marker([lat, lon], {
+          icon: L.divIcon({
+            className: "loc-icon",
+            html: gnssLive.locationMarkerHtml({ heading: heading?.degrees ?? null }),
+            iconSize: [gnssLive.LOCATION_MARKER_SIZE, gnssLive.LOCATION_MARKER_SIZE],
+            iconAnchor: [gnssLive.LOCATION_MARKER_SIZE / 2, gnssLive.LOCATION_MARKER_SIZE / 2]
+          }),
+          keyboard: false,
+          zIndexOffset: 1000
+        })
+          .bindTooltip(`現在地（${sourceLabel}）${heading ? ` ${gnssLive.formatHeadingLabel(heading)}` : ""}`, { direction: "top", offset: [0, -14] })
+          .addTo(liveLocationLayer);
+      } else {
+        L.circleMarker([lat, lon], {
+          radius: 8,
+          color: "#ffffff",
+          fillColor: "#1d4ed8",
+          fillOpacity: 1,
+          opacity: 1,
+          weight: 3
+        })
+          .bindTooltip("現在地", { direction: "top", offset: [0, -8] })
+          .addTo(liveLocationLayer);
+      }
 
       syncLayerVisibility();
 
@@ -10419,6 +10548,12 @@
         line = line.slice(dollarIndex);
       }
 
+      gnssLive?.tracker.ingest(line);
+      if (gnssLive && liveSource === "qz1" && /^\$G[A-Z]RMC,/.test(line)) {
+        // RMC carries the course over ground and follows its GGA in each
+        // epoch, so the marker's facing is refreshed here, not only on a fix.
+        refreshLiveHeading();
+      }
       serialRawLines.push(line);
       serialTail.push(line);
       if (serialTail.length > SERIAL_TAIL_LINES) {
@@ -10439,12 +10574,23 @@
       if (isGgaShaped) {
         const parsed = parseNmea(line);
         noFix = parsed.noFix > 0;
+        if (noFix && gnssLive) {
+          gnssLive.latestFix = { fixQuality: 0, receivedAtMs: Date.now() };
+        }
         if (parsed.points.length === 1) {
           point = parsed.points[0];
           activePointSource = "ライブ記録";
           point.id = `live-${serialPointsAdded}`;
           serialPointsAdded += 1;
           parsedPoints.push(point);
+          if (gnssLive) {
+            gnssLive.latestFix = { fixQuality: point.fixQuality, hdop: point.hdop, satellites: point.satellites, receivedAtMs: Date.now() };
+          }
+          if (liveLocationWatchId !== null) {
+            // "現在地を表示" is on: the QZ1 fix drives the blue dot and its facing.
+            lastQz1PositionMs = Date.now();
+            renderLiveLocation(point.lat, point.lon, null, "qz1");
+          }
           // The current fix (quality, satellites, HDOP, age) is shown once,
           // in the ライブGNSS section, via recordingController.ingestSerialLine
           // below — not duplicated here.
@@ -10452,6 +10598,49 @@
         }
       }
       recordingController?.ingestSerialLine({ rawLine: line, looksLikeGga: isGgaShaped, point, noFix });
+    }
+
+    function refreshGnssSignalView() {
+      if (!gnssLive?.view || document.hidden) {
+        return;
+      }
+      const fix = gnssLive.latestFix;
+      gnssLive.view.update({
+        fix,
+        fixAgeMs: fix ? Date.now() - fix.receivedAtMs : null,
+        snapshot: gnssLive.tracker.snapshot()
+      });
+    }
+
+    async function initGnssLiveView() {
+      const [quality, tracker, heading, marker, signal] = await Promise.all([
+        import("./js/gnss/gnss-quality.js"),
+        import("./js/gnss/satellite-tracker.js"),
+        import("./js/gnss/heading.js"),
+        import("./js/gnss/location-marker.js"),
+        import("./js/gnss/gnss-signal-view.js")
+      ]);
+      const panel = document.getElementById("gnssSignalPanel");
+      gnssLive = {
+        classifyFix: quality.classifyFix,
+        tracker: new tracker.SatelliteTracker(),
+        resolveHeading: heading.resolveHeading,
+        knotsToMs: heading.knotsToMs,
+        smoothHeading: heading.smoothHeading,
+        compassHeadingFromEvent: heading.compassHeadingFromEvent,
+        formatHeadingLabel: heading.formatHeadingLabel,
+        locationMarkerHtml: marker.locationMarkerHtml,
+        setLocationMarkerHeading: marker.setLocationMarkerHeading,
+        LOCATION_MARKER_SIZE: marker.LOCATION_MARKER_SIZE,
+        view: panel ? signal.createGnssSignalView(panel) : null,
+        latestFix: null
+      };
+      refreshGnssSignalView();
+      setInterval(refreshGnssSignalView, 1000);
+      if (parsedPoints.length > 0) {
+        // Points loaded before this module arrived get the quality colours too.
+        renderPoints({ fit: false });
+      }
     }
 
     function scheduleLiveRender() {
@@ -11758,6 +11947,12 @@
         console.error("Vegetation Intelligence initialization failed", error);
         const warning = document.getElementById("vegImportMessage");
         if (warning) warning.textContent = `植生インテリジェンスを初期化できませんでした: ${error.message}`;
+      }
+      try {
+        await initGnssLiveView();
+      } catch (error) {
+        // Optional view: the map, recording and file import keep working.
+        console.error("GNSS live view initialization failed", error);
       }
       try {
         const { RecordingSessionController } = await import("./js/recording/recording-controller.js");

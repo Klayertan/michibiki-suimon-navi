@@ -1,0 +1,170 @@
+/* Blue "you are here" marker with a facing cone, and the GNSS Analyzer-style
+   live signal view (badge, sky plot, C/N0 bars). */
+
+.leaflet-div-icon.loc-icon,
+.loc-icon {
+  background: transparent;
+  border: 0;
+}
+
+.loc-marker {
+  height: 56px;
+  position: relative;
+  width: 56px;
+}
+
+.loc-cone {
+  height: 56px;
+  left: 0;
+  pointer-events: none;
+  position: absolute;
+  top: 0;
+  transform-origin: 50% 50%;
+  transition: transform 0.15s linear;
+  width: 56px;
+}
+
+.loc-marker--no-heading .loc-cone {
+  display: none;
+}
+
+.loc-dot {
+  background: #1d4ed8;
+  border: 3px solid #ffffff;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.25), 0 2px 6px rgba(15, 23, 42, 0.35);
+  height: 18px;
+  left: 19px;
+  position: absolute;
+  top: 19px;
+  width: 18px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loc-cone { transition: none; }
+}
+
+/* GNSS signal view */
+.gnss-signal {
+  display: grid;
+  gap: 10px;
+}
+
+.gnss-badge {
+  align-items: center;
+  border: 1px solid var(--line, #d7dee8);
+  border-radius: 12px;
+  display: flex;
+  gap: 12px;
+  padding: 10px 12px;
+}
+
+.gnss-badge-dot {
+  border-radius: 50%;
+  flex: none;
+  height: 22px;
+  width: 22px;
+}
+
+.gnss-badge-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.gnss-badge-label {
+  font-size: 1.05rem;
+}
+
+.gnss-badge-detail {
+  color: var(--muted, #64748b);
+  font-size: 0.8rem;
+}
+
+.gnss-badge--good { background: #dcfce7; border-color: #15803d; }
+.gnss-badge--good .gnss-badge-dot { background: #15803d; box-shadow: 0 0 0 4px rgba(21, 128, 61, 0.2); }
+.gnss-badge--fair { background: #fef3c7; border-color: #d97706; }
+.gnss-badge--fair .gnss-badge-dot { background: #d97706; box-shadow: 0 0 0 4px rgba(217, 119, 6, 0.2); }
+.gnss-badge--poor { background: #fee2e2; border-color: #b91c1c; }
+.gnss-badge--poor .gnss-badge-dot { background: #b91c1c; box-shadow: 0 0 0 4px rgba(185, 28, 28, 0.2); }
+.gnss-badge--none { background: #f1f5f9; border-color: #94a3b8; }
+.gnss-badge--none .gnss-badge-dot { background: #94a3b8; }
+.gnss-badge-label, .gnss-badge-detail { color: #0f172a; }
+.gnss-badge-detail { opacity: 0.75; }
+
+.gnss-summary,
+.gnss-legend {
+  margin: 0;
+}
+
+.gnss-plot-wrap {
+  display: flex;
+  justify-content: center;
+}
+
+.gnss-sky {
+  height: auto;
+  max-width: 240px;
+  width: 100%;
+}
+
+.gnss-sky-ring,
+.gnss-sky-axis {
+  fill: none;
+  stroke: #94a3b8;
+  stroke-width: 1;
+}
+
+.gnss-sky-axis { stroke-dasharray: 3 3; }
+
+.gnss-sky-label {
+  fill: #475569;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.gnss-sat-id {
+  fill: #ffffff;
+  font-size: 8px;
+  font-weight: 700;
+  paint-order: stroke;
+  pointer-events: none;
+  stroke: rgba(15, 23, 42, 0.55);
+  stroke-width: 2px;
+}
+
+.gnss-bars {
+  display: grid;
+  gap: 3px;
+}
+
+.gnss-bar-row {
+  align-items: center;
+  display: grid;
+  font-size: 0.72rem;
+  gap: 6px;
+  grid-template-columns: 82px 1fr 28px;
+}
+
+.gnss-bar-row--used .gnss-bar-name { font-weight: 800; }
+
+.gnss-bar-track {
+  background: #e2e8f0;
+  border-radius: 4px;
+  display: block;
+  height: 8px;
+  overflow: hidden;
+}
+
+.gnss-bar-fill {
+  border-radius: 4px;
+  display: block;
+  height: 100%;
+}
+
+.gnss-bar-value { text-align: right; }
+
+@media (prefers-color-scheme: dark) {
+  .gnss-bar-track { background: #334155; }
+  .gnss-sky-label { fill: #cbd5e1; }
+}
