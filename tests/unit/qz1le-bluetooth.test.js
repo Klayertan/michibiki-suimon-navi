@@ -362,6 +362,18 @@ test("a stale gattserverdisconnected listener from an already-torn-down device i
   assert.equal(transport.state, stateAfterDisconnect);
 });
 
+test("reconnecting after a GATT drop reuses the remembered device without a second picker", async () => {
+  const { characteristic, device, bluetooth } = makeWorkingStack();
+  const transport = new Qz1LeBluetoothTransport({ bluetooth, profile: CONFIGURED_PROFILE, isSecureContext: true });
+  await transport.connect();
+  device.dispatch("gattserverdisconnected", {});
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await transport.connect();
+  assert.equal(bluetooth.requestCalls.length, 1);
+  assert.equal(transport.state, "connected");
+  assert.equal(characteristic.notifying, true);
+});
+
 test("a line arriving mid-stream after a buffer overflow still calls onError once, not silently", async () => {
   const { characteristic, bluetooth } = makeWorkingStack();
   const errors = [];

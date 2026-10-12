@@ -4681,6 +4681,7 @@
               <div class="kv"><span>接続状態</span><strong><span id="serialStatus" class="serial-status">未接続</span></strong></div>
               <button id="serialConnectButton" class="panel-button primary" type="button">QZ1に接続</button>
               <p id="serialMessage" class="meta"></p>
+              <p id="bridgeConnectionStatus" class="meta" aria-live="polite" hidden></p>
               <ol id="serialFallbackSteps" class="meta fallback-steps" hidden>
                 <li>Playストアで「Serial Bluetooth Terminal」（Kai Morich製）をインストール</li>
                 <li>Android設定 → Bluetooth でQZ1をペアリング</li>
@@ -10230,6 +10231,11 @@
         } catch (error) {
           setConnectionState("error", "未接続", "");
           if (error.name === "NotFoundError") {
+            if (qz1AcquisitionUx?.platformKind === "android") {
+              setSerialMessage("Chromeのポート選択でQZ1が選ばれませんでした。Androidブリッジへの接続を試します。");
+              await toggleLocalBridgeConnection();
+              return;
+            }
             setSerialMessage(granted.length > 0
               ? "許可済みポートを開けず、新しいポートも選択されませんでした。QZ1の電源と、他のアプリがポートを使用していないかを確認してください。"
               : "ポートが選択されませんでした。");
@@ -10540,6 +10546,7 @@
     let bleExplorer = null;
     let bleExplorerApi = null;
     let bleExplorerCandidate = null;
+    let localBridgeTransport = null;
 
     async function refreshAndroidConnectionDiagnostics() {
       if (!androidDiagnosticsApi) androidDiagnosticsApi = await import("./js/recording/android-connection-diagnostics.js");
@@ -10675,6 +10682,65 @@
       setSerialMessage(`QZ1LEへの接続でエラーが発生しました: ${error?.message || error}`);
     }
 
+    async function toggleLocalBridgeConnection() {
+      if (localBridgeTransport && !["idle", "disconnected", "unsupported"].includes(localBridgeTransport.state)) {
+        localBridgeTransport.disconnect();
+        serialConnected = false;
+        activeGnssTransport = "serial";
+        deviceSourceSelect.disabled = false;
+        serialConnectButton.textContent = "QZ1に接続";
+        setConnectionState("disconnected", "未接続", "");
+        return;
+      }
+      if (!localBridgeTransport) {
+        const { LocalBridgeWebSocketTransport } = await import("./js/recording/local-bridge-websocket.js");
+        localBridgeTransport = new LocalBridgeWebSocketTransport({
+          onLine: (line) => handleSerialLine(line),
+          onError: () => {},
+          onStateChange: (state, detail) => {
+            const bridgeNote = document.getElementById("bridgeConnectionStatus");
+            bridgeNote.hidden = false;
+            if (state === "connecting") {
+              bridgeNote.textContent = "Androidブリッジに接続しています。初回はChromeのローカルネットワーク接続を許可してください。";
+              setConnectionState("requesting", "ブリッジ接続中…", "");
+            } else if (state === "bridge-not-running") {
+              serialConnected = false;
+              bridgeNote.textContent = "ブリッジアプリに接続できません。SuiSui QZ1 Bridgeを起動し、ペア設定済みQZ1を選択してください。再接続を続けています。";
+              setConnectionState("disconnected", "ブリッジ未接続", "error");
+            } else if (state === "bridge-connected") {
+              serialConnected = false;
+              activeGnssTransport = "bridge";
+              serialConnectButton.textContent = "切断";
+              serialConnectButton.className = "panel-button danger";
+              bridgeNote.textContent = "ブリッジに接続しました。QZ1が未接続の場合はブリッジアプリで端末を選んでください。";
+              setConnectionState("connected", "ブリッジ接続・QZ1待機", "success");
+            } else if (state === "qz1-connected") {
+              serialConnected = true;
+              activeGnssTransport = "bridge";
+              serialTransportLabel = `Androidブリッジ (${detail.deviceName || "QZ1"})`;
+              serialConnectButton.textContent = "切断";
+              serialConnectButton.className = "panel-button danger";
+              bridgeNote.textContent = `${detail.deviceName || "QZ1"} 接続中。NMEAを受信しています。`;
+              setConnectionState("connected", "受信中", "connected");
+              setSerialMessage("AndroidブリッジからNMEAを受信しています。既存のQZ1解析・記録パイプラインを使用します。");
+            } else if (state === "qz1-disconnected") {
+              serialConnected = false;
+              bridgeNote.textContent = "ブリッジアプリは動作中ですが、QZ1が未接続です。ブリッジアプリで再接続してください。";
+              setConnectionState("stalled", "QZ1未接続", "error");
+            } else if (state === "disconnected") {
+              serialConnected = false;
+              activeGnssTransport = "serial";
+              bridgeNote.hidden = true;
+              serialConnectButton.textContent = "QZ1に接続";
+              serialConnectButton.className = "panel-button primary";
+              setConnectionState("disconnected", "未接続", "");
+            }
+          }
+        });
+      }
+      localBridgeTransport.connect();
+    }
+
     async function startBleExplorer() {
       const list = document.getElementById("bleExplorerServices");
       const output = document.getElementById("bleExplorerData");
@@ -10774,6 +10840,8 @@
     async function handleDeviceConnectClick() {
       if (selectedDeviceSource() === "qz1-bluetooth") {
         await toggleBluetoothConnection();
+      } else if (qz1AcquisitionUx?.platformKind === "android" && !qz1AcquisitionUx.androidSerialAvailable) {
+        await toggleLocalBridgeConnection();
       } else {
         await toggleSerialConnection();
       }
@@ -10826,7 +10894,7 @@
       } else {
         // Serial source: respect initSerialCard()'s own unsupported-browser
         // disabling instead of unconditionally re-enabling it here.
-        serialConnectButton.disabled = !serialSupported;
+        serialConnectButton.disabled = !serialSupported && !(qz1AcquisitionUx?.platformKind === "android");
       }
       updateBluetoothStatusNote();
     }
