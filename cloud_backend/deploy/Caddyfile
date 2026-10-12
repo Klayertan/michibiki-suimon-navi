@@ -1,0 +1,34 @@
+# Caddy reverse proxy for the single-VPS deployment (docker-compose.vps.yml).
+#
+# What a reverse proxy is for: the API (Uvicorn) is a Python program that
+# should never be the thing facing the open Internet. Caddy sits in front,
+# accepts the public connection, and forwards each request to the API over the
+# private Docker network (`api` is the compose service name, resolved by
+# Docker's internal DNS). Later it is also what terminates HTTPS, so the Python
+# code never has to touch certificates.
+#
+# ARTICLE 1 — plain HTTP on port 80, no hostname.
+# A bare `:80` means "answer on port 80 for any Host header". That is the only
+# thing possible while the server has nothing but an IP address: a certificate
+# is issued for a *name*, never for a bare IP, so HTTPS cannot work yet.
+# Plain HTTP is acceptable for exactly one reason: /api/health carries no
+# secrets and registration is switched off (SUISUI_CLOUD_REGISTRATION_OPEN=false).
+# Do NOT put logins or farmer data over this until the HTTPS step below is done.
+#
+# TO ENABLE HTTPS (Article 3): replace `:80` with the real hostname, e.g.
+#
+#     api.example.jp {
+#         reverse_proxy api:8000
+#     }
+#
+# publish port 443 in docker-compose.vps.yml, and open 443 in the firewall.
+# Caddy then obtains and renews a Let's Encrypt certificate by itself and
+# redirects HTTP to HTTPS. Port 80 must stay reachable for that to work.
+
+:80 {
+	# One access-log line per request, to the container's output
+	# (`docker compose logs caddy`).
+	log
+
+	reverse_proxy api:8000
+}

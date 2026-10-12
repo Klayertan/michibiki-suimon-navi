@@ -62,6 +62,10 @@ hostname, or credential.
       HTTP-01 challenge and to redirect to HTTPS). **Do not open 5432**
       (PostgreSQL) to the internet — it must only be reachable from the API
       container/process on the same VM.
+      **Docker caveat (documented Docker behaviour, not yet observed on a
+      VPS):** ports published by Docker bypass `ufw`, so the Sakura packet
+      filter (which runs outside the VM) is the firewall to rely on. See the
+      comment at the top of `cloud_backend/docker-compose.vps.yml`.
 - [ ] **5. Obtain the public IP.** Sakura Cloud assigns one at VM creation;
       note it down — needed for step 6.
 - [ ] **6. Configure DNS**, on whatever DNS provider manages `sakura.ne.jp`
@@ -69,14 +73,16 @@ hostname, or credential.
       task does not know which DNS provider is in use and does not invent
       one): an **A record** for `api.suisuinavi.sakura.ne.jp` → the VM's
       public IP from step 5. This exact hostname is a **recommendation**,
-      not something already configured or verified reachable — see
-      [AUTH_ARCHITECTURE.md](AUTH_ARCHITECTURE.md) §4 for an open,
-      explicitly-unverified question about whether `sakura.ne.jp`'s Public
-      Suffix List status affects the cookie-domain design once this
-      hostname is live; test the actual login flow in a real browser after
-      DNS + HTTPS are up, specifically checking whether the session cookie
-      is set at all (dev tools → Application → Cookies) before assuming it
-      works.
+      not something already configured or verified reachable. Whether the
+      Rental Server's control panel lets you point a subdomain of its
+      initial domain at an *external* IP is **still unverified** — check the
+      DNS/zone settings there first. `sakura.ne.jp` **is** on the Public
+      Suffix List (private section, submitted by Sakura; checked 2026-10-08),
+      so `suisuinavi.sakura.ne.jp` is itself a "site"; see
+      [AUTH_ARCHITECTURE.md](AUTH_ARCHITECTURE.md) §4 for what that means for
+      the cookie design. After DNS + HTTPS are up, test the real login flow in
+      a browser and check the session cookie is actually set (dev tools →
+      Application → Cookies).
 - [ ] **7. Install Docker + Docker Compose on the VM** (`curl -fsSL
       https://get.docker.com | sh`, then the Docker Compose plugin — see
       Docker's own current install docs, since exact commands drift over
@@ -122,9 +128,24 @@ existing Rental Server pipeline.
   and renews certificates with essentially zero configuration (`api.suisuinavi.sakura.ne.jp
   { reverse_proxy localhost:8000 }` is close to a complete Caddyfile for
   this), which is why it's preferred over Nginx + separate certbot
-  wiring for a single-service VM like this one. This has not been set up
-  or tested — port 80 must be reachable for the HTTP-01 challenge
-  (checklist step 4) before Caddy can obtain a certificate.
+  wiring for a single-service VM like this one. The Caddy service and a
+  first `Caddyfile` now exist (`cloud_backend/docker-compose.vps.yml`,
+  `cloud_backend/deploy/Caddyfile`); run on a VPS with
+  `docker compose -f docker-compose.yml -f docker-compose.vps.yml up -d --build`.
+  The shipped `Caddyfile` is **HTTP-only on port 80** (a certificate needs a
+  hostname, not a bare IP) — switching it to HTTPS is a one-line change
+  documented in that file. It was exercised locally against the real API and
+  PostgreSQL, but **not on a VPS and not with a real certificate**. Port 80
+  must be reachable for the HTTP-01 challenge (checklist step 4) before Caddy
+  can obtain a certificate.
+- **Behind a proxy, the API must be told to trust it.** The login rate limiter
+  keys on client IP. Without `FORWARDED_ALLOW_IPS` (set in
+  `docker-compose.vps.yml`), Uvicorn ignores `X-Forwarded-For` from anything
+  but 127.0.0.1, so every visitor appears to come from Caddy's container
+  address (observed: `172.18.0.4` in the API access log) and all users would
+  share one rate-limit bucket. With the setting, the log shows the address
+  Caddy actually saw, and a client-supplied `X-Forwarded-For` is overwritten
+  by Caddy rather than trusted.
 - **Never disable certificate verification** anywhere in the stack (the
   frontend's `fetch()` calls, any server-to-server call this API might make
   in the future) — this was not done and must not be added as a

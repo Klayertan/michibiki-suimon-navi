@@ -116,7 +116,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/api/health", response_model=HealthResponse)
     async def health() -> HealthResponse:
-        return HealthResponse(status="ok", environment=settings.environment)
+        return HealthResponse()
 
     app.include_router(auth_router)
     app.include_router(fields_router)
