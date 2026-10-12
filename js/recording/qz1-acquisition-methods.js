@@ -14,7 +14,7 @@
 /** Device compatibility panel content, item-for-item what the app promises -- never more. */
 export const DEVICE_COMPATIBILITY_GUIDE = [
   { device: "Windows PC", route: "QZ1LE → Chrome / Edge → Bluetooth → SuiSuiNavi" },
-  { device: "Android", route: "QZ1LE → Chrome → Bluetooth → SuiSuiNavi" },
+  { device: "Android", route: "QZ1（Classic SPP）→ Chrome Web Serial（表示時）またはAndroidブリッジアプリ → SuiSuiNavi" },
   { device: "iPhone / iPad", route: "QZ1LE → GNSS Analyzer → NMEAログ → SuiSuiNavi" },
   { device: "USB対応PC", route: "QZ1 / QZ1LE → USB → Web Serial → SuiSuiNavi" }
 ];
@@ -90,6 +90,11 @@ export function decideQz1AcquisitionUx({
   const showBluetoothOption = Boolean(hasBluetooth) && !isIOS;
   const showIosFallback = isIOS;
   const showUnsupportedBrowserNotice = !isIOS && !showSerialOption && !showBluetoothOption;
+  const androidSerialAvailable = platformKind === "android" && showSerialOption;
+  const androidSerialUnavailableReason = platformKind === "android" && !showSerialOption
+    ? (isSecureContext === false ? "このページがHTTPSではないため、Web Serialを利用できません。"
+      : "このChromeではWeb Serialが公開されていません。AndroidブリッジアプリまたはBLE探索をお使いください。")
+    : "";
 
   let bluetoothState = "not-applicable";
   if (showBluetoothOption) {
@@ -108,6 +113,9 @@ export function decideQz1AcquisitionUx({
     showBluetoothOption,
     showIosFallback,
     showUnsupportedBrowserNotice,
+    case: isIOS ? "C" : platformKind === "android" ? (androidSerialAvailable ? "B-serial" : "B-bridge") : showSerialOption ? "A" : "D",
+    androidSerialAvailable,
+    androidSerialUnavailableReason,
     // NMEA file import is the one path that always works (item 8): flagged
     // here so the UI can point to it whenever neither live transport does.
     showFileImportReminder: showIosFallback || showUnsupportedBrowserNotice,

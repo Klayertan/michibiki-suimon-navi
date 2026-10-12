@@ -59,15 +59,24 @@ test("A. Windows / supported desktop Chromium: Bluetooth + Serial + (implicitly)
   assert.equal(ux.bluetoothConnectEnabled, true);
 });
 
-test("B. Android + Chrome/Web Bluetooth: Bluetooth + file, no Serial", () => {
+test("B. Android with Web Serial exposed: enable native RFCOMM candidate and Web Bluetooth", () => {
   const ux = decideQz1AcquisitionUx({
-    isSecureContext: true, hasSerial: false, hasBluetooth: true,
+    isSecureContext: true, hasSerial: true, hasBluetooth: true,
     platformKind: "android", bleProfile: CONFIGURED_PROFILE
   });
-  assert.equal(ux.showSerialOption, false);
+  assert.equal(ux.showSerialOption, true);
+  assert.equal(ux.androidSerialAvailable, true);
+  assert.equal(ux.case, "B-serial");
   assert.equal(ux.showBluetoothOption, true);
   assert.equal(ux.showIosFallback, false);
   assert.equal(ux.showUnsupportedBrowserNotice, false);
+});
+
+test("Android without Web Serial gives a specific bridge/explorer reason", () => {
+  const ux = decideQz1AcquisitionUx({ platformKind: "android", hasSerial: false, hasBluetooth: true });
+  assert.equal(ux.androidSerialAvailable, false);
+  assert.match(ux.androidSerialUnavailableReason, /ブリッジアプリ/);
+  assert.equal(ux.case, "B-bridge");
 });
 
 test("C. iPhone / iPad: no working Bluetooth button, GNSS Analyzer fallback shown instead", () => {

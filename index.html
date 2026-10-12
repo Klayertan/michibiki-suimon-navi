@@ -4606,11 +4606,19 @@
           <section class="rec-section">
             <h3 class="rec-section-title">デバイス<span class="en">Device</span></h3>
 
+            <details id="androidConnectionDiagnostics" class="rec-diagnostics-details">
+              <summary>Android接続診断 / Connection diagnostics</summary>
+              <p class="meta">Android Chromeで表示した状態を確認できます。個人情報は含めず、接続状態の値だけをコピーします。</p>
+              <button id="copyAndroidDiagnostics" class="panel-button" type="button">診断結果をコピー</button>
+              <pre id="androidDiagnosticsOutput" class="meta" style="white-space:pre-wrap;overflow-wrap:anywhere"></pre>
+              <p id="androidDiagnosticsCopyStatus" class="meta" aria-live="polite"></p>
+            </details>
+
             <details class="rec-diagnostics-details">
               <summary>端末別の接続方法<span class="en"> / By device</span></summary>
               <dl class="rec-compat-list">
                 <div><dt>Windows PC</dt><dd>QZ1LE → Chrome / Edge → Bluetooth → SuiSuiNavi</dd></div>
-                <div><dt>Android</dt><dd>QZ1LE → Chrome → Bluetooth → SuiSuiNavi</dd></div>
+                <div><dt>Android</dt><dd>QZ1（Classic SPP）→ Chrome Web Serial（表示時）またはAndroidブリッジ → SuiSuiNavi</dd></div>
                 <div><dt>iPhone / iPad</dt><dd>QZ1LE → GNSS Analyzer → NMEAログ → SuiSuiNavi</dd></div>
                 <div><dt>USB対応PC</dt><dd>QZ1 / QZ1LE → USB → Web Serial → SuiSuiNavi</dd></div>
               </dl>
@@ -10123,8 +10131,11 @@
           // Chrome/Edge hide navigator.serial entirely on insecure origins, so
           // this is the most common cause on LAN-hosted pages.
           setSerialMessage("Web Serial はHTTPSまたはlocalhostでのみ利用できます。このページを https:// または http://localhost で開き直してください。");
-        } else if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
-          setSerialMessage("このブラウザは Web Serial 非対応です（Android/iPhoneでは使えません）。スマホでは以下の手順でログを記録してアップロードしてください：");
+        } else if (/Android/i.test(navigator.userAgent)) {
+          setSerialMessage("このChromeではWeb Serialが公開されていません。AndroidブリッジアプリまたはBLE探索をご利用ください。下記はログファイルで取り込む場合の手順です。");
+          document.getElementById("serialFallbackSteps").hidden = false;
+        } else if (/iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+          setSerialMessage("このブラウザはWeb Serial非対応です。スマホでは以下の手順でログを記録してアップロードしてください：");
           document.getElementById("serialFallbackSteps").hidden = false;
         } else {
           setSerialMessage("このブラウザは Web Serial 非対応です。デスクトップ版の Chrome / Edge をご利用ください（USB接続・Bluetooth SPP仮想ポートの両方に対応します）。");
@@ -10517,6 +10528,32 @@
     let qz1leBleProfile = null;
     let qz1AcquisitionUx = null;
     let Qz1LeBluetoothErrorClass = null;
+    let androidDiagnosticsApi = null;
+
+    async function refreshAndroidConnectionDiagnostics() {
+      if (!androidDiagnosticsApi) androidDiagnosticsApi = await import("./js/recording/android-connection-diagnostics.js");
+      const data = await androidDiagnosticsApi.collectAndroidConnectionDiagnostics({
+        navigatorLike: navigator,
+        isSecureContext: window.isSecureContext,
+        decision: qz1AcquisitionUx
+      });
+      document.getElementById("androidDiagnosticsOutput").textContent = androidDiagnosticsApi.formatAndroidConnectionDiagnostics(data);
+    }
+
+    document.getElementById("androidConnectionDiagnostics")?.addEventListener("toggle", (event) => {
+      if (event.currentTarget.open) refreshAndroidConnectionDiagnostics().catch(() => {});
+    });
+    document.getElementById("copyAndroidDiagnostics")?.addEventListener("click", async () => {
+      const output = document.getElementById("androidDiagnosticsOutput");
+      const status = document.getElementById("androidDiagnosticsCopyStatus");
+      try {
+        if (!output.textContent) await refreshAndroidConnectionDiagnostics();
+        await navigator.clipboard.writeText(output.textContent);
+        status.textContent = "診断結果をコピーしました。";
+      } catch (error) {
+        status.textContent = "自動コピーできませんでした。表示された診断結果を長押ししてコピーしてください。";
+      }
+    });
 
     async function initQz1leBluetooth() {
       const [bluetoothApi, configApi, acquisitionApi] = await Promise.all([
