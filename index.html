@@ -10786,7 +10786,12 @@
               useProfile.disabled = true;
               useProfile.addEventListener("click", () => {
                 if (!bleExplorerCandidate || !bleExplorerApi.hasTwoValidNmeaSentences(bleExplorer.receivedLines)) return;
-                bleExplorerApi.saveRuntimeBleProfile(localStorage, { ...bleExplorerCandidate, deviceId: result.device.id });
+                const candidateConfirmed = bleExplorerApi.hasTwoValidNmeaSentences(bleExplorer.receivedLines);
+                bleExplorerApi.saveRuntimeBleProfile(localStorage, {
+                  ...bleExplorerCandidate,
+                  deviceId: result.device.id,
+                  verifiedDeviceId: candidateConfirmed ? result.device.id : ""
+                });
                 qz1leBleProfile = configApiForRuntimeProfile();
                 if (qz1leTransport) qz1leTransport.profile = qz1leBleProfile;
                 qz1AcquisitionUx = { ...qz1AcquisitionUx, bluetoothState: "configured-unverified", bluetoothConnectEnabled: true, bluetoothMessage: "このプロファイルはこの端末のローカル設定です。受信は端末ごとに確認されます。" };

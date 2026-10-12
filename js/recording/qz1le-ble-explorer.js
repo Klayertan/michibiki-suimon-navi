@@ -5,6 +5,7 @@ import { NmeaLineSplitter } from "./qz1le-bluetooth.js";
 export const BLE_EXPLORER_OPTIONAL_SERVICES = [
   "6e400001-b5a3-f393-e0a9-e50e24dcca9e", // Nordic UART
   "0000ffe0-0000-1000-8000-00805f9b34fb", // HM-10 family
+  "0000fff0-0000-1000-8000-00805f9b34fb", // common Telit / UART modules
   "49535343-fe7d-4ae5-8fa9-9fafd205e455", // Microchip transparent UART
   "0000ff00-0000-1000-8000-00805f9b34fb", // common UART bridge family
   "0000180a-0000-1000-8000-00805f9b34fb"  // Device Information
@@ -28,7 +29,8 @@ export function saveRuntimeBleProfile(storage, profile) {
     serviceUuid: String(profile?.serviceUuid || "").toLowerCase(),
     notifyCharacteristicUuid: String(profile?.notifyCharacteristicUuid || "").toLowerCase(),
     deviceName: String(profile?.deviceName || "").trim(),
-    deviceId: String(profile?.deviceId || "")
+    deviceId: String(profile?.deviceId || ""),
+    verifiedDeviceId: String(profile?.verifiedDeviceId || "")
   };
   if (!normalized.serviceUuid || !normalized.notifyCharacteristicUuid) throw new TypeError("BLE service and characteristic UUIDs are required");
   storage.setItem("suisui.qz1le.bleProfile", JSON.stringify(normalized));
@@ -83,6 +85,9 @@ export class Qz1LeBleExplorer {
     const serviceItem = this.services.find((entry) => entry.service.uuid === serviceUuid);
     const item = serviceItem?.characteristics.find((entry) => entry.characteristic.uuid === characteristicUuid);
     if (!item || !(item.characteristic.properties.notify || item.characteristic.properties.indicate)) throw new Error("Notify / Indicate対応キャラクタリスティックを選択してください。");
+    await this.stop();
+    this.splitter = new NmeaLineSplitter();
+    this.receivedLines = [];
     await item.characteristic.startNotifications();
     item.characteristic.addEventListener("characteristicvaluechanged", this._onValue);
     this.activeCharacteristic = item.characteristic;

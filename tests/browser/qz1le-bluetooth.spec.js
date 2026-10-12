@@ -225,7 +225,7 @@ test.describe("Android Chrome", () => {
     await expect(page.locator("#serialConnectButton")).toHaveText("QZ1LEに接続");
 
     await page.locator("#serialConnectButton").click();
-    await expect(page.locator("#serialStatus")).toHaveText("接続中（未検証）");
+    await expect(page.locator("#serialStatus")).toHaveText("接続中（未確認）");
 
     // Confirms requestDevice() was called with the REAL configured service --
     // never a guessed one.
