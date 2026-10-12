@@ -115,3 +115,29 @@ test("a fake SPP-style serial port streams NMEA through the shared pipeline", as
   await page.locator("#serialConnectButton").click();
   await expect(page.locator("#serialStatus")).toHaveText("未接続");
 });
+
+test("Android with Web Serial exposed offers the existing QZ1 serial route", async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(Navigator.prototype, "userAgent", {
+      configurable: true,
+      get: () => "Mozilla/5.0 (Linux; Android 14; Pixel 6a) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Mobile Safari/537.36"
+    });
+    const port = {
+      getInfo: () => ({}),
+      async open() {
+        this.readable = new ReadableStream({ start(controller) { controller.enqueue(new TextEncoder().encode("$GNGGA,012345.00,3439.2705,N,13549.8410,E,2,14,0.9,45.0,M,30.0,M,,*5C\r\n")); } });
+      },
+      async close() { await this.readable?.cancel(); }
+    };
+    const serial = { async getPorts() { return []; }, async requestPort() { return port; }, addEventListener() {} };
+    Object.defineProperty(Navigator.prototype, "serial", { configurable: true, get: () => serial });
+  });
+  await openSurveySerialCard(page);
+  await expect(page.locator("#serialConnectButton")).toBeEnabled();
+  await page.locator("#androidConnectionDiagnostics summary").click();
+  await expect(page.locator("#androidDiagnosticsOutput")).toContainText("acquisition decision: B-serial");
+  await page.locator("#serialConnectButton").click();
+  await expect(page.locator("#serialStatus")).toHaveText("接続中");
+  await expect(page.locator("#recFixQualityLabel")).toHaveText("2");
+  await page.locator("#serialConnectButton").click();
+});

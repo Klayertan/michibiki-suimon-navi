@@ -237,6 +237,14 @@ def test_mode_change_round_trip_matches_the_verified_hardware_test(connected) ->
 
 def test_vehicle_rejection_is_reported_never_swallowed(connected) -> None:
     _, service, link = connected
+    # Let the asynchronous connection bootstrap finish before arming this
+    # one-shot fault, or a startup telemetry command can consume the rejection.
+    assert wait_until(
+        lambda: sum(
+            entry["command"] == constants.MAV_CMD_SET_MESSAGE_INTERVAL
+            for entry in link.command_long_log
+        ) >= len(constants.ESSENTIAL_TELEMETRY_STREAMS)
+    )
     link.reject_next_commands(1)
 
     with pytest.raises(CommandRejected) as excinfo:
