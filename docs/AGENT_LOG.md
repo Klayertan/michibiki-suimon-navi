@@ -70,3 +70,11 @@ The running record of what changed in this project and why. Every agent appends 
 - **Why:** KAI printed both hook test pieces in PETG and reported that the 10 mm one fits the real rails. `RAIL_DIA = 10.0` in `mounts.py` is confirmed. Holybro's STEP file (9.4 mm) is wrong on this point.
 - **Verified:** First physical check of this design, by KAI. It confirms rail diameter and snap fit. KAI did not report on the 60 mm rail spacing separately, but the test piece spans both rails.
 - **Open / next:** Print the battery tray and drop-test it with a dummy weight. Battery and D435 sizes are still unconfirmed. `main` is pushed up to `f22ebd8`; this commit is not pushed.
+
+## 2026-10-12 — Session moved to the cloud; handoff file committed
+- **Agent:** Claude Code (Opus 5.5)
+- **Branch:** `feature/vps-article1-8ihyy7` (cloud copy of `feature/vps-article1`)
+- **What changed:** Committed `DRONE_WORK_HANDOFF.md` (context for the water-sensor side's AI). Added `.playwright-cli/` and `.wrangler/` to `.gitignore`. Dropped the desktop's "WIP" snapshot commit, which held only these plus local tool caches.
+- **Why:** Session moved from the desktop app to the cloud; the cloud stop hook asks for untracked files to be committed and pushed.
+- **Verified:** `git status` clean after commit. No code changed, so no tests run.
+- **Open / next:** Same as the previous entry: print and drop-test the battery tray, measure the battery and D435. KAI still to send the handoff file to the friend.
