@@ -1,0 +1,92 @@
+- generic [ref=e2]:
+  - banner [ref=e3]:
+    - generic [ref=e4]:
+      - generic [ref=e5]:
+        - generic [ref=e6]: 水
+        - heading "スイスイナビ みちびきで、水門判断をもっと確かに。" [level=1] [ref=e7]:
+          - text: スイスイナビ
+          - generic [ref=e8]: みちびきで、水門判断をもっと確かに。
+      - button "使い方" [ref=e10] [cursor=pointer]:
+        - generic [ref=e11]: "?"
+    - navigation "モード選択" [ref=e13]:
+      - button "基本モード 圃場を測る・水位を管理" [ref=e14] [cursor=pointer]:
+        - generic [ref=e15]: 🌾
+        - generic [ref=e16]: 基本モード
+        - generic [ref=e17]: 圃場を測る・水位を管理
+      - button "ドローンモード 登録済みの圃場を自動巡回" [ref=e18] [cursor=pointer]:
+        - generic [ref=e19]: 🚁
+        - generic [ref=e20]: ドローンモード
+        - generic [ref=e21]: 登録済みの圃場を自動巡回
+      - button "設定 その他の機能" [ref=e22] [cursor=pointer]:
+        - generic [ref=e23]: ⚙
+        - generic [ref=e24]: 設定
+        - generic [ref=e25]: その他の機能
+  - main [ref=e26]:
+    - generic [ref=e27]:
+      - generic [ref=e28]:
+        - generic:
+          - generic:
+            - generic [ref=e29]:
+              - button "Zoom in" [ref=e30] [cursor=pointer]: +
+              - button "Zoom out" [ref=e31] [cursor=pointer]: −
+            - generic [ref=e32]:
+              - link "Leaflet" [ref=e33] [cursor=pointer]:
+                - /url: https://leafletjs.com
+              - text: "| ©"
+              - link "OpenStreetMap" [ref=e38] [cursor=pointer]:
+                - /url: https://www.openstreetmap.org/copyright
+              - text: contributors
+      - group "背景地図" [ref=e39]:
+        - button "地図" [pressed] [ref=e40] [cursor=pointer]
+        - button "航空写真" [ref=e41] [cursor=pointer]
+      - generic [ref=e42]:
+        - strong [ref=e43]: 圃場はまだ登録されていません
+        - text: NMEAをアップロードしてください
+      - generic [ref=e44]:
+        - paragraph [ref=e45]: 水管理ポイント
+        - paragraph [ref=e46]: 先に圃場を登録してください。
+        - generic [ref=e47]:
+          - button "水門" [disabled] [ref=e48]
+          - button "給水口" [disabled] [ref=e49]
+          - button "排水口" [disabled] [ref=e50]
+          - button "水位センサ" [disabled] [ref=e51]
+          - button "撮影地点" [disabled] [ref=e52]
+    - complementary [ref=e53]:
+      - generic:
+        - generic [ref=e54]:
+          - generic [ref=e55]: 圃場の管理
+          - paragraph [ref=e56]: 登録済みの圃場を確認・選択し、新しい圃場を登録します。
+          - generic [ref=e57]: 圃場はまだ登録されていません
+        - generic [ref=e58]:
+          - generic [ref=e59]: 水管理
+          - heading "生育ステージに応じた水管理Water Management" [level=2] [ref=e60]
+          - paragraph [ref=e61]: 圃場を登録すると、生育ステージに応じた参考水深と必要水量を表示できます。
+          - paragraph [ref=e62]: ※ 参考水深は平年条件の目安であり、「最適な水深」ではありません。理論追加水量は圃場面積×水深差の幾何計算です。実際の必要用水量は、気象・土壌・浸透・排水・通水効率によって異なります。水門の操作は必ず人が行ってください。
+      - generic:
+        - text: ＋
+        - generic [ref=e63]:
+          - generic [ref=e64]: 圃場を登録する
+          - heading "QZ1データから圃場を作る" [level=2] [ref=e65]
+          - generic [ref=e66] [cursor=pointer]: NMEAをアップロード
+        - text: ＋
+        - group [ref=e67]:
+          - generic "登録済み圃場・測量ログRegistered fields & logs −" [ref=e68] [cursor=pointer]:
+            - generic [ref=e69]: 登録済み圃場・測量ログRegistered fields & logs
+            - text: −
+          - generic [ref=e70]:
+            - generic [ref=e71]:
+              - generic [ref=e72]:
+                - generic [ref=e73]: 圃場数
+                - strong [ref=e74]: "0"
+              - generic [ref=e75]:
+                - generic [ref=e76]: 境界トラック数
+                - strong [ref=e77]: "0"
+              - generic [ref=e78]:
+                - generic [ref=e79]: 水利ポイント数
+                - strong [ref=e80]: "0"
+              - generic [ref=e81]:
+                - generic [ref=e82]: 観察記録数
+                - strong [ref=e83]: "0"
+            - status
+            - paragraph [ref=e85]: まだ圃場データがありません。NMEAログをアップロードするか、地図上で圃場を登録してください。
+        - text: − ＋ − ＋ − − − 測量チェックを実行すると表示されます。 − − ＋ ＋ − ＋ − ＋ ＋ − ＋ ＋ ＋ ＋ ＋ − ＋ ＋ ＋

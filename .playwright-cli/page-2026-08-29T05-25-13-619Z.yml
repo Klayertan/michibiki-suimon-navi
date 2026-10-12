@@ -1,0 +1,138 @@
+- generic [ref=e2]:
+  - banner [ref=e3]:
+    - generic [ref=e4]:
+      - generic [ref=e5]:
+        - generic [ref=e6]: 水
+        - heading "スイスイナビ みちびきで、水門判断をもっと確かに。" [level=1] [ref=e7]:
+          - text: スイスイナビ
+          - generic [ref=e8]: みちびきで、水門判断をもっと確かに。
+      - generic [ref=e9]:
+        - generic [ref=e86]:
+          - generic [ref=e87]: 実証データ待機中
+          - button "選択中データの測位点を表示" [ref=e89] [cursor=pointer]
+        - button "使い方" [ref=e10] [cursor=pointer]:
+          - generic [ref=e11]: "?"
+    - navigation "モード選択" [ref=e13]:
+      - button "基本モード 圃場を測る・水位を管理" [ref=e14] [cursor=pointer]:
+        - generic [ref=e15]: 🌾
+        - generic [ref=e16]: 基本モード
+        - generic [ref=e17]: 圃場を測る・水位を管理
+      - button "ドローンモード 登録済みの圃場を自動巡回" [ref=e18] [cursor=pointer]:
+        - generic [ref=e19]: 🚁
+        - generic [ref=e20]: ドローンモード
+        - generic [ref=e21]: 登録済みの圃場を自動巡回
+      - button "設定 その他の機能" [active] [ref=e22] [cursor=pointer]:
+        - generic [ref=e23]: ⚙
+        - generic [ref=e24]: 設定
+        - generic [ref=e25]: その他の機能
+    - navigation "詳細・開発画面" [ref=e91]:
+      - button "判断デモ" [ref=e92] [cursor=pointer]
+      - button "QZ1測量" [ref=e93] [cursor=pointer]
+      - button "測量チェック" [ref=e94] [cursor=pointer]
+      - button "圃場データ" [ref=e95] [cursor=pointer]
+      - button "詳細解析" [ref=e96] [cursor=pointer]
+      - button "開発ツール" [ref=e97] [cursor=pointer]
+  - main [ref=e26]:
+    - generic [ref=e27]:
+      - generic [ref=e28]:
+        - generic:
+          - generic:
+            - generic [ref=e29]:
+              - button "Zoom in" [ref=e30] [cursor=pointer]: +
+              - button "Zoom out" [ref=e31] [cursor=pointer]: −
+            - generic [ref=e32]:
+              - link "Leaflet" [ref=e33] [cursor=pointer]:
+                - /url: https://leafletjs.com
+              - text: "| ©"
+              - link "OpenStreetMap" [ref=e38] [cursor=pointer]:
+                - /url: https://www.openstreetmap.org/copyright
+              - text: contributors
+      - group "背景地図" [ref=e39]:
+        - button "地図" [pressed] [ref=e40] [cursor=pointer]
+        - button "航空写真" [ref=e41] [cursor=pointer]
+      - generic [ref=e42]:
+        - strong [ref=e43]: QZ1ログが未読込です
+        - text: NMEAファイル（.nmea）をアップロードするか、測量JSONを読み込むと測位点が表示されます。
+    - complementary [ref=e53]:
+      - generic [ref=e98]:
+        - generic [ref=e99]:
+          - generic [ref=e100]: 対象圃場 / 使用データ
+          - heading "使用する圃場データを選ぶ" [level=2] [ref=e101]
+          - generic [ref=e102]:
+            - generic [ref=e103]: 対象圃場
+            - combobox "対象圃場" [ref=e104]:
+              - option "データを選択" [selected]
+              - option "校内実測サンプル"
+              - option "デモ（仮ジオメトリ・参考値）"
+          - generic [ref=e105]:
+            - generic [ref=e106]: 判断プロファイル
+            - combobox "判断プロファイル" [ref=e107]:
+              - option "一般水田管理" [selected]
+              - option "大雨前"
+              - option "中干し期間"
+              - option "水不足注意"
+              - option "収穫前"
+              - option "実験モード"
+          - paragraph [ref=e108]: まだ実測圃場データがありません。基本モードでNMEAログをアップロードし、圃場を登録してください。
+        - generic [ref=e109]:
+          - generic [ref=e110]: 今日の水門判断
+          - heading "気象と圃場の状況からの推奨" [level=2] [ref=e111]
+          - generic [ref=e112]: 圃場を登録すると、その圃場の水管理情報を表示できます。
+          - paragraph [ref=e113]: ※ 本アプリは判断支援です。最終判断と水門の操作は必ず人が行ってください。必要水量は圃場面積と水深から算出した目安で、浸透・漏水・蒸発・通水ロスは考慮していません。
+        - generic [ref=e58]:
+          - generic [ref=e59]: 水管理
+          - heading "生育ステージに応じた水管理Water Management" [level=2] [ref=e60]
+          - paragraph [ref=e61]: 圃場を登録すると、生育ステージに応じた参考水深と必要水量を表示できます。
+          - paragraph [ref=e62]: ※ 参考水深は平年条件の目安であり、「最適な水深」ではありません。理論追加水量は圃場面積×水深差の幾何計算です。実際の必要用水量は、気象・土壌・浸透・排水・通水効率によって異なります。水門の操作は必ず人が行ってください。
+      - generic [ref=e114]:
+        - generic [ref=e115]:
+          - heading "気象条件Weather" [level=2] [ref=e116]
+          - generic [ref=e117]:
+            - generic [ref=e118]: 自動取得
+            - strong [ref=e119]:
+              - generic [ref=e120]: 取得成功
+          - button "現在地の気象を自動取得（Open-Meteo）" [ref=e121] [cursor=pointer]
+          - generic "デモ用気象条件" [ref=e122]:
+            - button "開ける" [ref=e123] [cursor=pointer]
+            - button "様子見" [ref=e124] [cursor=pointer]
+            - button "閉める" [ref=e125] [cursor=pointer]
+            - button "元に戻す" [ref=e126] [cursor=pointer]
+          - paragraph [ref=e127]: デモ条件を選ぶと、判断ロジックをその場で確認できます。
+          - generic [ref=e128]:
+            - generic [ref=e129]: 直近24時間の降雨量 (mm)
+            - spinbutton "直近24時間の降雨量 (mm)" [ref=e130]: "2.5"
+          - generic [ref=e131]:
+            - generic [ref=e132]: 無降雨日数 (日)
+            - spinbutton "無降雨日数 (日)" [ref=e133]: "3"
+          - generic [ref=e134]:
+            - generic [ref=e135]: 今後24時間の降水確率 (%)
+            - spinbutton "今後24時間の降水確率 (%)" [ref=e136]: "73"
+          - paragraph [ref=e137]: "更新: 2026-08-29 05:24 UTC / 出典: Open-Meteo自動取得（34.65481, 135.83022）（値はここで上書きできます）"
+        - group [ref=e138]:
+          - generic "判断ルールThresholds ＋" [ref=e139] [cursor=pointer]:
+            - generic [ref=e140]: 判断ルールThresholds
+            - text: ＋
+        - generic [ref=e141]:
+          - heading "圃場・水門Field & gate" [level=2] [ref=e142]
+          - generic [ref=e143]:
+            - generic [ref=e144]: 圃場
+            - strong [ref=e145]: —
+          - generic [ref=e146]:
+            - generic [ref=e147]: 圃場面積
+            - strong [ref=e148]: —
+          - generic [ref=e149]:
+            - generic [ref=e150]: 境界データ
+            - strong [ref=e151]: 未設定（あと3点タグ付けが必要）
+          - generic [ref=e152]:
+            - generic [ref=e153]: 水路データ
+            - strong [ref=e154]: 未設定（あと2点タグ付けが必要）
+          - generic [ref=e155]:
+            - generic [ref=e156]: 水門位置
+            - strong [ref=e157]: —
+          - generic [ref=e158]:
+            - generic [ref=e159]: 位置ソース
+            - strong [ref=e160]: 未設定
+          - button "圃場データを書き出し (field.json)" [disabled] [ref=e161]
+          - paragraph [ref=e162]: "データ: data/*.json（静的JSON）を読込済み"
+          - paragraph [ref=e163]: 測位点を地図のポップアップで「圃場の角」「水路」「水門」にタグ付けすると、その場で境界線・水路・水門位置が描画されます。圃場の角は外周を歩いた順にタグ付けしてください（3点以上で境界線が描画されます）。
+        - text: ＋ − − ＋ − ＋ − − − 測量チェックを実行すると表示されます。 − − ＋ ＋ − ＋ − ＋ ＋ − ＋ ＋ ＋ ＋ ＋ − ＋ ＋ ＋

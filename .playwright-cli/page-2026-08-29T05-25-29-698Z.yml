@@ -1,0 +1,371 @@
+- generic [ref=e2]:
+  - banner [ref=e3]:
+    - generic [ref=e4]:
+      - generic [ref=e5]:
+        - generic [ref=e6]: 水
+        - heading "スイスイナビ みちびきで、水門判断をもっと確かに。" [level=1] [ref=e7]:
+          - text: スイスイナビ
+          - generic [ref=e8]: みちびきで、水門判断をもっと確かに。
+      - generic [ref=e9]:
+        - generic [ref=e86]:
+          - generic [ref=e87]: 実証データ待機中
+          - button "NMEAをアップロード" [ref=e164] [cursor=pointer]
+        - button "使い方" [ref=e10] [cursor=pointer]:
+          - generic [ref=e11]: "?"
+    - navigation "モード選択" [ref=e13]:
+      - button "基本モード 圃場を測る・水位を管理" [ref=e14] [cursor=pointer]:
+        - generic [ref=e15]: 🌾
+        - generic [ref=e16]: 基本モード
+        - generic [ref=e17]: 圃場を測る・水位を管理
+      - button "ドローンモード 登録済みの圃場を自動巡回" [ref=e18] [cursor=pointer]:
+        - generic [ref=e19]: 🚁
+        - generic [ref=e20]: ドローンモード
+        - generic [ref=e21]: 登録済みの圃場を自動巡回
+      - button "設定 その他の機能" [ref=e22] [cursor=pointer]:
+        - generic [ref=e23]: ⚙
+        - generic [ref=e24]: 設定
+        - generic [ref=e25]: その他の機能
+    - navigation "詳細・開発画面" [ref=e91]:
+      - button "判断デモ" [ref=e92] [cursor=pointer]
+      - button "QZ1測量" [ref=e93] [cursor=pointer]
+      - button "測量チェック" [ref=e94] [cursor=pointer]
+      - button "圃場データ" [ref=e95] [cursor=pointer]
+      - button "詳細解析" [ref=e96] [cursor=pointer]
+      - button "開発ツール" [ref=e97] [cursor=pointer]
+  - main [ref=e26]:
+    - generic [ref=e27]:
+      - generic [ref=e28]:
+        - generic:
+          - generic:
+            - generic [ref=e29]:
+              - button "Zoom in" [ref=e30] [cursor=pointer]: +
+              - button "Zoom out" [ref=e31] [cursor=pointer]: −
+            - generic [ref=e32]:
+              - link "Leaflet" [ref=e33] [cursor=pointer]:
+                - /url: https://leafletjs.com
+              - text: "| ©"
+              - link "OpenStreetMap" [ref=e38] [cursor=pointer]:
+                - /url: https://www.openstreetmap.org/copyright
+              - text: contributors
+      - group "背景地図" [ref=e39]:
+        - button "地図" [pressed] [ref=e40] [cursor=pointer]
+        - button "航空写真" [ref=e41] [cursor=pointer]
+      - generic [ref=e42]:
+        - strong [ref=e43]: QZ1ログが未読込です
+        - text: NMEAファイル（.nmea）をアップロードするか、測量JSONを読み込むと測位点が表示されます。
+    - complementary [ref=e53]:
+      - generic [ref=e114]:
+        - text: ＋ ＋ −
+        - group [ref=e165]:
+          - generic "水位・観察を記録Mark observation −" [ref=e166] [cursor=pointer]:
+            - generic [ref=e167]: 水位・観察を記録Mark observation
+            - text: −
+          - generic [ref=e168]:
+            - generic [ref=e169]:
+              - generic [ref=e170]: 観測タイプ
+              - combobox "観測タイプ" [ref=e171]:
+                - option "水位 / Water level" [selected]
+                - option "雑草 / Weed"
+                - option "生育ストレス候補 / Crop stress candidate"
+                - option "害虫被害の疑い / Suspected pest damage"
+                - option "病害の疑い / Suspected disease"
+                - option "取水・排水口の異常 / Inlet/outlet issue"
+                - option "畦の損傷 / Levee damage"
+                - option "その他 / Other"
+            - generic [ref=e172]:
+              - generic [ref=e173]: 水位 (cm・任意)
+              - spinbutton "水位 (cm・任意)" [ref=e174]
+            - generic [ref=e175]:
+              - generic [ref=e176]: 目標水位 (cm・任意)
+              - spinbutton "目標水位 (cm・任意)" [ref=e177]
+            - generic [ref=e178]:
+              - generic [ref=e179]: メモ
+              - textbox "メモ" [ref=e180]
+            - generic [ref=e181] [cursor=pointer]:
+              - text: 写真を撮影・添付（任意）
+              - button "写真を撮影・添付（任意）" [ref=e182]
+            - button "現在地を記録" [disabled] [ref=e183]
+            - status
+        - text: ＋ − ＋ − − − 測量チェックを実行すると表示されます。 − − ＋ ＋ − ＋ − ＋ ＋ − ＋ ＋ ＋ ＋ ＋
+        - group [ref=e184]:
+          - generic "圃場を測るField recording −" [ref=e185] [cursor=pointer]:
+            - generic [ref=e186]: 圃場を測るField recording
+            - text: −
+          - generic [ref=e187]:
+            - paragraph [ref=e188]: QZ1を持って圃場の外周を歩いてください。「記録開始」を押すまでデータは保存されません。
+            - generic [ref=e189]:
+              - checkbox "フィールド記録モード（スマホ向け・大きいボタン）" [ref=e190]
+              - text: フィールド記録モード（スマホ向け・大きいボタン）
+            - paragraph [ref=e279]: 未終了の記録セッションはありません。
+            - generic [ref=e193]:
+              - heading "デバイス Device" [level=3] [ref=e194]:
+                - text: デバイス
+                - generic [ref=e195]: Device
+              - generic [ref=e196]:
+                - generic [ref=e197]: ソース
+                - combobox "ソース" [ref=e198]:
+                  - option "QZ1（USB / Bluetooth SPP）" [selected]
+                  - option "QZ1（Bluetooth）— 準備中" [disabled]
+                  - option "ドローン — 準備中" [disabled]
+                  - option "NMEAファイル再生 — 準備中" [disabled]
+              - generic [ref=e199]:
+                - generic [ref=e200]: ボーレート（USB接続時のみ有効）
+                - combobox "ボーレート（USB接続時のみ有効）" [ref=e201]:
+                  - option "4800"
+                  - option "9600"
+                  - option "38400"
+                  - option "115200" [selected]
+              - generic [ref=e202]:
+                - generic [ref=e203]: 接続状態
+                - strong [ref=e204]:
+                  - generic [ref=e205]: 未接続
+              - button "QZ1に接続" [ref=e206] [cursor=pointer]
+              - paragraph [ref=e207]: QZ1をペアリング済みのPC（Chrome/Edge・HTTPSまたはlocalhost）で「QZ1に接続」を押し、シリアルポートを選択してください。USBポートも、Bluetooth Classic SPPの仮想シリアルポートも同じ一覧に表示されます。
+            - generic [ref=e208]:
+              - heading "記録 Recording" [level=3] [ref=e209]:
+                - text: 記録
+                - generic [ref=e210]: Recording
+              - generic [ref=e211]:
+                - generic [ref=e212]: 圃場名（省略時は選択中の圃場を使用）
+                - textbox "圃場名（省略時は選択中の圃場を使用）" [ref=e213]
+              - generic [ref=e214]:
+                - generic [ref=e215]:
+                  - text: "記録状態:"
+                  - strong [ref=e216]: 未記録
+                - generic [ref=e217]:
+                  - text: "セッションID:"
+                  - strong [ref=e218]: —
+                - generic [ref=e219]:
+                  - text: "経過時間:"
+                  - strong [ref=e220]: —
+              - generic [ref=e221]:
+                - button "記録開始" [ref=e222] [cursor=pointer]
+                - button "一時停止" [disabled] [ref=e223]
+                - button "記録再開" [disabled] [ref=e224]
+                - button "記録終了" [disabled] [ref=e225]
+              - status
+              - status [ref=e226]: Serial not connected. / シリアル未接続です。
+            - generic [ref=e227]:
+              - heading "ライブGNSS Live GNSS" [level=3] [ref=e228]:
+                - text: ライブGNSS
+                - generic [ref=e229]: Live GNSS
+              - generic [ref=e230]:
+                - generic [ref=e231]:
+                  - generic [ref=e232]: 緯度
+                  - strong [ref=e233]: —
+                - generic [ref=e234]:
+                  - generic [ref=e235]: 経度
+                  - strong [ref=e236]: —
+                - generic [ref=e237]:
+                  - generic [ref=e238]: Fix quality
+                  - strong [ref=e239]: —
+                - generic [ref=e240]:
+                  - generic [ref=e241]: 衛星数
+                  - strong [ref=e242]: —
+                - generic [ref=e243]:
+                  - generic [ref=e244]: HDOP
+                  - strong [ref=e245]: —
+                - generic [ref=e246]:
+                  - generic [ref=e247]: 最新Fixの経過
+                  - strong [ref=e248]: —
+            - generic [ref=e249]:
+              - heading "保存 Storage" [level=3] [ref=e250]:
+                - text: 保存
+                - generic [ref=e251]: Storage
+              - generic [ref=e252]:
+                - generic [ref=e253]:
+                  - generic [ref=e254]: 未保存の書き込み
+                  - strong [ref=e255]: "0"
+                - generic [ref=e256]:
+                  - generic [ref=e257]: 推定使用容量
+                  - strong [ref=e258]: 5.2 KB / 10.0 GB
+                - generic [ref=e259]:
+                  - generic [ref=e260]: このセッションの画像容量
+                  - strong: —
+                - generic [ref=e261]:
+                  - generic [ref=e262]: 最終保存
+                  - strong [ref=e263]: —
+              - generic [ref=e264]:
+                - button "生ログ (.nmea)" [ref=e265] [cursor=pointer]
+                - button "測位 (.csv)" [ref=e266] [cursor=pointer]
+                - button "セッション全体 (.json)" [ref=e267] [cursor=pointer]
+                - button "観測 (.csv)" [ref=e268] [cursor=pointer]
+                - button "観測 (.json)" [ref=e269] [cursor=pointer]
+              - generic [ref=e270]:
+                - button "接続ログを保存 (.nmea)" [disabled] [ref=e271]
+                - paragraph [ref=e272]: 記録セッションを開始していなくても、接続中に受信した生ログをここから保存できます。
+            - group [ref=e273]:
+              - generic "診断Diagnostics" [ref=e274] [cursor=pointer]
+        - group [ref=e275]:
+          - generic "QZ1 水位実験QZ1 water-level experiment −" [active] [ref=e280] [cursor=pointer]:
+            - generic [ref=e277]: QZ1 水位実験QZ1 water-level experiment
+            - text: −
+          - generic [ref=e281]:
+            - paragraph [ref=e282]:
+              - strong [ref=e283]: 実験機能です。
+              - text: GNSSの標高から水位変化を読み取れるかどうかを
+              - emphasis [ref=e284]: 調べるため
+              - text: の道具であり、 読み取れることを前提にした機能ではありません。 ここに出る数値は水深ではありません。ミリメートル精度は主張していません。
+            - generic [ref=e285]:
+              - heading "浮体センサ Float sensor" [level=3] [ref=e286]:
+                - text: 浮体センサ
+                - generic [ref=e287]: Float sensor
+              - paragraph [ref=e288]: センサは自分がどの圃場にあるかを知りません。スイスイナビが、登録済みの圃場ポリゴンと GNSS位置を照合して判定します。確定（割り当て）は人が一度だけ行います。
+              - generic [ref=e289]:
+                - generic [ref=e290]: センサID
+                - textbox "センサID" [ref=e291]:
+                  - /placeholder: QZ1-FLOAT-001
+                  - text: QZ1-FLOAT-001
+              - button "センサを登録" [ref=e293] [cursor=pointer]
+              - generic [ref=e294]:
+                - generic [ref=e295]: 状態
+                - strong [ref=e296]: 未登録・受信なし
+              - heading "GNSS" [level=4] [ref=e298]
+              - generic [ref=e299]:
+                - generic [ref=e300]: 緯度
+                - strong [ref=e301]: —
+              - generic [ref=e302]:
+                - generic [ref=e303]: 経度
+                - strong [ref=e304]: —
+              - generic [ref=e305]:
+                - generic [ref=e306]: 標高
+                - strong [ref=e307]: —
+              - generic [ref=e308]:
+                - generic [ref=e309]: 最終受信
+                - strong [ref=e310]: —
+              - heading "圃場Field" [level=4] [ref=e311]
+              - generic [ref=e312]:
+                - generic [ref=e313]: 検出圃場（自動）
+                - strong [ref=e314]: —（測位待ち）
+              - generic [ref=e315]:
+                - generic [ref=e316]: 検出一貫性Detection consistency
+                - strong [ref=e317]: 0%
+              - generic [ref=e318]:
+                - generic [ref=e319]: 判定に使ったサンプル
+                - strong [ref=e320]: 0 / 10 件
+              - generic [ref=e321]:
+                - generic [ref=e322]: 割り当て圃場（確定）
+                - strong [ref=e323]: —
+              - generic [ref=e324]:
+                - generic [ref=e325]: 割り当て状態
+                - strong [ref=e326]: 未割り当て
+              - generic [ref=e327]:
+                - button "この圃場に割り当てる" [disabled] [ref=e328]
+                - button "割り当てを解除" [disabled] [ref=e329]
+              - status
+              - group [ref=e330]:
+                - generic "検出の内訳（デバッグ）" [ref=e331] [cursor=pointer]
+            - generic [ref=e332]:
+              - heading "実験設定 Design" [level=3] [ref=e333]:
+                - text: 実験設定
+                - generic [ref=e334]: Design
+              - generic [ref=e335]:
+                - generic [ref=e336]: 実験ID
+                - textbox "実験ID" [ref=e337]:
+                  - /placeholder: vertical-displacement-001
+                  - text: vertical-displacement-2026-08-29
+              - generic [ref=e338]:
+                - generic [ref=e339]: 段階
+                - combobox "段階" [ref=e340]:
+                  - option "① 固定治具で受信機を上下（水なし）" [selected]
+                  - option "② 浮体ブイ（実水面・別途実測が必要）"
+              - generic [ref=e341]:
+                - generic [ref=e342]: 受信機
+                - combobox "受信機" [ref=e343]:
+                  - option "QZ1" [selected]
+                  - option "QZ1LE"
+              - generic [ref=e344]:
+                - generic [ref=e345]: 基準高さ (mm)
+                - textbox "基準高さ (mm)" [ref=e346]:
+                  - /placeholder: 0, 10, 20, 30, 50, 100
+                  - text: 0, 10, 20, 30, 50, 100
+              - generic [ref=e347]:
+                - generic [ref=e348]: 各段の滞在時間
+                - combobox "各段の滞在時間" [ref=e349]:
+                  - option "60 秒"
+                  - option "120 秒" [selected]
+                  - option "300 秒"
+              - generic [ref=e350]:
+                - generic [ref=e351]: 整定時間 (s・冒頭を除外)
+                - spinbutton "整定時間 (s・冒頭を除外)" [ref=e352]: "15"
+              - generic [ref=e353]:
+                - generic [ref=e354]: 許容誤差 (mm)
+                - spinbutton "許容誤差 (mm)" [ref=e355]: "10"
+              - generic [ref=e356]:
+                - checkbox "復路（下降）も測る — ドリフトの確認になります" [checked] [ref=e357]
+                - text: 復路（下降）も測る — ドリフトの確認になります
+              - paragraph [ref=e358]: 11 段（0 → 10 → 20 → 30 → 50 → 100 → 50 → 30 → 20 → 10 → 0 mm） ／ 滞在 120s・整定 15s ／ 移動時間を除く合計 約22分
+            - generic [ref=e359]:
+              - heading "実行 Run" [level=3] [ref=e360]:
+                - text: 実行
+                - generic [ref=e361]: Run
+              - paragraph [ref=e362]:
+                - text: 「QZ1に接続」で受信機がつながっている必要があります（上の「圃場を測る」カードと同じ接続を使います）。 各段は
+                - strong [ref=e363]: 「位置に到達」を押してから
+                - text: 時間を数え始めます。移動中のデータはどの段にも含めません。
+              - generic [ref=e364]:
+                - button "実験を開始" [ref=e365] [cursor=pointer]
+                - button "位置に到達" [disabled] [ref=e366]
+                - button "この段を早めに終える" [disabled] [ref=e367]
+                - button "中止" [disabled] [ref=e368]
+              - generic [ref=e369]:
+                - generic [ref=e370]: 状態
+                - strong [ref=e371]: 未開始
+              - generic [ref=e372]:
+                - generic [ref=e373]: いま置くべき高さ
+                - strong [ref=e374]: —
+              - generic [ref=e375]:
+                - generic [ref=e376]: 残り時間
+                - strong [ref=e377]: —
+              - generic [ref=e378]:
+                - generic [ref=e379]: 進捗
+                - strong [ref=e380]: —
+              - generic [ref=e381]:
+                - generic [ref=e382]: サンプル数
+                - strong [ref=e383]: —
+              - status
+            - generic [ref=e384]:
+              - heading "ライブ表示 Live" [level=3] [ref=e385]:
+                - text: ライブ表示
+                - generic [ref=e386]: Live
+              - generic [ref=e387]:
+                - generic [ref=e388]: Fix
+                - strong [ref=e389]: —
+              - generic [ref=e390]:
+                - generic [ref=e391]: 衛星数
+                - strong [ref=e392]: —
+              - generic [ref=e393]:
+                - generic [ref=e394]: HDOP
+                - strong [ref=e395]: —
+              - generic [ref=e396]:
+                - generic [ref=e397]: ① 生のGNSS標高
+                - strong [ref=e398]: —
+              - generic [ref=e399]:
+                - generic [ref=e400]: 基準（0mm）の標高
+                - strong [ref=e401]: 未取得（0mm の段が未完了）
+              - generic [ref=e402]:
+                - generic [ref=e403]: ② 相対変位（水深ではありません）
+                - strong [ref=e404]: —
+              - generic [ref=e405]:
+                - generic [ref=e406]: ③ 較正済み水深
+                - strong [ref=e407]: 表示できません
+              - paragraph [ref=e408]: 較正がありません / no calibration
+            - generic [ref=e409]:
+              - heading "解析 Analysis" [level=3] [ref=e410]:
+                - text: 解析
+                - generic [ref=e411]: Analysis
+              - generic [ref=e412]:
+                - generic [ref=e413]: フィルタ
+                - combobox "フィルタ" [ref=e414]:
+                  - option "none" [selected]
+                  - option "valid-fix-only"
+                  - option "standard-quality-gate"
+                  - option "quality-gate-then-median-15"
+              - paragraph [ref=e415]: フィルタは結果と一緒に必ず記録されます。生データは書き換えません。 平滑化は見た目のばらつきを減らしますが、統計的な検出力は上がりません（有効サンプル数が減ります）。
+              - generic [ref=e416]:
+                - button "解析する" [disabled] [ref=e417]
+                - button "CSV・メタデータを保存" [disabled] [ref=e418]
+                - button "レポート(HTML)" [disabled] [ref=e419]
+                - button "解析結果(JSON)" [disabled] [ref=e420]
+              - paragraph [ref=e421]
+        - text: ＋ ＋
