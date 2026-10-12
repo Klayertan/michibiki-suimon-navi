@@ -62,3 +62,11 @@ The running record of what changed in this project and why. Every agent appends 
 - **Why:** KAI confirmed the Pixhawk 6C stays on the top plate under the Jetson deck and that its connectors face sideways. The deck design stands as it is.
 - **Verified:** Nothing new. Still not checked on the real board with cables.
 - **Open / next:** KAI is printing the two hook test pieces and will report which rail size fits. Not pushed.
+
+## 2026-10-12 — Hook test result: rails are 10 mm
+- **Agent:** Claude Code (Opus 5.5)
+- **Branch:** `docs/agent-handoff`, fast-forwarded into `main` and merged into `feature/vps-article1`
+- **What changed:** README and plan updated with the result. No geometry changed.
+- **Why:** KAI printed both hook test pieces in PETG and reported that the 10 mm one fits the real rails. `RAIL_DIA = 10.0` in `mounts.py` is confirmed. Holybro's STEP file (9.4 mm) is wrong on this point.
+- **Verified:** First physical check of this design, by KAI. It confirms rail diameter and snap fit. KAI did not report on the 60 mm rail spacing separately, but the test piece spans both rails.
+- **Open / next:** Print the battery tray and drop-test it with a dummy weight. Battery and D435 sizes are still unconfirmed. `main` is pushed up to `f22ebd8`; this commit is not pushed.
