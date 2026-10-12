@@ -4661,6 +4661,14 @@
                    profile is configured/verified is actionable status, not
                    compact-field-mode trivia like the baud rate below. -->
               <p id="bluetoothStatusNote" class="meta" hidden></p>
+              <details id="bleExplorerPanel" class="rec-diagnostics-details">
+                <summary>BLE探索 / BLE explorer</summary>
+                <p class="meta">UUIDを推測せず、公開されているGATTサービスとNotify / Indicateデータを確認します。青いQZ1がBLEを公開しない場合は、BLE接続は利用できません。</p>
+                <button id="bleExplorerStart" class="panel-button" type="button">BLE機器を探索</button>
+                <p id="bleExplorerStatus" class="meta" aria-live="polite">未探索</p>
+                <div id="bleExplorerServices"></div>
+                <pre id="bleExplorerData" class="meta" style="white-space:pre-wrap;overflow-wrap:anywhere;max-height:14em;overflow:auto"></pre>
+              </details>
               <div id="baudRow" class="input-row rec-secondary">
                 <label for="baudSelect">ボーレート（USB接続時のみ有効）</label>
                 <select id="baudSelect" class="baud-select">
@@ -10529,6 +10537,9 @@
     let qz1AcquisitionUx = null;
     let Qz1LeBluetoothErrorClass = null;
     let androidDiagnosticsApi = null;
+    let bleExplorer = null;
+    let bleExplorerApi = null;
+    let bleExplorerCandidate = null;
 
     async function refreshAndroidConnectionDiagnostics() {
       if (!androidDiagnosticsApi) androidDiagnosticsApi = await import("./js/recording/android-connection-diagnostics.js");
@@ -10556,12 +10567,29 @@
     });
 
     async function initQz1leBluetooth() {
-      const [bluetoothApi, configApi, acquisitionApi] = await Promise.all([
+      const [bluetoothApi, configApi, acquisitionApi, explorerApi] = await Promise.all([
         import("./js/recording/qz1le-bluetooth.js"),
         import("./js/recording/qz1le-ble-config.js"),
-        import("./js/recording/qz1-acquisition-methods.js")
+        import("./js/recording/qz1-acquisition-methods.js"),
+        import("./js/recording/qz1le-ble-explorer.js")
       ]);
       Qz1LeBluetoothErrorClass = bluetoothApi.Qz1LeBluetoothError;
+      bleExplorerApi = explorerApi;
+      bleExplorer = new explorerApi.Qz1LeBleExplorer({
+        onState: (state) => { document.getElementById("bleExplorerStatus").textContent = state; },
+        onError: (error) => { document.getElementById("bleExplorerStatus").textContent = `探索エラー: ${error.message}`; },
+        onData: (payload) => {
+          const output = document.getElementById("bleExplorerData");
+          output.textContent = `${payload.line}\nASCII: ${payload.ascii}\nHEX: ${payload.hex}\n${payload.nmeaCandidate ? "NMEA候補（チェックサム有効文を2文以上受信）" : "NMEA候補を確認中"}\n\n${output.textContent}`.slice(0, 8000);
+          if (payload.nmeaCandidate && bleExplorerCandidate) {
+            const saved = explorerApi.readRuntimeBleProfile(localStorage);
+            if (saved) localStorage.setItem("suisui.qz1le.bleProfile", JSON.stringify({ ...saved, verifiedDeviceId: bleExplorer.device?.id || "" }));
+            document.getElementById("bleExplorerStatus").textContent = "この端末でNMEA受信を確認";
+          }
+          bleExplorer?.onDataCandidate?.();
+        }
+      });
+      document.getElementById("bleExplorerStart")?.addEventListener("click", startBleExplorer);
       qz1leBleProfile = configApi.readQz1LeBleProfile(window);
       const platformKind = acquisitionApi.detectPlatformKind({
         userAgent: navigator.userAgent,
@@ -10601,8 +10629,12 @@
           serialConnectButton.textContent = "切断";
           serialConnectButton.className = "panel-button danger";
           deviceSourceSelect.disabled = true;
-          setConnectionState("connected", "接続中（未検証）", "success");
-          setSerialMessage("QZ1LEに接続しました。この接続は実機での動作が確認されていません。測位点が表示されない場合はQZ1（USB / Bluetooth SPP）またはNMEAファイルの読み込みをお試しください。");
+          const savedBleProfile = bleExplorerApi?.readRuntimeBleProfile(localStorage);
+          const bleSeenOnThisDevice = Boolean(savedBleProfile?.verifiedDeviceId && savedBleProfile.verifiedDeviceId === qz1leTransport?.device?.id);
+          setConnectionState("connected", bleSeenOnThisDevice ? "この端末でNMEA受信を確認" : "接続中（未確認）", "success");
+          setSerialMessage(bleSeenOnThisDevice
+            ? "この端末でチェックサム有効なNMEA文の受信を確認済みです。"
+            : "接続しましたが、この端末でNMEA文をまだ確認していません。BLE探索で受信データを確認してください。");
           break;
         case "disconnecting":
           setConnectionState("disconnecting", "切断中", "");
@@ -10641,6 +10673,79 @@
         return;
       }
       setSerialMessage(`QZ1LEへの接続でエラーが発生しました: ${error?.message || error}`);
+    }
+
+    async function startBleExplorer() {
+      const list = document.getElementById("bleExplorerServices");
+      const output = document.getElementById("bleExplorerData");
+      list.replaceChildren();
+      output.textContent = "";
+      try {
+        const result = await bleExplorer.discover();
+        if (!result.services.length) {
+          document.getElementById("bleExplorerStatus").textContent = "アクセス可能なGATTサービスがありません。青いQZ1がBLE GATTを公開していない可能性があり、この場合BLEは接続手段になりません。Androidブリッジアプリをご利用ください。";
+          return;
+        }
+        for (const entry of result.services) {
+          const section = document.createElement("section");
+          const heading = document.createElement("p");
+          heading.className = "meta";
+          heading.textContent = `Service ${entry.service.uuid}`;
+          section.append(heading);
+          for (const item of entry.characteristics) {
+            const row = document.createElement("div");
+            row.className = "rec-connection-note";
+            const label = document.createElement("p");
+            const properties = Object.entries(item.properties).filter(([, enabled]) => enabled).map(([name]) => name).join(", ") || "properties unavailable";
+            label.textContent = `Characteristic ${item.characteristic.uuid} (${properties})`;
+            row.append(label);
+            if (item.characteristic.properties.notify || item.characteristic.properties.indicate) {
+              const subscribe = document.createElement("button");
+              subscribe.type = "button";
+              subscribe.className = "panel-button";
+              subscribe.textContent = "受信を購読";
+              subscribe.addEventListener("click", async () => {
+                try {
+                  bleExplorerCandidate = await bleExplorer.subscribe(entry.service.uuid, item.characteristic.uuid);
+                  document.getElementById("bleExplorerStatus").textContent = `${result.device.name || "BLE機器"} の受信を購読中。チェックサム有効なNMEA文を2文以上受信すると保存できます。`;
+                  useProfile.disabled = true;
+                } catch (error) {
+                  document.getElementById("bleExplorerStatus").textContent = `購読できませんでした: ${error.message}`;
+                }
+              });
+              const useProfile = document.createElement("button");
+              useProfile.type = "button";
+              useProfile.className = "panel-button";
+              useProfile.textContent = "このプロファイルを使う";
+              useProfile.disabled = true;
+              useProfile.addEventListener("click", () => {
+                if (!bleExplorerCandidate || !bleExplorerApi.hasTwoValidNmeaSentences(bleExplorer.receivedLines)) return;
+                bleExplorerApi.saveRuntimeBleProfile(localStorage, { ...bleExplorerCandidate, deviceId: result.device.id });
+                qz1leBleProfile = configApiForRuntimeProfile();
+                if (qz1leTransport) qz1leTransport.profile = qz1leBleProfile;
+                qz1AcquisitionUx = { ...qz1AcquisitionUx, bluetoothState: "configured-unverified", bluetoothConnectEnabled: true, bluetoothMessage: "このプロファイルはこの端末のローカル設定です。受信は端末ごとに確認されます。" };
+                document.getElementById("bleExplorerStatus").textContent = "プロファイルをこの端末に保存しました。";
+                syncDeviceSourceUi();
+              });
+              section.append(subscribe, useProfile);
+              bleExplorer.onDataCandidate = () => { useProfile.disabled = !bleExplorerApi.hasTwoValidNmeaSentences(bleExplorer.receivedLines); };
+            }
+            section.append(row);
+            list.append(section);
+          }
+        }
+      } catch (error) {
+        document.getElementById("bleExplorerStatus").textContent = `探索できませんでした: ${error.message}`;
+      }
+    }
+
+    function configApiForRuntimeProfile() {
+      return {
+        ...bleExplorerApi.readRuntimeBleProfile(localStorage),
+        configured: true,
+        reason: null,
+        deviceNamePrefix: bleExplorerApi.readRuntimeBleProfile(localStorage)?.deviceName || "QZ1LE"
+      };
     }
 
     async function toggleBluetoothConnection() {

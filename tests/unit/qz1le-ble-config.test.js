@@ -66,6 +66,16 @@ test("readQz1LeBleProfile reads off a global scope, defaulting safely when unset
   assert.equal(profile.configured, true);
 });
 
+test("a device-local runtime profile is read only when committed config is unset", () => {
+  const runtime = { getItem: () => JSON.stringify({ serviceUuid: "180d", notifyCharacteristicUuid: "2a37", deviceName: "receiver", deviceId: "local-id" }) };
+  const fromRuntime = readQz1LeBleProfile({ localStorage: runtime });
+  assert.equal(fromRuntime.source, "device-local");
+  assert.equal(fromRuntime.deviceId, "local-id");
+  const committed = readQz1LeBleProfile({ SUISUI_QZ1LE_BLE_PROFILE: { serviceUuid: "180f", notifyCharacteristicUuid: "2a19" }, localStorage: runtime });
+  assert.equal(committed.serviceUuid, "180f");
+  assert.equal(committed.source, undefined);
+});
+
 test("unconfiguredQz1LeReasonText gives a distinct, non-empty message per reason", () => {
   const missing = unconfiguredQz1LeReasonText("missing");
   const service = unconfiguredQz1LeReasonText("service");

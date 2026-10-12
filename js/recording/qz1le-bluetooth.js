@@ -115,6 +115,7 @@ export class Qz1LeBluetoothTransport {
     this.onError = onError;
 
     this.device = null;
+    this.lastDevice = null;
     this.characteristic = null;
     this.splitter = new NmeaLineSplitter();
     this.state = "idle";
@@ -158,6 +159,14 @@ export class Qz1LeBluetoothTransport {
       throw error;
     }
 
+    let rememberedDevice = this.lastDevice;
+    if (!rememberedDevice && this.profile.deviceId && this.bluetooth?.getDevices) {
+      try {
+        rememberedDevice = (await this.bluetooth.getDevices()).find((device) => device.id === this.profile.deviceId) || null;
+      } catch {}
+    }
+    if (rememberedDevice) return this._connectToDevice(rememberedDevice);
+
     this._setState("requesting");
     const filter = { services: [this.profile.serviceUuid] };
     if (this.profile.deviceNamePrefix) {
@@ -179,6 +188,7 @@ export class Qz1LeBluetoothTransport {
 
   async _connectToDevice(device) {
     this.device = device;
+    this.lastDevice = device;
     this.device.addEventListener?.("gattserverdisconnected", this._handleGattDisconnected);
     this._setState("connecting");
     try {
@@ -234,6 +244,7 @@ export class Qz1LeBluetoothTransport {
   }
 
   async _teardown() {
+    if (this.device) this.lastDevice = this.device;
     try {
       this.characteristic?.removeEventListener("characteristicvaluechanged", this._handleValueChanged);
       await this.characteristic?.stopNotifications?.();

@@ -28,6 +28,18 @@ test("a sentence split across two notifications (byte-chunk boundary) is reassem
   assert.deepEqual(second.lines, ["$GNGGA,012345.00,N*7C"]);
 });
 
+test("several realistic 20-byte BLE notification chunks reassemble full NMEA lines", () => {
+  const splitter = new NmeaLineSplitter();
+  const stream = "$GNGGA,123519,4807.038,N,01131.000,E,2,12,0.8,545.4,M,46.9,M,,*47\r\n$GNRMC,123519,A,4807.038,N,01131.000,E,0.0,0.0,230394,,,A*6A\r\n";
+  const bytes = new TextEncoder().encode(stream);
+  const received = [];
+  for (let offset = 0; offset < bytes.length; offset += 20) received.push(...splitter.push(bytes.slice(offset, offset + 20)).lines);
+  assert.equal(received.length, 2);
+  assert.ok(received[0].startsWith("$GNGGA,"));
+  assert.ok(received[1].startsWith("$GNRMC,"));
+  assert.equal(splitter.buffer, "");
+});
+
 test("a chunk boundary landing exactly on the line terminator still completes the line", () => {
   const splitter = new NmeaLineSplitter();
   splitter.push("$GNGGA,1*00\r\n");

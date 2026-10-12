@@ -51,12 +51,25 @@ export function normalizeQz1LeBleProfile(raw) {
   if (!notifyCharacteristicUuid) {
     return { serviceUuid, notifyCharacteristicUuid: null, deviceNamePrefix, configured: false, reason: "characteristic" };
   }
-  return { serviceUuid, notifyCharacteristicUuid, deviceNamePrefix, configured: true, reason: null };
+  return { serviceUuid, notifyCharacteristicUuid, deviceNamePrefix, configured: true, reason: null, deviceId: text(raw.deviceId) || "" };
 }
 
 /** Reads and normalizes the profile off a global scope (defaults to `window`). */
 export function readQz1LeBleProfile(globalScope = typeof window !== "undefined" ? window : {}) {
-  return normalizeQz1LeBleProfile(globalScope?.SUISUI_QZ1LE_BLE_PROFILE);
+  const committed = normalizeQz1LeBleProfile(globalScope?.SUISUI_QZ1LE_BLE_PROFILE);
+  if (committed.configured) return committed;
+  try {
+    const runtime = JSON.parse(globalScope?.localStorage?.getItem("suisui.qz1le.bleProfile") || "null");
+    const profile = normalizeQz1LeBleProfile({
+      serviceUuid: runtime?.serviceUuid,
+      notifyCharacteristicUuid: runtime?.notifyCharacteristicUuid,
+      deviceNamePrefix: runtime?.deviceName || "QZ1LE",
+      deviceId: runtime?.deviceId || ""
+    });
+    return profile.configured ? { ...profile, source: "device-local", deviceName: runtime.deviceName || "" } : committed;
+  } catch {
+    return committed;
+  }
 }
 
 /** Japanese one-liner for why direct QZ1LE Bluetooth connection is unavailable. */
