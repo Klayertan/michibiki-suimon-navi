@@ -106,8 +106,9 @@ flowchart TD
 | 機能 | 状況 |
 |---|---|
 | NMEAアップロード・GGA解析（fix品質/HDOP/QZSS） | ✅ 実装済み |
-| ライブ記録（Web Serial・PC、QZ1） | ✅ 実装済み |
-| ライブ記録（Web Bluetooth・QZ1LE） | 🚧 実装済み・実機未検証（[詳細](docs/QZ1LE_CONNECTIVITY.md)） |
+| ライブ記録（Web Serial・PC / Android対応時、QZ1） | ✅ 実装済み・Android ChromeでのQZ1選択は未検証 |
+| Android QZ1接続（RFCOMMブリッジ / localhost WebSocket） | 🚧 実装済み・実機未検証（[手順](docs/ANDROID_QZ1_CONNECTION.md)） |
+| BLE探索・QZ1LE用端末内プロファイル | 🚧 実装済み・実機未検証（[詳細](docs/QZ1LE_CONNECTIVITY.md)） |
 | iPhone/iPad向けQZ1LE接続（GNSS Analyzer経由） | ✅ 実装済み（案内表示のみ、直接接続は不可） |
 | GNSS観測からの圃場境界作成 | ✅ 実装済み |
 | 圃場面積の算出 | ✅ 実装済み |
@@ -145,6 +146,7 @@ flowchart TD
 | [`docs/SAKURA_CLOUD_BACKEND.md`](./docs/SAKURA_CLOUD_BACKEND.md) | `cloud_backend/`（自前アカウント/圃場API）の構成・DBスキーマ・検証状況 |
 | [`docs/AUTH_ARCHITECTURE.md`](./docs/AUTH_ARCHITECTURE.md) | 認証・セッション・CSRF・複数ユーザー分離の設計 |
 | [`docs/SAKURA_CLOUD_DEPLOYMENT.md`](./docs/SAKURA_CLOUD_DEPLOYMENT.md) | Sakura Cloud VMへの手動セットアップ手順（未実施） |
+| [`docs/ANDROID_QZ1_CONNECTION.md`](./docs/ANDROID_QZ1_CONNECTION.md) | Android Chromeの接続判断、localhostブリッジとPixel 6a実機確認手順 |
 
 **根拠の追跡可能性：** 画面に出る数値 → `js/water/water-management-sources.js` の登録 → `docs/RESEARCH_REFERENCES.md` の書誌情報、の順にたどれます。出典を確認できない数値はコードに入れていません。
 
@@ -153,8 +155,8 @@ flowchart TD
 ## 技術構成 (Tech stack)
 
 - **フィールド機器：** 青いQZ1 GNSS受信機（L1S/SLAS、Bluetooth SPP）＋ Android Pixel 6a
-- **ライブ記録（PC）：** Web Serial API — Chrome/Edgeで仮想シリアルポートとしてNMEAをリアルタイム受信・地図表示・保存
-- **ライブ記録（QZ1LE）：** Web Bluetooth API（Chrome/Edge・Android Chrome）。実機QZ1LEのGATTプロファイル（サービス/通知キャラクタリスティックUUID）は未確認のため、設定するまで接続は無効。iPhone/iPadはWeb Bluetooth非対応につきGNSS Analyzer経由のNMEAログ読み込みを案内。詳細は [docs/QZ1LE_CONNECTIVITY.md](docs/QZ1LE_CONNECTIVITY.md)
+- **ライブ記録（QZ1 Classic SPP）：** PCではWeb Serial。Android Chromeでは利用可能な場合にWeb Serialを先に試し、次にloopback-onlyのAndroid RFCOMMブリッジへ接続。Android上での物理QZ1接続は未検証。
+- **BLE探索 / QZ1LE：** Web Bluetooth GATT explorerは実機プロファイルを探索し、チェックサム有効NMEAを受けた場合に限り端末内へ保存。コミット済みUUIDは未設定。iPhone/iPadはこれまで通りGNSS Analyzer経由のNMEAログ読み込み。詳細は [docs/QZ1LE_CONNECTIVITY.md](docs/QZ1LE_CONNECTIVITY.md)
 - **地図表示：** Leaflet ＋ Leaflet.markercluster ＋ Turf.js（境界ポリゴンから面積算出）
 - **気象データ：** [Open-Meteo](https://open-meteo.com/)（無料・APIキー不要）から水門座標で自動取得。失敗時は `data/weather.json` にフォールバック
 - **水管理モデル：** `js/water/` — DOM非依存の純粋モジュール群、ユニットテスト済み

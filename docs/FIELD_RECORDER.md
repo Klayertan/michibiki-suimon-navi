@@ -1,12 +1,15 @@
 # QZ1 Field Recorder
 
-Android/desktop field-recording layer built on top of the shared Web Serial
-pipeline. Connection state (is QZ1's serial link open?) and recording state
+Android/desktop field-recording layer built on the shared line-ingestion
+pipeline. QZ1 live input can arrive over Web Serial or the Android RFCOMM
+bridge; QZ1LE can arrive over BLE GATT. Connection state and recording state
 (is a session actively capturing to IndexedDB?) are independent state
 machines — connecting to QZ1 never implicitly starts a recording session.
 
 QZ1LE (Bluetooth Low Energy) is a separate transport that feeds the exact
-same pipeline described here — see [QZ1LE_CONNECTIVITY.md](QZ1LE_CONNECTIVITY.md).
+same `handleSerialLine()` pipeline — see
+[QZ1LE_CONNECTIVITY.md](QZ1LE_CONNECTIVITY.md) and
+[ANDROID_QZ1_CONNECTION.md](ANDROID_QZ1_CONNECTION.md).
 
 ## Architecture
 
@@ -15,6 +18,8 @@ same pipeline described here — see [QZ1LE_CONNECTIVITY.md](QZ1LE_CONNECTIVITY.
 | `js/recording/recording-core.js` | Pure logic: state machines, NMEA checksum verification, 4-tier stall diagnostics, observation validation, CSV builders. Unit-tested with `node --test`. |
 | `js/recording/recording-store.js` | IndexedDB wrapper: `sessions`, `rawNmeaLines`, `structuredFixes`, `markedObservations`, `imageBlobs`. |
 | `js/recording/recording-controller.js` | Browser controller: recording lifecycle, batched flush, wake lock, recovery workflow, camera capture, exports. |
+| `js/recording/local-bridge-websocket.js` | Localhost WebSocket client with status handling and bounded reconnect backoff; complete lines reach `handleSerialLine()`. |
+| `android-bridge/` | Kotlin Android foreground service: paired Classic SPP RFCOMM receiver, loopback-only WebSocket at `127.0.0.1:8765`. Not device-tested. |
 | `css/recording.css` | Panel styles, including the mobile "field mode" layout. |
 | `index.html` | フィールド記録 card in the QZ1測量 workspace + `setConnectionState`/ingestion hooks layered onto the existing shared serial pipeline. |
 
