@@ -164,3 +164,5 @@ KAI has three CLEALINK LoRa modules on boards with UART pins, plus one bare modu
 Three usable modules cover both jobs: one on the drone, one on the sensor node, and one receiver shared by both. Sharing a receiver means the drone's 1 Hz stream and the sensor's 10-minute messages use the same channel, so an occasional sensor message can be lost while the drone is flying. The node should send each reading more than once, or the two links should use different channels.
 
 **Not confirmed:** the exact model printed on the modules (the plan assumes E220-900T22S(JP)), whether KAI has antennas for them, and whether the two antennas still on the request are needed.
+
+**Confirmed by KAI, 2026-10-13:** the modules are E220-900T22S(JP), as the plan assumed, and KAI has two antennas. Three working modules need three antennas, so the request now buys one TX915-JKS-20, not two. Total: ¥14,057 for nine items. Check that the two owned antennas are 920 MHz ones of a type the module is certified with.

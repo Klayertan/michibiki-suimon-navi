@@ -142,3 +142,11 @@ The running record of what changed in this project and why. Every agent appends 
 - **Why:** KAI reported owning three CLEALINK LoRa modules with UART pins and one unsoldered bare module, contradicting the earlier "no E220 yet". The two E220 evaluation boards were dropped from the purchase request. The pipe (VU100, 0.5 m, Amazon) was added. The combined request is nine items, ¥14,772, and is not in the repo. KAI also printed the float and lid, and the pre-boss tube cap.
 - **Verified:** Nothing new measured. Module model and antenna ownership are unconfirmed.
 - **Open / next:** Confirm the module model and antennas. Bucket test of the printed float. Six commits unpushed.
+
+## 2026-10-13 — LoRa module model and antennas confirmed
+- **Agent:** Claude Code (Opus 5.5)
+- **Branch:** `main`
+- **What changed:** One paragraph in `docs/WATER_SENSOR_PLAN.md` §8.
+- **Why:** KAI confirmed the three boards are E220-900T22S(JP) and that two antennas are on hand. The purchase request now has one antenna, and totals ¥14,057 for nine items.
+- **Verified:** Nothing measured. The type of the two owned antennas is not confirmed.
+- **Open / next:** Bucket test of the float; fit checks when the pipe and sensor arrive. Seven commits unpushed.
