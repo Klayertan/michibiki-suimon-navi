@@ -94,3 +94,11 @@ The running record of what changed in this project and why. Every agent appends 
 - **Why:** KAI decisions on 2026-10-13: the project is now aimed at the **Kobe SII forum, not the hackathon**, so QZSS need not measure the water and "cheap and good" decides. One sensor point per field, with field slope handled by a one-time ruler survey. Sensor is a ToF unit looking down a perforated pipe at a float. KAI and the teammate will work on the water sensor together when free. A purchase request was made for 2 × M5Stack ToF unit (VL53L1X), 1 × ATOMS3 Lite, 2 × 1 m Grove cable (Switch Science, ¥6,325); it is not in the repo.
 - **Verified:** Each part exports as one solid; `sensor.py` reports no overlap between cap, lid, sensor unit, float and pipe. Animation opened once in a browser with no console errors. **Not verified:** nothing printed or built; the sensor has not arrived; pipe diameters are nominal VU100; the sensor's position on the unit is unpublished; accuracy, beam-versus-pipe-wall, condensation and heat are untested (plan §6).
 - **Open / next:** Pipe size is 100 mm, not the 75 mm first suggested (the sensor's cone is too wide for 75 mm). Node firmware and the app-side writer are not written. The app has no place to store slope offsets. Not pushed.
+
+## 2026-10-13 — Water-sensor parts exported in print orientation
+- **Agent:** Claude Code (Opus 5.5)
+- **Branch:** `main`
+- **What changed:** `hardware/water-sensor/sensor.py` now exports each part flipped and sitting on the bed (`as_printed`). Exports regenerated. Added `cap-top-view.png` and a README note.
+- **Why:** KAI opened all three files in Bambu Studio and could not see the sensor window. The files were in their positions on the pipe, so they loaded nested as one object: the float hid the window from inside and the lid from outside. The window was always there.
+- **Verified:** Probe of the cap model shows no plastic in the 22 × 14 mm window. Cap export spans z 0 to 35 mm. Overlap checks still pass. Not printed.
+- **Open / next:** KAI is considering solar power for the node. No decision yet: it depends on how readings leave the field (Wi-Fi, LoRa or Bluetooth) and how often. Not pushed.

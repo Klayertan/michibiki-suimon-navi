@@ -36,9 +36,13 @@ The script also checks that the parts do not overlap each other, the pipe or the
 
 | Part | Orientation | Notes |
 |---|---|---|
-| Tube cap | **Upside down**, flat top on the bed | No supports. |
-| Sensor lid | Upside down, top on the bed | No supports. |
-| Float | **Upside down**, flat face on the bed | No supports. The bed side becomes the smooth target face. |
+| Tube cap | As exported: flat top on the bed | No supports. |
+| Sensor lid | As exported: top on the bed | No supports. |
+| Float | As exported: flat face on the bed | No supports. The bed side becomes the smooth target face. |
+
+The exported files are already upside down and sitting on the bed, so do not re-orient them. Load them as **separate objects**. (Before 2026-10-13 they were exported in their positions on the pipe, where the float and the lid hide the sensor window from both sides.)
+
+![Cap seen from above: the rectangle is the sensor window, the two small holes take the lid screws](cap-top-view.png)
 
 PETG, 0.2 mm layers, 4 walls. A white or light filament keeps the cap cooler and gives the sensor a brighter float.
 

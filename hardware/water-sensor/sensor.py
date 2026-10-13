@@ -114,10 +114,23 @@ def float_target():
 PARTS = {"tube_cap": tube_cap, "sensor_lid": sensor_lid,
          "float_target": float_target}
 
+
+def as_printed(part):
+    """Flip a part upside down and sit it on the bed, centred.
+
+    The parts are modelled where they sit on the pipe, so opened together they
+    nest inside one another and hide the sensor window. The exports are in
+    print orientation instead: flat top on the bed, no supports.
+    """
+    p = part.rotate((0, 0, 0), (1, 0, 0), 180)
+    bb = p.val().BoundingBox()
+    return p.translate((-(bb.xmin + bb.xmax) / 2, -(bb.ymin + bb.ymax) / 2,
+                        -bb.zmin))
+
 if __name__ == "__main__":
     OUT.mkdir(exist_ok=True)
     for name, fn in PARTS.items():
-        part = fn()
+        part = as_printed(fn())
         solid = part.val()
         bb = solid.BoundingBox()
         cq.exporters.export(part, str(OUT / f"{name}.step"))
