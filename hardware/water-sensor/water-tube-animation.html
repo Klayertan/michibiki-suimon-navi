@@ -7,6 +7,7 @@
   --water: #3f8fb0; --water-soft: #bfdcea; --soil: #8a6a4a; --soil-deep: #6f5439;
   --leaf: #4d8a3c; --part: #e9ece6; --part-edge: #55635a; --beam: #d8452e; --accent: #1f6f54;
   --warn: #b5651d; --on-soil: #f4eadb; --warn-on-soil: #ffd08a;
+  --sky: #dcecf3; --night: #1c2740; --sun: #e8a81c; --panel-blue: #27496d;
   --display: "Zen Kaku Gothic New", "Hiragino Sans", "Yu Gothic", system-ui, sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
 }
@@ -14,12 +15,12 @@
   --bg: #131a16; --panel: #1b2520; --fg: #e4ebe5; --muted: #9fb0a5; --line: #33423a;
   --water: #4fa3c6; --water-soft: #234a5c; --soil: #7a5d42; --soil-deep: #5a4431;
   --leaf: #6fae5b; --part: #2b3731; --part-edge: #a9b8ae; --beam: #ff6b52; --accent: #5cc29c;
-  --warn: #e0954a; --on-soil: #f4eadb; --warn-on-soil: #ffd08a; color-scheme: dark } }
+  --warn: #e0954a; --on-soil: #f4eadb; --warn-on-soil: #ffd08a; --sky: #25404d; --night: #0d1322; --sun: #f0b93a; --panel-blue: #3d6a99; color-scheme: dark } }
 :root[data-theme="dark"] {
   --bg: #131a16; --panel: #1b2520; --fg: #e4ebe5; --muted: #9fb0a5; --line: #33423a;
   --water: #4fa3c6; --water-soft: #234a5c; --soil: #7a5d42; --soil-deep: #5a4431;
   --leaf: #6fae5b; --part: #2b3731; --part-edge: #a9b8ae; --beam: #ff6b52; --accent: #5cc29c;
-  --warn: #e0954a; --on-soil: #f4eadb; --warn-on-soil: #ffd08a; color-scheme: dark }
+  --warn: #e0954a; --on-soil: #f4eadb; --warn-on-soil: #ffd08a; --sky: #25404d; --night: #0d1322; --sun: #f0b93a; --panel-blue: #3d6a99; color-scheme: dark }
 body { background: var(--bg); color: var(--fg); font-family: var(--display); font-size: 16px; line-height: 1.6; }
 .wrap { max-width: 1040px; margin: 0 auto; padding-inline: 20px; padding-block: 28px 56px; display: grid; gap: 40px; }
 h1 { font-size: clamp(1.7rem, 4vw, 2.4rem); line-height: 1.15; margin: 0; font-weight: 700; text-wrap: balance; }
@@ -51,6 +52,12 @@ ol.steps li { counter-increment: s; display: grid; grid-template-columns: 2ch mi
 ol.steps li::before { content: counter(s); font-family: var(--mono); }
 ol.steps li.on { color: var(--fg); background: var(--part); font-weight: 500; }
 .note { font-size: .9rem; color: var(--muted); }
+.wide { display: grid; gap: 16px; }
+.wide .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 24px; align-items: start; }
+.wide .cols > * { min-width: 0; }
+ol.flow { margin: 0; padding-left: 1.3em; display: grid; gap: 4px; color: var(--muted); }
+ol.flow li.on { color: var(--fg); font-weight: 500; }
+#sys text { font-size: 17px; }
 svg text { font-family: var(--mono); font-size: 11px; fill: var(--muted); }
 svg .lbl { fill: var(--fg); font-size: 12px; }
 .mv { transition: transform .7s cubic-bezier(.2,.7,.2,1), opacity .5s; }
@@ -60,7 +67,7 @@ svg .lbl { fill: var(--fg); font-size: 12px; }
 <div class="wrap">
   <header>
     <h1>Paddy water tube</h1>
-    <p class="lede">A pipe in the soil, a float on the water inside it, and a laser distance sensor in the cap. This page shows how it reads the water level and how it goes together. Draft design, 2026-10-13: not yet built or tested.</p>
+    <p class="lede">A pipe in the soil, a float on the water inside it, and a laser distance sensor in the cap. This page shows how it reads the water level, how it goes together, and how a reading travels from the paddy to the screen. Draft design, 2026-10-13: not yet built or tested.</p>
   </header>
 
   <section class="rig" aria-labelledby="h-works">
@@ -176,8 +183,12 @@ svg .lbl { fill: var(--fg); font-size: 12px; }
         <g class="mv" data-step="6" data-dy="0" data-fade="1">
           <path d="M278 138 h80 q14 0 14 14 v40" fill="none" stroke="var(--part-edge)" stroke-width="1.6"/>
           <rect x="368" y="180" width="8" height="200" fill="var(--soil-deep)"/>
-          <rect x="356" y="186" width="32" height="32" rx="3" fill="var(--part)" stroke="var(--part-edge)" stroke-width="1.2"/>
-          <text x="394" y="206" class="lbl">controller</text>
+          <rect x="356" y="186" width="32" height="40" rx="3" fill="var(--part)" stroke="var(--part-edge)" stroke-width="1.2"/>
+          <text x="394" y="204" class="lbl">box: controller,</text>
+          <text x="394" y="220" class="lbl">radio, battery</text>
+          <polygon points="196,112 386,78 388,87 198,121" fill="var(--panel-blue)" stroke="var(--part-edge)" stroke-width="1"/>
+          <line x1="372" y1="84" x2="372" y2="186" stroke="var(--soil-deep)" stroke-width="6"/>
+          <text x="262" y="74" class="lbl">solar panel</text>
         </g>
         <g class="mv" data-step="7" data-dy="0" data-fade="1">
           <g stroke="var(--beam)" stroke-width="1">
@@ -197,7 +208,7 @@ svg .lbl { fill: var(--fg); font-size: 12px; }
         <li>Drop the float in, flat face up.</li>
         <li>Fit the cap and tighten the screw in its side. Grooves in the cap let the pipe breathe.</li>
         <li>Lay the sensor face down over the window and screw the lid on.</li>
-        <li>Run the cable to the controller on a stake.</li>
+        <li>Fix the box and the solar panel to a stake, with the panel over the tube to shade it. Plug in the sensor cable.</li>
         <li>Calibrate: measure from the sensor to the soil once, then check against the staff gauge.</li>
       </ol>
       <div class="btns">
@@ -206,6 +217,81 @@ svg .lbl { fill: var(--fg); font-size: 12px; }
         <button id="auto" type="button">Play all</button>
       </div>
       <p class="note">Printed parts: cap, lid and float, in PETG. The pipe is ordinary 100 mm PVC drain pipe.</p>
+    </div>
+  </section>
+
+  <section class="wide" aria-labelledby="h-sys">
+    <h2 id="h-sys">From the paddy to the screen</h2>
+    <p>The node sleeps, wakes every 10 minutes, measures, and sends one short radio message. A receiver at the house passes it to the app.</p>
+    <div class="stage">
+      <svg id="sys" viewBox="0 0 1000 400" role="img" aria-label="The sensor node in the paddy sends a reading by radio to a receiver at the house">
+        <rect id="sky" x="0" y="0" width="1000" height="300" fill="var(--sky)"/>
+        <circle id="sun" cx="120" cy="70" r="26" fill="var(--sun)"/>
+        <!-- paddy -->
+        <rect x="0" y="286" width="600" height="14" fill="var(--water-soft)"/>
+        <rect x="0" y="300" width="1000" height="100" fill="var(--soil)"/>
+        <g stroke="var(--leaf)" stroke-width="3" fill="none" stroke-linecap="round">
+          <path d="M40 300 q-6 -28 -12 -44 M40 300 q0 -32 2 -52 M40 300 q8 -26 14 -40"/>
+          <path d="M100 300 q-6 -28 -12 -44 M100 300 q0 -32 2 -52 M100 300 q8 -26 14 -40"/>
+          <path d="M330 300 q-6 -28 -12 -44 M330 300 q0 -32 2 -52 M330 300 q8 -26 14 -40"/>
+          <path d="M400 300 q-6 -28 -12 -44 M400 300 q0 -32 2 -52 M400 300 q8 -26 14 -40"/>
+          <path d="M470 300 q-6 -28 -12 -44 M470 300 q0 -32 2 -52 M470 300 q8 -26 14 -40"/>
+          <path d="M540 300 q-6 -28 -12 -44 M540 300 q0 -32 2 -52 M540 300 q8 -26 14 -40"/>
+        </g>
+        <!-- tube -->
+        <rect x="186" y="236" width="40" height="124" fill="var(--panel)" stroke="var(--part-edge)" stroke-width="1.5"/>
+        <rect x="188" y="290" width="36" height="68" fill="var(--water)"/>
+        <rect x="191" y="283" width="30" height="6" fill="var(--panel)" stroke="var(--part-edge)" stroke-width="1"/>
+        <polygon id="sysBeam" points="206,238 200,283 212,283" fill="var(--beam)" opacity="0"/>
+        <rect x="182" y="228" width="48" height="12" fill="var(--part)" stroke="var(--part-edge)" stroke-width="1.5"/>
+        <!-- stake, box, panel, antenna -->
+        <rect x="252" y="150" width="7" height="190" fill="var(--soil-deep)"/>
+        <rect x="240" y="212" width="31" height="40" rx="3" fill="var(--part)" stroke="var(--part-edge)" stroke-width="1.5"/>
+        <path d="M230 232 h10" stroke="var(--part-edge)" stroke-width="2" fill="none"/>
+        <polygon points="150,176 282,150 284,159 152,185" fill="var(--panel-blue)" stroke="var(--part-edge)" stroke-width="1"/>
+        <line x1="268" y1="212" x2="268" y2="176" stroke="var(--part-edge)" stroke-width="2"/>
+        <circle cx="268" cy="174" r="3" fill="var(--part-edge)"/>
+        <path id="chg" d="M262 162 v46" stroke="var(--sun)" stroke-width="3" stroke-dasharray="5 4" fill="none"/>
+        <!-- battery gauge on the box -->
+        <rect x="244" y="258" width="23" height="8" fill="var(--panel)" stroke="var(--part-edge)" stroke-width="1"/>
+        <rect id="battBar" x="245" y="259" width="16" height="6" fill="var(--accent)"/>
+        <!-- radio path -->
+        <path id="link" d="M268 174 Q 540 20 812 150" fill="none" stroke="var(--part-edge)" stroke-width="1" stroke-dasharray="3 6" opacity=".6"/>
+        <circle id="pkt" cx="268" cy="174" r="7" fill="var(--beam)" opacity="0"/>
+        <!-- house -->
+        <rect x="770" y="206" width="150" height="94" fill="var(--panel)" stroke="var(--part-edge)" stroke-width="1.5"/>
+        <polygon points="756,206 845,150 934,206" fill="var(--part)" stroke="var(--part-edge)" stroke-width="1.5"/>
+        <line x1="812" y1="206" x2="812" y2="150" stroke="var(--part-edge)" stroke-width="2"/>
+        <circle cx="812" cy="150" r="3" fill="var(--part-edge)"/>
+        <rect id="scr" x="836" y="232" width="62" height="40" rx="3" fill="var(--bg)" stroke="var(--part-edge)" stroke-width="1.5"/>
+        <text id="scrTxt" x="867" y="258" text-anchor="middle" class="lbl">—</text>
+        <rect x="826" y="274" width="82" height="5" fill="var(--part-edge)"/>
+        <text x="150" y="386" style="fill:var(--on-soil)">sensor node</text>
+        <text x="790" y="386" style="fill:var(--on-soil)">receiver and app</text>
+        <text x="470" y="64" class="lbl">920 MHz LoRa</text>
+      </svg>
+    </div>
+    <div class="cols">
+      <div class="readout">
+        <div><span class="k">time</span><span id="sT">—</span></div>
+        <div><span class="k">last reading</span><span class="big" id="sL">—</span></div>
+        <div><span class="k">battery</span><span id="sB">—</span></div>
+        <div class="state" id="sS">—</div>
+      </div>
+      <ol class="flow" id="flow">
+        <li>Wake up.</li>
+        <li>Measure the distance to the float.</li>
+        <li>Send the reading by radio.</li>
+        <li>The app shows it, marked as a sensor reading with its time.</li>
+        <li>Sleep for 10 minutes.</li>
+      </ol>
+      <div class="side">
+        <div class="btns">
+          <button class="primary" id="sPlay" type="button">Play</button>
+          <button id="sNight" type="button">Jump to night</button>
+        </div>
+        <p class="note">By day the panel runs the node and tops up the battery. At night the battery carries it. One cell should last about a month without sun. These are estimates: nothing here has been measured yet.</p>
+      </div>
     </div>
   </section>
 </div>
@@ -316,5 +402,57 @@ svg .lbl { fill: var(--fg); font-size: 12px; }
     timer = setInterval(function () { if (step >= 7) { halt(); } else { show(step + 1); } }, 1800);
   });
   show(7);
+
+  // ---- whole system
+  var link = $('link'), LEN = link.getTotalLength(), flow = [].slice.call(document.querySelectorAll('#flow li'));
+  var st = { min: 9 * 60, level: 42, batt: 78 }, sysTimer = null, sraf = null;
+  function isDay(m) { var h = (m / 60) % 24; return h >= 6 && h < 18; }
+  function hhmm(m) { var h = Math.floor(m / 60) % 24, mm = m % 60; return (h < 10 ? '0' : '') + h + ':' + (mm < 10 ? '0' : '') + mm; }
+  function stage(i) { flow.forEach(function (li, k) { li.classList.toggle('on', k === i); }); }
+  function paint(showReading) {
+    var day = isDay(st.min);
+    $('sky').setAttribute('fill', day ? 'var(--sky)' : 'var(--night)');
+    $('sun').setAttribute('fill', day ? 'var(--sun)' : 'var(--part)');
+    $('sun').setAttribute('r', day ? 26 : 16);
+    $('chg').setAttribute('opacity', day ? 1 : 0);
+    $('battBar').setAttribute('width', Math.max(1, 21 * st.batt / 100));
+    $('sT').textContent = hhmm(st.min);
+    $('sB').textContent = Math.round(st.batt) + ' %';
+    $('sS').textContent = day ? 'Daylight: running on the panel and charging.' : 'Night: running on the battery.';
+    $('sNight').textContent = day ? 'Jump to night' : 'Jump to day';
+    if (showReading) {
+      var v = '+' + Math.round(st.level) + ' mm';
+      $('sL').textContent = v; $('scrTxt').textContent = v;
+    }
+  }
+  function cycle() {
+    stage(0);
+    var t0 = performance.now(), T = reduce ? 1 : 2200;
+    (function f(now) {
+      var k = Math.min(1, (now - t0) / T);
+      if (k < 0.25) { stage(k < 0.08 ? 0 : 1); $('sysBeam').setAttribute('opacity', 0.45); }
+      else if (k < 0.85) {
+        stage(2); $('sysBeam').setAttribute('opacity', 0);
+        var pt = link.getPointAtLength(LEN * (k - 0.25) / 0.6);
+        $('pkt').setAttribute('cx', pt.x); $('pkt').setAttribute('cy', pt.y); $('pkt').setAttribute('opacity', 1);
+      } else { stage(3); $('pkt').setAttribute('opacity', 0); paint(true); }
+      if (k < 1) { sraf = requestAnimationFrame(f); }
+      else {
+        sraf = null; stage(4);
+        st.min += 10; st.level = Math.max(-150, st.level - 15 / 144);
+        st.batt = Math.max(0, Math.min(100, st.batt + (isDay(st.min) ? 0.8 : -0.02)));
+        paint(false);
+      }
+    })(t0);
+  }
+  function sysStop() { if (sysTimer) { clearInterval(sysTimer); sysTimer = null; $('sPlay').textContent = 'Play'; } }
+  $('sPlay').addEventListener('click', function () {
+    if (sysTimer) { sysStop(); return; }
+    $('sPlay').textContent = 'Pause'; cycle(); sysTimer = setInterval(cycle, 3200);
+  });
+  $('sNight').addEventListener('click', function () {
+    st.min = isDay(st.min) ? 21 * 60 : 9 * 60; paint(false);
+  });
+  paint(true); stage(4);
 })();
 </script>

@@ -126,3 +126,11 @@ The running record of what changed in this project and why. Every agent appends 
 - **Why:** KAI owns no E220 modules and approved buying from Amazon. Two E220 evaluation boards with antennas, a USB-serial module for the receiver, a 3 W panel, a bq25185 charger and one 2000 mAh lithium cell.
 - **Verified:** Prices and stock read from Akizuki, Switch Science and Amazon pages on 2026-10-13. The FT234X price came from a related-products list, not its own page. Nothing bought or tested. The lithium cell is unbranded; its plug polarity must be checked before use.
 - **Open / next:** Measure the controller's sleep current. Design the stake box, panel bracket, receiver and packet format. Not pushed.
+
+## 2026-10-13 — Water-tube animation completed with the whole system
+- **Agent:** Claude Code (Opus 5.5)
+- **Branch:** `main`
+- **What changed:** `hardware/water-sensor/water-tube-animation.html` gained a third section (node with solar panel and box, LoRa link, receiver and app, day and night), and the assembly steps now include the stake, box and panel.
+- **Why:** KAI asked for the complete animation after choosing solar power and LoRa.
+- **Verified:** Opened once in a browser: all three sections render, the new one plays, no console errors. The battery and charging behaviour shown is illustrative, based on the plan's estimates, not measurements.
+- **Open / next:** Same as the previous entry. Five commits unpushed.
