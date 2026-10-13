@@ -102,3 +102,11 @@ The running record of what changed in this project and why. Every agent appends 
 - **Why:** KAI opened all three files in Bambu Studio and could not see the sensor window. The files were in their positions on the pipe, so they loaded nested as one object: the float hid the window from inside and the lid from outside. The window was always there.
 - **Verified:** Probe of the cap model shows no plastic in the 22 × 14 mm window. Cap export spans z 0 to 35 mm. Overlap checks still pass. Not printed.
 - **Open / next:** KAI is considering solar power for the node. No decision yet: it depends on how readings leave the field (Wi-Fi, LoRa or Bluetooth) and how often. Not pushed.
+
+## 2026-10-13 — Cap screw holes strengthened; no printed threads
+- **Agent:** Claude Code (Opus 5.5)
+- **Branch:** `main`
+- **What changed:** `hardware/water-sensor/sensor.py`: 6 mm bosses under the two lid-screw holes and a rib outside the skirt at the pipe screw. Cap export regenerated (now 124 mm on one axis). README section on screws.
+- **Why:** KAI asked whether threads were needed. Decision: none are modelled; M3 screws self-tap into 2.6 mm holes. The lid holes had only 3 mm of plastic, which is too little, so they were deepened.
+- **Verified:** Cap is one solid; overlap checks pass. Not printed, and the self-tapping fit in PETG is untested.
+- **Open / next:** Solar power still undecided. Not pushed (this and `fe43d4f`).

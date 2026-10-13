@@ -36,6 +36,8 @@ RIM_GAP = 2.0             # air gap above the pipe rim, so the pipe can breathe
 VENT_W, VENT_D = 6.0, 1.2
 LID_T = 2.0
 LID_EAR = 9.0
+SCREW_PILOT = 2.6        # M3 screws cut their own thread in a hole this size
+BOSS_H = 6.0             # extra depth under each lid screw, for more thread
 FLOAT_GAP = 6.5           # radial gap between float and pipe wall
 FLOAT_T = 1.2
 FLOAT_RIM = 14.0
@@ -75,10 +77,16 @@ def tube_cap():
         c = c.cut(vent.rotate((0, 0, 0), (0, 0, 1), math.degrees(a) + 60))
     c = c.cut(box(-WINDOW_L / 2, WINDOW_L / 2, -WINDOW_W / 2, WINDOW_W / 2,
                   Z_TOP0 - 1, Z_TOP1 + 1))
-    for sy in (-1, 1):                                  # lid screws, M3 self-tap
-        c = c.cut(cyl(1.3, Z_TOP0 - 1, Z_TOP1 + 1, 0, sy * EAR_Y))
-    grub = (cq.Workplane("YZ").circle(1.3).extrude(SKIRT_T + 4)
-            .translate((-R_OUT - 1, 0, -SKIRT_H / 2)))  # M3 screw onto the pipe
+    # No printed threads anywhere: an M3 thread is too fine to print well.
+    # The screws cut their own thread, so each hole gets extra plastic.
+    for sy in (-1, 1):                                  # lid screws
+        c = c.union(cyl(4.0, Z_TOP0 - BOSS_H, Z_TOP0 + 0.01, 0, sy * EAR_Y))
+        c = c.cut(cyl(SCREW_PILOT / 2, Z_TOP0 - BOSS_H - 1, Z_TOP1 + 1,
+                      0, sy * EAR_Y))
+    # full-height rib outside the skirt, so the pipe screw has 6 mm to bite
+    c = c.union(box(-R_OUT - 3.0, -R_OUT + 1.0, -5, 5, -SKIRT_H, Z_TOP1))
+    grub = (cq.Workplane("YZ").circle(SCREW_PILOT / 2).extrude(SKIRT_T + 8)
+            .translate((-R_OUT - 4, 0, -SKIRT_H / 2)))  # M3 screw onto the pipe
     return c.cut(grub)
 
 

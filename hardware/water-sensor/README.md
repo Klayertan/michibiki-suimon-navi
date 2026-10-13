@@ -6,7 +6,7 @@ Three printed parts for the water-level sensor described in [`docs/WATER_SENSOR_
 
 | Part | File | Size (mm) | What it does |
 |---|---|---|---|
-| Tube cap | `exports/tube_cap.step` | 121 × 121 × 35 | Slips over a VU100 pipe. Has the window the sensor looks through and three vent grooves. |
+| Tube cap | `exports/tube_cap.step` | 124 × 121 × 35 | Slips over a VU100 pipe. Has the window the sensor looks through and three vent grooves. |
 | Sensor lid | `exports/sensor_lid.step` | 37 × 47 × 10 | Holds the ToF unit face down over the window and keeps rain off. Two M3 screws. |
 | Float | `exports/float_target.step` | 94 across × 14 | An upturned cup with a flat top for the sensor to see. Glue foam inside. |
 
@@ -45,6 +45,17 @@ The exported files are already upside down and sitting on the bed, so do not re-
 ![Cap seen from above: the rectangle is the sensor window, the two small holes take the lid screws](cap-top-view.png)
 
 PETG, 0.2 mm layers, 4 walls. A white or light filament keeps the cap cooler and gives the sensor a brighter float.
+
+## Screws: no printed threads
+
+Nothing here has a modelled thread. An M3 thread is too fine to print cleanly, and the pipe has none. Every screw hole is a plain 2.6 mm hole and the M3 screw cuts its own thread as it goes in.
+
+| Screw | Where | Thread depth |
+|---|---|---|
+| 2 × M3 × 10 | Lid to cap | 9 mm (3 mm plate plus a 6 mm boss underneath) |
+| 1 × M3 × 10 | Side of the cap, pressing on the pipe | 6 mm (skirt plus an outside rib) |
+
+The cap itself is a slip fit on the pipe; the side screw only stops it lifting off. Drive the screws in slowly the first time. A self-cut thread in PETG survives a handful of removals. If the lid will come off often, melt M3 heat-set inserts into the lid holes and enlarge `SCREW_PILOT` to suit them.
 
 ## Assembly
 
