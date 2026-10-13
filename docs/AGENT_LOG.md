@@ -110,3 +110,11 @@ The running record of what changed in this project and why. Every agent appends 
 - **Why:** KAI asked whether threads were needed. Decision: none are modelled; M3 screws self-tap into 2.6 mm holes. The lid holes had only 3 mm of plastic, which is too little, so they were deepened.
 - **Verified:** Cap is one solid; overlap checks pass. Not printed, and the self-tapping fit in PETG is untested.
 - **Open / next:** Solar power still undecided. Not pushed (this and `fe43d4f`).
+
+## 2026-10-13 — Water sensor: solar power and LoRa chosen
+- **Agent:** Claude Code (Opus 5.5)
+- **Branch:** `main`
+- **What changed:** `docs/WATER_SENSOR_PLAN.md` gained §8 (power budget, candidate parts, layout, open items).
+- **Why:** KAI decided the node runs on solar and sends readings over LoRa. KAI printed the earlier tube cap (before the screw bosses) and will use it with nuts for bench tests; the reprint waits until the pipe and sensor arrive.
+- **Verified:** Prices and stock read from Switch Science and Akizuki pages on 2026-10-13. The power budget is an estimate; nothing was measured. No battery source found yet.
+- **Open / next:** See plan §8 "Open". No purchase sheet for the power parts yet. Not pushed.

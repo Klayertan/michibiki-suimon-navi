@@ -96,3 +96,46 @@ Put the tube at a spot of roughly average height, not the lowest corner. Redo th
 6. Field install, staff-gauge calibration and the slope survey.
 
 How it goes together and how it reads the water: `hardware/water-sensor/water-tube-animation.html`.
+
+## 8. Power and data link (added 2026-10-13)
+
+**Decisions (KAI):** solar power, and LoRa to carry the readings. Reading interval: every 10 minutes, as a default that can change.
+
+### Budget
+
+Estimates, not measurements. The E220 figures are from its product page; the rest are typical values.
+
+| Phase | Draw | Time | Per day (144 readings) |
+|---|---|---|---|
+| Awake: boot, range, send | about 0.3–0.5 W (E220 transmits at 43 mA) | about 1.5 s | about 0.03 Wh |
+| Asleep | E220 2.5 µA. **Controller unknown**, assume 1 mA at 5 V | the rest | about 0.12 Wh |
+| **Total** | | | **about 0.15–0.25 Wh** |
+
+A 2 W panel gives very roughly 3 Wh on a clear day after losses, which is more than ten times the need. A single 2000 mAh lithium cell (about 7 Wh) would run the node for about a month with no sun. The margin is there to cover the one real unknown: how much the ATOMS3 Lite draws asleep. Measure that first. If it is tens of milliamps, the answer is a different controller or a power switch, not a bigger panel.
+
+### Parts looked up on 2026-10-13
+
+| Part | Candidate | Price | State |
+|---|---|---|---|
+| Charger | Adafruit bq25185 board with 5 V output (Switch Science 10183). Takes 5–18 V from a panel, charges one lithium cell, gives 5 V at up to 1 A. | ¥1,870 | In stock (4) |
+| Panel | Akizuki SY-M2W, 2 W, 6.9 V open circuit, 116 × 116 × 3 mm, bare leads | ¥800 | Online stock due late November |
+| Panel, alternative | Akizuki SY-M3W, 3 W | ¥1,380 | In stock. Voltage and size not checked. |
+| LoRa radio | E220-900T22S(JP) R2 (Switch Science 10453). 920 MHz, 13 dBm. | ¥1,793 | In stock. **Bare surface-mount module**: its breakout boards are sold out, so it needs fine soldering. |
+| Battery | One protected lithium cell, about 2000 mAh | — | **Not sourced.** Switch Science is sold out of every size. |
+
+Not chosen: the DFRobot 5 V panel at Switch Science (6 W, ¥1,938) has a 1.5–2 month lead time.
+
+### Layout
+
+- Panel, charger, battery, controller and radio all go on the **stake**, in one sealed box, above the highest water level. Nothing electrical but the sensor goes on the tube.
+- Mount the panel above the tube so it shades the cap. That also helps with the sensor's 40 °C limit.
+- Keep the lithium cell out of direct sun. LiFePO4 is the safer chemistry if a cell and matching charger can be found.
+- A USB power bank will not work: most switch off when the load drops to sleep current.
+
+### Open
+
+1. Does KAI already own E220 modules on breakout boards, and how many? The drone link plan assumed a pair.
+2. Battery source.
+3. Controller sleep current, measured.
+4. Radio rules: the E220's certification covers specific antennas. Use only the antenna it is certified with.
+5. Not designed: the receiver at the house, the packet format, the stake box and the panel bracket.
