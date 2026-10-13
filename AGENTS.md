@@ -58,7 +58,7 @@ After completing any task that modifies repository files:
 
 ## 4. Project in brief
 
-SuisuiNavi (スイスイナビ / 水門ナビ) is a decision-support web app for rice-paddy water management, built for the Michibiki (QZSS) hackathon. A QZ1 GNSS receiver measures the field boundary. The app turns growth stage, area, water level and weather into a recommended depth, a water volume and an open/close/wait gate verdict. The farmer operates the gate; the app never does.
+SuisuiNavi (スイスイナビ / 水門ナビ) is a decision-support web app for rice-paddy water management, built for the Michibiki (QZSS) hackathon and now aimed at the Kobe SII forum (since 2026-10-13). A QZ1 GNSS receiver measures the field boundary. The app turns growth stage, area, water level and weather into a recommended depth, a water volume and an open/close/wait gate verdict. The farmer operates the gate; the app never does.
 
 - **Frontend:** plain HTML/CSS/JS, no bundler. `index.html` is one very large file shared by every feature, so keep edits to it small and put new logic in modules under `js/`.
 - **Drone:** `backend/` (FastAPI + pymavlink), `js/drone/`, `js/pilot/`, `js/gamepad/`, flight-path planner in `js/paddy-intelligence.js`, Jetson + RealSense in `edge/perception/`.
@@ -86,6 +86,7 @@ Work is split between two people: KAI owns the drone, and a teammate owns the wa
 | System design | `docs/ARCHITECTURE.md` |
 | Drone operation and safety | `docs/MAVLINK_OPERATOR_GUIDE.md`, `docs/PILOT_CONTROL_GUIDE.md` |
 | Drone payload mounts (3D-printed) | `docs/DRONE_PAYLOAD_MOUNT_PLAN.md` |
+| Water-level sensor (tube, ToF sensor, 3D-printed parts) | `docs/WATER_SENSOR_PLAN.md` |
 | Drone data link | `docs/DRONE_LINK_PLAN.md` |
 | Water model | `docs/PADDY_WATER_MANAGEMENT.md` |
 | Older snapshots (August 2026, historical) | `docs/CLAUDE_HANDOFF.md`, `docs/HANDOFF.md` |

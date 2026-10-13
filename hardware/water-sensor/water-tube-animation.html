@@ -1,0 +1,320 @@
+<title>Paddy Water Tube</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one column of two instruments. Each is a drawing beside its controls; they stack on a phone. */
+:root {
+  --bg: #f3f6f1; --panel: #ffffff; --fg: #1d2a22; --muted: #5d6b62; --line: #cdd6cd;
+  --water: #3f8fb0; --water-soft: #bfdcea; --soil: #8a6a4a; --soil-deep: #6f5439;
+  --leaf: #4d8a3c; --part: #e9ece6; --part-edge: #55635a; --beam: #d8452e; --accent: #1f6f54;
+  --warn: #b5651d; --on-soil: #f4eadb; --warn-on-soil: #ffd08a;
+  --display: "Zen Kaku Gothic New", "Hiragino Sans", "Yu Gothic", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #131a16; --panel: #1b2520; --fg: #e4ebe5; --muted: #9fb0a5; --line: #33423a;
+  --water: #4fa3c6; --water-soft: #234a5c; --soil: #7a5d42; --soil-deep: #5a4431;
+  --leaf: #6fae5b; --part: #2b3731; --part-edge: #a9b8ae; --beam: #ff6b52; --accent: #5cc29c;
+  --warn: #e0954a; --on-soil: #f4eadb; --warn-on-soil: #ffd08a; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #131a16; --panel: #1b2520; --fg: #e4ebe5; --muted: #9fb0a5; --line: #33423a;
+  --water: #4fa3c6; --water-soft: #234a5c; --soil: #7a5d42; --soil-deep: #5a4431;
+  --leaf: #6fae5b; --part: #2b3731; --part-edge: #a9b8ae; --beam: #ff6b52; --accent: #5cc29c;
+  --warn: #e0954a; --on-soil: #f4eadb; --warn-on-soil: #ffd08a; color-scheme: dark }
+body { background: var(--bg); color: var(--fg); font-family: var(--display); font-size: 16px; line-height: 1.6; }
+.wrap { max-width: 1040px; margin: 0 auto; padding-inline: 20px; padding-block: 28px 56px; display: grid; gap: 40px; }
+h1 { font-size: clamp(1.7rem, 4vw, 2.4rem); line-height: 1.15; margin: 0; font-weight: 700; text-wrap: balance; }
+h2 { font-size: 1.3rem; margin: 0; font-weight: 700; text-wrap: balance; }
+p { margin: 0; max-width: 65ch; }
+.lede { color: var(--muted); margin-top: 10px; }
+.rig { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 24px; align-items: start; }
+@media (max-width: 760px) { .rig { grid-template-columns: minmax(0, 1fr); } }
+.stage { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; }
+.stage svg { display: block; width: 100%; height: auto; }
+.side { display: grid; gap: 16px; min-width: 0; }
+.readout { font-family: var(--mono); font-variant-numeric: tabular-nums; display: grid; gap: 6px; border-top: 2px solid var(--fg); padding-top: 12px; }
+.readout div { display: flex; justify-content: space-between; gap: 12px; }
+.readout .k { color: var(--muted); }
+.readout .big { font-size: 1.7rem; font-weight: 500; }
+.state { font-weight: 500; }
+.state.warn { color: var(--warn); }
+.state.ok { color: var(--accent); }
+.formula { font-family: var(--mono); font-size: .9rem; color: var(--muted); }
+label { font-size: .9rem; color: var(--muted); display: grid; gap: 4px; }
+input[type=range] { width: 100%; accent-color: var(--accent); }
+.btns { display: flex; flex-wrap: wrap; gap: 8px; }
+button { font: inherit; font-size: .95rem; padding: 8px 14px; border-radius: 4px; border: 1px solid var(--part-edge); background: var(--panel); color: var(--fg); cursor: pointer; }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--bg); font-weight: 500; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button:disabled { opacity: .45; cursor: default; }
+ol.steps { margin: 0; padding: 0; list-style: none; display: grid; gap: 2px; counter-reset: s; }
+ol.steps li { counter-increment: s; display: grid; grid-template-columns: 2ch minmax(0, 1fr); gap: 10px; padding: 6px 8px; border-radius: 4px; color: var(--muted); cursor: pointer; }
+ol.steps li::before { content: counter(s); font-family: var(--mono); }
+ol.steps li.on { color: var(--fg); background: var(--part); font-weight: 500; }
+.note { font-size: .9rem; color: var(--muted); }
+svg text { font-family: var(--mono); font-size: 11px; fill: var(--muted); }
+svg .lbl { fill: var(--fg); font-size: 12px; }
+.mv { transition: transform .7s cubic-bezier(.2,.7,.2,1), opacity .5s; }
+@media (prefers-reduced-motion: reduce) { .mv { transition: none; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Paddy water tube</h1>
+    <p class="lede">A pipe in the soil, a float on the water inside it, and a laser distance sensor in the cap. This page shows how it reads the water level and how it goes together. Draft design, 2026-10-13: not yet built or tested.</p>
+  </header>
+
+  <section class="rig" aria-labelledby="h-works">
+    <div class="stage">
+      <svg id="works" viewBox="0 0 520 540" role="img" aria-label="Cross-section of the water tube in a paddy field">
+        <rect x="0" y="0" width="520" height="540" fill="var(--panel)"/>
+        <!-- field water (above soil) -->
+        <rect id="fieldWater" x="0" y="300" width="520" height="0" fill="var(--water-soft)"/>
+        <!-- soil -->
+        <rect x="0" y="300" width="520" height="240" fill="var(--soil)"/>
+        <rect id="wetSoil" x="0" y="300" width="520" height="240" fill="var(--soil-deep)"/>
+        <!-- rice -->
+        <g stroke="var(--leaf)" stroke-width="3" fill="none" stroke-linecap="round">
+          <path d="M60 300 q-8 -40 -16 -62 M60 300 q0 -44 2 -72 M60 300 q10 -38 20 -58"/>
+          <path d="M130 300 q-8 -40 -16 -62 M130 300 q0 -44 2 -72 M130 300 q10 -38 20 -58"/>
+          <path d="M400 300 q-8 -40 -16 -62 M400 300 q0 -44 2 -72 M400 300 q10 -38 20 -58"/>
+          <path d="M470 300 q-8 -40 -16 -62 M470 300 q0 -44 2 -72 M470 300 q10 -38 20 -58"/>
+        </g>
+        <!-- pipe interior -->
+        <rect x="212" y="120" width="96" height="360" fill="var(--panel)"/>
+        <rect id="pipeWater" x="212" y="300" width="96" height="180" fill="var(--water)"/>
+        <!-- beam -->
+        <polygon id="beam" points="260,118 250,290 270,290" fill="var(--beam)" opacity=".28"/>
+        <line id="beamLine" x1="260" y1="118" x2="260" y2="290" stroke="var(--beam)" stroke-width="1.5" stroke-dasharray="4 3"/>
+        <!-- float -->
+        <g id="float"><rect x="218" y="-13" width="84" height="13" rx="2" fill="var(--panel)" stroke="var(--part-edge)" stroke-width="1.5"/></g>
+        <!-- pipe walls with holes below soil -->
+        <g fill="var(--part)" stroke="var(--part-edge)" stroke-width="1.2">
+          <rect x="209" y="120" width="5" height="360"/><rect x="306" y="120" width="5" height="360"/>
+        </g>
+        <g fill="var(--soil-deep)">
+          <circle cx="211.5" cy="330" r="2"/><circle cx="211.5" cy="370" r="2"/><circle cx="211.5" cy="410" r="2"/><circle cx="211.5" cy="450" r="2"/>
+          <circle cx="308.5" cy="330" r="2"/><circle cx="308.5" cy="370" r="2"/><circle cx="308.5" cy="410" r="2"/><circle cx="308.5" cy="450" r="2"/>
+        </g>
+        <!-- cap, sensor, lid -->
+        <path d="M204 142 V113 H316 V142 H312 V117 H208 V142 Z" fill="var(--part)" stroke="var(--part-edge)" stroke-width="1.2"/>
+        <rect x="246" y="106" width="28" height="7" fill="var(--accent)"/>
+        <rect x="242" y="102" width="36" height="11" fill="none" stroke="var(--part-edge)" stroke-width="1.2"/>
+        <path d="M278 108 h60 v60" fill="none" stroke="var(--part-edge)" stroke-width="1.2"/>
+        <text x="342" y="112" class="lbl">sensor in the cap</text>
+        <!-- staff gauge -->
+        <g id="gauge"></g>
+        <!-- reference lines -->
+        <line x1="0" y1="300" x2="520" y2="300" stroke="var(--fg)" stroke-width="1"/>
+        <text x="8" y="295" class="lbl">soil surface = 0 mm</text>
+        <rect x="330" y="255" width="182" height="18" fill="var(--accent)" opacity=".16"/>
+        <text x="336" y="268">target 30–50 mm (example)</text>
+        <line x1="330" y1="435" x2="512" y2="435" stroke="var(--warn-on-soil)" stroke-width="1.4" stroke-dasharray="5 4"/>
+        <text x="336" y="430" style="fill:var(--on-soil)">−150 mm: irrigate (safe AWD)</text>
+        <!-- dimension d -->
+        <g id="dim" stroke="var(--beam)" stroke-width="1">
+          <line id="dimLine" x1="190" y1="118" x2="190" y2="290"/>
+          <line x1="184" y1="118" x2="196" y2="118"/><line id="dimEnd" x1="184" y1="290" x2="196" y2="290"/>
+        </g>
+        <text id="dimTxt" x="150" y="200" fill="var(--beam)" style="fill:var(--beam)">d</text>
+      </svg>
+    </div>
+    <div class="side">
+      <h2 id="h-works">How it reads the water</h2>
+      <p>Holes in the buried half of the pipe let water in, so the level inside matches the field, even when it has dropped below the soil. The sensor measures down to the float.</p>
+      <div class="readout" aria-live="off">
+        <div><span class="k">sensor reads d</span><span id="rD">—</span></div>
+        <div><span class="k">water level</span><span class="big" id="rL">—</span></div>
+        <div><span class="k">day</span><span id="rDay">—</span></div>
+        <div class="state" id="rS">—</div>
+      </div>
+      <p class="formula">level = H − d − f &nbsp; (H 200 mm sensor above soil, f 8 mm float above water)</p>
+      <label for="lvl">Water level
+        <input id="lvl" type="range" min="-225" max="150" step="1" value="40">
+      </label>
+      <div class="btns">
+        <button class="primary" id="play" type="button">Play two weeks</button>
+        <button id="b50" type="button">Flooded +50</button>
+        <button id="b0" type="button">At the soil 0</button>
+        <button id="b150" type="button">AWD −150</button>
+      </div>
+      <p class="note">Below about −190 mm the float rests on the bottom of the pipe. The sensor then reports no reading. It never reports zero for a missing value.</p>
+    </div>
+  </section>
+
+  <section class="rig" aria-labelledby="h-asm">
+    <div class="stage">
+      <svg id="asm" viewBox="0 0 520 540" role="img" aria-label="Assembly of the water tube, step by step">
+        <rect x="0" y="0" width="520" height="540" fill="var(--panel)"/>
+        <rect x="0" y="330" width="520" height="210" fill="var(--soil)"/>
+        <line x1="0" y1="330" x2="520" y2="330" stroke="var(--fg)" stroke-width="1"/>
+        <!-- hole in soil appears with the pipe -->
+        <g class="mv" data-step="2" data-dy="-230">
+          <rect x="212" y="150" width="96" height="360" fill="var(--panel)"/>
+          <rect x="212" y="345" width="96" height="165" fill="var(--water)"/>
+          <g fill="var(--part)" stroke="var(--part-edge)" stroke-width="1.2">
+            <rect x="209" y="150" width="5" height="360"/><rect x="306" y="150" width="5" height="360"/>
+          </g>
+          <g fill="var(--soil-deep)" id="asmHoles">
+            <circle cx="211.5" cy="360" r="2"/><circle cx="211.5" cy="400" r="2"/><circle cx="211.5" cy="440" r="2"/><circle cx="211.5" cy="480" r="2"/>
+            <circle cx="308.5" cy="360" r="2"/><circle cx="308.5" cy="400" r="2"/><circle cx="308.5" cy="440" r="2"/><circle cx="308.5" cy="480" r="2"/>
+          </g>
+          <g stroke="var(--part-edge)" stroke-width=".6" opacity=".7" id="mesh">
+            <path d="M204 335 H316 M204 375 H316 M204 415 H316 M204 455 H316 M204 495 H316" fill="none"/>
+          </g>
+        </g>
+        <g class="mv" data-step="3" data-dy="-260">
+          <rect x="218" y="325" width="84" height="13" rx="2" fill="var(--panel)" stroke="var(--part-edge)" stroke-width="1.5"/>
+        </g>
+        <g class="mv" data-step="4" data-dy="-110">
+          <path d="M204 172 V143 H316 V172 H312 V147 H208 V172 Z" fill="var(--part)" stroke="var(--part-edge)" stroke-width="1.2"/>
+          <circle cx="202" cy="160" r="3" fill="var(--part-edge)"/>
+        </g>
+        <g class="mv" data-step="5" data-dy="-90">
+          <rect x="246" y="136" width="28" height="7" fill="var(--accent)"/>
+          <rect x="242" y="131" width="36" height="12" fill="none" stroke="var(--part-edge)" stroke-width="1.4"/>
+        </g>
+        <g class="mv" data-step="6" data-dy="0" data-fade="1">
+          <path d="M278 138 h80 q14 0 14 14 v40" fill="none" stroke="var(--part-edge)" stroke-width="1.6"/>
+          <rect x="368" y="180" width="8" height="200" fill="var(--soil-deep)"/>
+          <rect x="356" y="186" width="32" height="32" rx="3" fill="var(--part)" stroke="var(--part-edge)" stroke-width="1.2"/>
+          <text x="394" y="206" class="lbl">controller</text>
+        </g>
+        <g class="mv" data-step="7" data-dy="0" data-fade="1">
+          <g stroke="var(--beam)" stroke-width="1">
+            <line x1="186" y1="143" x2="186" y2="330"/><line x1="180" y1="143" x2="192" y2="143"/><line x1="180" y1="330" x2="192" y2="330"/>
+          </g>
+          <text x="118" y="240" style="fill:var(--beam)">H 200 mm</text>
+        </g>
+        <text x="8" y="325" class="lbl">soil surface</text>
+        <text id="asmCap" x="8" y="24" class="lbl"></text>
+      </svg>
+    </div>
+    <div class="side">
+      <h2 id="h-asm">How it goes together</h2>
+      <ol class="steps" id="steps">
+        <li>Drill 5 mm holes round the lower 200 mm of a 400 mm pipe. Wrap that half in fine mesh.</li>
+        <li>Push the pipe 200 mm into the soil and scoop the mud out from inside.</li>
+        <li>Drop the float in, flat face up.</li>
+        <li>Fit the cap and tighten the screw in its side. Grooves in the cap let the pipe breathe.</li>
+        <li>Lay the sensor face down over the window and screw the lid on.</li>
+        <li>Run the cable to the controller on a stake.</li>
+        <li>Calibrate: measure from the sensor to the soil once, then check against the staff gauge.</li>
+      </ol>
+      <div class="btns">
+        <button id="prev" type="button">Back</button>
+        <button class="primary" id="next" type="button">Next step</button>
+        <button id="auto" type="button">Play all</button>
+      </div>
+      <p class="note">Printed parts: cap, lid and float, in PETG. The pipe is ordinary 100 mm PVC drain pipe.</p>
+    </div>
+  </section>
+</div>
+
+<script>
+(function () {
+  var SOIL = 300, PX = 0.9, H = 200, F = 8, DMIN = 40, BOTTOM = -200, FLOAT_H = 14;
+  var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var $ = function (id) { return document.getElementById(id); };
+  var y = function (mm) { return SOIL - mm * PX; };
+
+  // staff gauge ticks on the pipe
+  var g = $('gauge'), ns = 'http://www.w3.org/2000/svg';
+  for (var mm = -200; mm <= 150; mm += 50) {
+    var l = document.createElementNS(ns, 'line');
+    l.setAttribute('x1', 311); l.setAttribute('x2', 322); l.setAttribute('y1', y(mm)); l.setAttribute('y2', y(mm));
+    l.setAttribute('stroke', 'var(--part-edge)'); l.setAttribute('stroke-width', mm === 0 ? 2 : 1); g.appendChild(l);
+    if (mm !== 0 && mm !== 50 && mm !== -150) {
+      var t = document.createElementNS(ns, 'text');
+      t.setAttribute('x', 326); t.setAttribute('y', y(mm) + 4); t.textContent = (mm > 0 ? '+' : '−') + Math.abs(mm); if (mm < 0) { t.style.fill = 'var(--on-soil)'; } g.appendChild(t);
+    }
+  }
+
+  function draw(level, day) {
+    var floatTop = Math.max(level + F, BOTTOM + FLOAT_H);
+    var resting = level + F < BOTTOM + FLOAT_H;
+    var d = H - floatTop;
+    var fw = $('fieldWater');
+    if (level > 0) { fw.setAttribute('y', y(level)); fw.setAttribute('height', level * PX); } else { fw.setAttribute('height', 0); }
+    var wet = $('wetSoil'); var wy = y(Math.min(level, 0));
+    wet.setAttribute('y', wy); wet.setAttribute('height', Math.max(0, 540 - wy));
+    var pw = $('pipeWater'); var top = Math.max(y(level), 120); var bot = 480;
+    pw.setAttribute('y', Math.min(top, bot)); pw.setAttribute('height', Math.max(0, bot - top));
+    var fy = y(floatTop);
+    $('float').setAttribute('transform', 'translate(0,' + (fy + 13) + ')');
+    $('beam').setAttribute('points', '260,118 ' + (260 - d * PX * 0.13) + ',' + fy + ' ' + (260 + d * PX * 0.13) + ',' + fy);
+    $('beamLine').setAttribute('y2', fy);
+    $('dimLine').setAttribute('y2', fy); $('dimEnd').setAttribute('y1', fy); $('dimEnd').setAttribute('y2', fy);
+    $('dimTxt').setAttribute('y', (118 + fy) / 2 + 4); $('dimTxt').textContent = 'd ' + Math.round(d);
+    var s = $('rS'); s.className = 'state';
+    if (resting) {
+      $('rD').textContent = Math.round(d) + ' mm'; $('rL').textContent = 'no reading';
+      s.textContent = 'Float is on the bottom of the pipe. Water is below about −190 mm.'; s.classList.add('warn');
+    } else if (d < DMIN) {
+      $('rD').textContent = '< 40 mm'; $('rL').textContent = 'no reading';
+      s.textContent = 'Float is too close to the sensor.'; s.classList.add('warn');
+    } else {
+      $('rD').textContent = Math.round(d) + ' mm';
+      $('rL').textContent = (level > 0 ? '+' : level < 0 ? '−' : '') + Math.abs(Math.round(level)) + ' mm';
+      if (level <= -150) { s.textContent = 'At or below −150 mm: time to irrigate.'; s.classList.add('warn'); }
+      else if (level < 0) { s.textContent = 'Water is below the soil surface.'; }
+      else if (level >= 30 && level <= 50) { s.textContent = 'Inside the example target range.'; s.classList.add('ok'); }
+      else { s.textContent = 'Standing water on the field.'; }
+    }
+    $('rDay').textContent = day == null ? '—' : String(day);
+  }
+
+  var slider = $('lvl'), raf = null;
+  function stop() { if (raf) { cancelAnimationFrame(raf); raf = null; $('play').textContent = 'Play two weeks'; } }
+  function set(v) { stop(); slider.value = v; draw(+v, null); }
+  slider.addEventListener('input', function () { stop(); draw(+slider.value, null); });
+  $('b50').addEventListener('click', function () { set(50); });
+  $('b0').addEventListener('click', function () { set(0); });
+  $('b150').addEventListener('click', function () { set(-150); });
+
+  // Two weeks: flooded at +50, loses 15 mm a day, irrigated back to +50 when it reaches -150.
+  function levelAt(day) {
+    var cycle = 200 / 15 + 0.6, t = day % cycle, dry = 200 / 15;
+    return t < dry ? 50 - 15 * t : -150 + 200 * ((t - dry) / 0.6);
+  }
+  $('play').addEventListener('click', function () {
+    if (raf) { stop(); return; }
+    $('play').textContent = 'Stop';
+    var t0 = performance.now(), DAYS = 14, MS = reduce ? 1 : 14000;
+    (function tick(now) {
+      var day = Math.min(DAYS, (now - t0) / MS * DAYS), lv = levelAt(day);
+      slider.value = Math.round(lv); draw(lv, day.toFixed(1));
+      if (day < DAYS) { raf = requestAnimationFrame(tick); } else { raf = null; $('play').textContent = 'Play two weeks'; }
+    })(t0);
+  });
+  draw(+slider.value, null);
+
+  // ---- assembly
+  var parts = [].slice.call(document.querySelectorAll('#asm .mv'));
+  var items = [].slice.call(document.querySelectorAll('#steps li'));
+  var step = 7, timer = null;
+  function show(n) {
+    step = Math.max(1, Math.min(7, n));
+    parts.forEach(function (p) {
+      var ps = +p.getAttribute('data-step'), dy = +p.getAttribute('data-dy'), fade = p.getAttribute('data-fade');
+      // the pipe is shown lifted during step 1 (being prepared), in the ground from step 2
+      var placed = step >= ps;
+      var visible = placed || (ps === 2 && step === 1) || (!fade && ps === step + 1);
+      p.style.transform = placed ? 'translateY(0)' : 'translateY(' + dy + 'px)';
+      p.style.opacity = visible ? 1 : 0;
+    });
+    items.forEach(function (li, i) { li.classList.toggle('on', i === step - 1); });
+    $('asmCap').textContent = 'Step ' + step + ' of 7';
+    $('prev').disabled = step === 1; $('next').disabled = step === 7;
+  }
+  function halt() { if (timer) { clearInterval(timer); timer = null; $('auto').textContent = 'Play all'; } }
+  $('prev').addEventListener('click', function () { halt(); show(step - 1); });
+  $('next').addEventListener('click', function () { halt(); show(step + 1); });
+  items.forEach(function (li, i) { li.addEventListener('click', function () { halt(); show(i + 1); }); });
+  $('auto').addEventListener('click', function () {
+    if (timer) { halt(); return; }
+    $('auto').textContent = 'Stop'; show(1);
+    timer = setInterval(function () { if (step >= 7) { halt(); } else { show(step + 1); } }, 1800);
+  });
+  show(7);
+})();
+</script>
