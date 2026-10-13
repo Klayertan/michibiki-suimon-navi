@@ -150,3 +150,11 @@ The running record of what changed in this project and why. Every agent appends 
 - **Why:** KAI confirmed the three boards are E220-900T22S(JP) and that two antennas are on hand. The purchase request now has one antenna, and totals ¥14,057 for nine items.
 - **Verified:** Nothing measured. The type of the two owned antennas is not confirmed.
 - **Open / next:** Bucket test of the float; fit checks when the pipe and sensor arrive. Seven commits unpushed.
+
+## 2026-10-13 — Drone tray passes the frame check; stake parts modelled
+- **Agent:** Claude Code (Opus 5.5)
+- **Branch:** `main`
+- **What changed:** New `hardware/water-sensor/stake.py` with exports for `stake_chassis`, `stake_cover` and `panel_bracket`; README and plan updated. No change to the drone mounts.
+- **Why:** KAI asked for the pending frame check on the redesigned battery tray, and for the remaining water-sensor parts to be designed now from published sizes.
+- **Verified:** `hardware/drone-mounts/check_fit.py` against Holybro's `x500v2-frame.step`: no clash for the tray, the D435 under it, the Jetson deck, the hoop or the QZ1 mast, and the tray's 14 mm slide-on path is clear. Lowest point of the tray is 105 mm above the ground in the model (legs 215 mm; KAI measured about 200 mm on the real drone, so about 90 mm). Stake parts: each exports as one solid; chassis/cover and bracket/panel overlap checks pass. **Not verified:** none of the stake parts is printed, and none of the parts they hold has arrived. The check still knows nothing about the Pixhawk, wiring or anything else not in Holybro's model.
+- **Open / next:** The battery tray is now clear to print. KAI owns three E220-900T22S(JP) boards and two antennas. Bench tests in plan §6 are all still to do.

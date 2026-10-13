@@ -166,3 +166,7 @@ Three usable modules cover both jobs: one on the drone, one on the sensor node, 
 **Not confirmed:** the exact model printed on the modules (the plan assumes E220-900T22S(JP)), whether KAI has antennas for them, and whether the two antennas still on the request are needed.
 
 **Confirmed by KAI, 2026-10-13:** the modules are E220-900T22S(JP), as the plan assumed, and KAI has two antennas. Three working modules need three antennas, so the request now buys one TX915-JKS-20, not two. Total: ¥14,057 for nine items. Check that the two owned antennas are 920 MHz ones of a type the module is certified with.
+
+### Stake parts modelled, 2026-10-13
+
+The stake box and the panel bracket now exist as CAD in `hardware/water-sensor/stake.py`: a chassis plate, a rain-shedding cover and a 30° panel bracket. All strap to the stake with zip ties in a V saddle. Sizes come from published dimensions only; see the README there. The receiver case is still not designed.
