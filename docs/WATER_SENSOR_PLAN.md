@@ -156,3 +156,11 @@ KAI owns no E220 modules, so the request covers both ends of the link.
 **Before connecting the battery:** check the plug's polarity against the charger board's markings with a multimeter. PH2.0 plugs on unbranded cells are often wired the opposite way round, and a reversed cell destroys the board. The cell is from an unknown maker, so treat its capacity and its protection circuit as unproven, charge it the first time where it can be watched, and keep it in shade in the field.
 
 Still to buy locally: a sealed box for the stake, jumper wires, a stake.
+
+### Correction, 2026-10-13: KAI already owns LoRa modules
+
+KAI has three CLEALINK LoRa modules on boards with UART pins, plus one bare module that is not soldered. The two E220 evaluation boards were therefore removed from the purchase request, which now totals ¥14,772 for nine items including the pipe (a 0.5 m VU100 length from Amazon, ¥788 plus shipping).
+
+Three usable modules cover both jobs: one on the drone, one on the sensor node, and one receiver shared by both. Sharing a receiver means the drone's 1 Hz stream and the sensor's 10-minute messages use the same channel, so an occasional sensor message can be lost while the drone is flying. The node should send each reading more than once, or the two links should use different channels.
+
+**Not confirmed:** the exact model printed on the modules (the plan assumes E220-900T22S(JP)), whether KAI has antennas for them, and whether the two antennas still on the request are needed.

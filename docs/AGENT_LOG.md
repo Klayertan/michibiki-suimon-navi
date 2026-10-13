@@ -134,3 +134,11 @@ The running record of what changed in this project and why. Every agent appends 
 - **Why:** KAI asked for the complete animation after choosing solar power and LoRa.
 - **Verified:** Opened once in a browser: all three sections render, the new one plays, no console errors. The battery and charging behaviour shown is illustrative, based on the plan's estimates, not measurements.
 - **Open / next:** Same as the previous entry. Five commits unpushed.
+
+## 2026-10-13 — KAI owns LoRa modules; purchase request reduced
+- **Agent:** Claude Code (Opus 5.5)
+- **Branch:** `main`
+- **What changed:** `docs/WATER_SENSOR_PLAN.md` §8 corrected.
+- **Why:** KAI reported owning three CLEALINK LoRa modules with UART pins and one unsoldered bare module, contradicting the earlier "no E220 yet". The two E220 evaluation boards were dropped from the purchase request. The pipe (VU100, 0.5 m, Amazon) was added. The combined request is nine items, ¥14,772, and is not in the repo. KAI also printed the float and lid, and the pre-boss tube cap.
+- **Verified:** Nothing new measured. Module model and antenna ownership are unconfirmed.
+- **Open / next:** Confirm the module model and antennas. Bucket test of the printed float. Six commits unpushed.
