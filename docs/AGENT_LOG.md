@@ -118,3 +118,11 @@ The running record of what changed in this project and why. Every agent appends 
 - **Why:** KAI decided the node runs on solar and sends readings over LoRa. KAI printed the earlier tube cap (before the screw bosses) and will use it with nuts for bench tests; the reprint waits until the pipe and sensor arrive.
 - **Verified:** Prices and stock read from Switch Science and Akizuki pages on 2026-10-13. The power budget is an estimate; nothing was measured. No battery source found yet.
 - **Open / next:** See plan §8 "Open". No purchase sheet for the power parts yet. Not pushed.
+
+## 2026-10-13 — Water sensor: power and LoRa parts chosen
+- **Agent:** Claude Code (Opus 5.5)
+- **Branch:** `main`
+- **What changed:** `docs/WATER_SENSOR_PLAN.md` §8 lists the parts in the second purchase request (¥11,619; the sheet itself is not in the repo).
+- **Why:** KAI owns no E220 modules and approved buying from Amazon. Two E220 evaluation boards with antennas, a USB-serial module for the receiver, a 3 W panel, a bq25185 charger and one 2000 mAh lithium cell.
+- **Verified:** Prices and stock read from Akizuki, Switch Science and Amazon pages on 2026-10-13. The FT234X price came from a related-products list, not its own page. Nothing bought or tested. The lithium cell is unbranded; its plug polarity must be checked before use.
+- **Open / next:** Measure the controller's sleep current. Design the stake box, panel bracket, receiver and packet format. Not pushed.

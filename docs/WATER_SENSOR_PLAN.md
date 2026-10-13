@@ -139,3 +139,20 @@ Not chosen: the DFRobot 5 V panel at Switch Science (6 W, ¥1,938) has a 1.5–2
 3. Controller sleep current, measured.
 4. Radio rules: the E220's certification covers specific antennas. Use only the antenna it is certified with.
 5. Not designed: the receiver at the house, the packet format, the stake box and the panel bracket.
+
+### Parts chosen for the second purchase request (2026-10-13, ¥11,619)
+
+KAI owns no E220 modules, so the request covers both ends of the link.
+
+| Item | Qty | Price each | From | Note |
+|---|---|---|---|---|
+| E220-900T22S(JP)-EV2 LoRa evaluation board | 2 | ¥1,980 | Akizuki 131361 | One for the node, one for the receiver. Pin headers and an SMA socket, so no fine soldering. |
+| LoRa antenna TX915-JKS-20 | 2 | ¥715 | Akizuki 117618 | The antenna Akizuki lists for this board. |
+| FT234X USB-serial module | 1 | ¥780 | Akizuki 108461 | Makes the receiver a USB serial port, which the app's Web Serial code can already read. |
+| Solar module SY-M3W, 3 W | 1 | ¥1,380 | Akizuki 108920 | 10.9 V open circuit, 251 × 140 × 18 mm, alligator-clip leads. Chosen over the 2 W panel because it is in stock, and it is big enough to shade the cap. |
+| bq25185 charger board with 5 V output | 1 | ¥1,870 | Switch Science 10183 | Accepts 5–18 V. |
+| Lithium polymer cell, 3.7 V 2000 mAh, 103450, PH2.0 plug, built-in protection | 1 | ¥2,199 | Amazon B0GFCZZB3D | Unbranded, two reviews. See the warning below. |
+
+**Before connecting the battery:** check the plug's polarity against the charger board's markings with a multimeter. PH2.0 plugs on unbranded cells are often wired the opposite way round, and a reversed cell destroys the board. The cell is from an unknown maker, so treat its capacity and its protection circuit as unproven, charge it the first time where it can be watched, and keep it in shade in the field.
+
+Still to buy locally: a sealed box for the stake, jumper wires, a stake.
